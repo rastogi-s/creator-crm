@@ -6,3 +6,4 @@ target/
 *.iml
 dist/
 packaging/creator-crm.jar
+*.bak
