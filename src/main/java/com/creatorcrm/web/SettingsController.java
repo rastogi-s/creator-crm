@@ -122,6 +122,9 @@ public class SettingsController {
             if (!USER_ENTERED.contains(name)) throw new IllegalArgumentException(name + " cannot be set directly");
             if (e.getValue() != null && e.getValue().length() > 4000) throw new IllegalArgumentException(name + " is too long");
             secrets.put(name, e.getValue());
+            if (name == SecretName.ANTHROPIC_API_KEY && e.getValue() != null && !e.getValue().isBlank()) {
+                ingestion.processPendingAsync(); // analyze what's waiting now, not at the next sync
+            }
             if (name == SecretName.INSTAGRAM_ACCESS_TOKEN && e.getValue() != null && !e.getValue().isBlank()) {
                 instagram.refreshIdentity(); // validates the pasted token
             }

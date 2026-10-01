@@ -14,6 +14,7 @@ import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.llm.Intent;
+import com.creatorcrm.llm.LlmException;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.MessageRepo;
@@ -91,6 +92,11 @@ class ImportHistoryIntegrationTest {
         mailbox.sinces.clear();
         llm.next.clear();
         llm.draftCalls = 0;
+        llm.classifyCalls = 0;
+        llm.failWith = null;
+        // Earlier tests may leave unanalyzed mail behind; mark it handled so each test sees only its own.
+        messages.findAll().stream().filter(m -> !m.aiProcessed && m.filteredReason == null)
+                .forEach(m -> { m.filteredReason = "test reset"; messages.save(m); });
     }
 
     private static NormalizedMessage mail(String thread, int daysAgo, String text) {
@@ -121,6 +127,26 @@ class ImportHistoryIntegrationTest {
                 .isCloseTo(OffsetDateTime.now().minusDays(90), within(1, ChronoUnit.MINUTES));
         assertThat(ingestion.status().importingSince()).isNull(); // done
         assertThat(mailbox.mail).allMatch(m -> messages.existsByExternalId("other:" + m.externalId()));
+    }
+
+    @Test
+    void analysisFailuresAreShownNotSilent() {
+        String t = "err" + UUID.randomUUID().toString().substring(0, 6);
+        ingestion.store(List.of(mail(t, 3, "one"), mail(t, 2, "two")));
+
+        // Something specific to a message failing (here: no scripted analysis): shown, and the run keeps going.
+        ingestion.processPending();
+        assertThat(llm.classifyCalls).isEqualTo(2);
+        assertThat(ingestion.status().aiError()).contains("Analysis failed for one message");
+
+        // Claude itself failing: shown, and the run stops after 3 in a row instead of trying everything.
+        for (int i = 0; i < 5; i++) ingestion.store(List.of(mail(t + i, 1, "more " + i)));
+        llm.classifyCalls = 0;
+        llm.failWith = new LlmException("Claude request failed: AnthropicIoException: timeout");
+        ingestion.processPending();
+        assertThat(llm.classifyCalls).isEqualTo(3);
+        assertThat(ingestion.status().aiError()).contains("AnthropicIoException: timeout");
+        assertThat(ingestion.status().waitingForAi()).isEqualTo(7);
     }
 
     @Test

@@ -706,8 +706,9 @@
     else if (n > 0 && !s.aiConfigured) {
       text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
     } else if (n > 0 && s.aiError) {
-      text = msgs + " waiting: " + (/\(401\)/.test(s.aiError) ? "Claude API key rejected"
-        : /\(429\)/.test(s.aiError) ? "Claude rate limit, retrying next sync" : "AI error");
+      const reason = s.aiError.replace(/^\S+\s+/, "");
+      text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude API key rejected"
+        : /\(429\)/.test(reason) ? "Claude rate limit, retrying next sync" : reason);
       warn = true; title = s.aiError;
     } else if (n > 0) text = msgs + " waiting for analysis";
     const chip = document.getElementById("sync-status");

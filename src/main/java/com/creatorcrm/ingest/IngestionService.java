@@ -210,6 +210,7 @@ public class IngestionService {
     public int processPending() {
         if (!llm.isConfigured() || !processLock.tryLock()) return 0;
         int n = 0;
+        int claudeFailuresInARow = 0;
         try {
             for (Message m : messages.findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc()) {
                 if (messages.existsByConversationIdAndAiProcessedTrueAndSentAtAfter(m.conversationId, m.sentAt)) {
@@ -222,15 +223,20 @@ public class IngestionService {
                 try {
                     processor.process(m);
                     n++;
+                    claudeFailuresInARow = 0;
                     version.incrementAndGet();
                     if (read(AI_ERROR).isPresent()) write(AI_ERROR, "");
                 } catch (LlmException e) {
                     log.warn("AI analysis failed for message {}: {}", m.id, e.getMessage());
                     write(AI_ERROR, OffsetDateTime.now() + " " + e.getMessage());
-                    // Bad key or rate limited: stop; unprocessed messages are retried on the next run.
-                    if (e.getMessage() != null && e.getMessage().matches(".*\\((401|429)\\).*")) break;
+                    // Bad key, rate limited, or Claude failing over and over: stop; the rest retry on the next run.
+                    if (e.getMessage() != null && e.getMessage().matches("(?s).*\\((401|429)\\).*")) break;
+                    if (++claudeFailuresInARow >= 3) break;
                 } catch (RuntimeException e) {
+                    // Something specific to this message (e.g. saving the result). Show it, and keep going.
                     log.error("Processing failed for message {}", m.id, e);
+                    write(AI_ERROR, OffsetDateTime.now() + " Analysis failed for one message: "
+                            + e.getClass().getSimpleName() + ": " + e.getMessage());
                 }
             }
         } finally {

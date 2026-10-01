@@ -18,6 +18,9 @@ import java.util.List;
 public class FakeLlm implements LlmClient {
     public final Deque<MessageAnalysis> next = new ArrayDeque<>();
     public int draftCalls;
+    public int classifyCalls;
+    /** When set, every classify call throws this (simulates Claude being down). */
+    public RuntimeException failWith;
 
     public static MessageAnalysis analysis(Intent intent, String brand, boolean requiresReply,
                                            List<MessageAnalysis.ExtractedDeadline> deadlines) {
@@ -32,6 +35,8 @@ public class FakeLlm implements LlmClient {
 
     @Override
     public MessageAnalysis classify(ClassificationInput input) {
+        classifyCalls++;
+        if (failWith != null) throw failWith;
         if (next.isEmpty()) throw new IllegalStateException("No scripted analysis for: " + input.newMessage());
         return next.poll();
     }

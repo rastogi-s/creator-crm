@@ -3,6 +3,7 @@ package com.creatorcrm.llm;
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.core.JsonValue;
+import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.MessageCreateParams;
@@ -131,7 +132,10 @@ public class ClaudeLlmClient implements LlmClient {
         try {
             response = client().messages().create(params.build());
         } catch (AnthropicServiceException e) {
-            throw new LlmException("Claude API error (" + e.statusCode() + ")", e);
+            throw new LlmException("Claude API error (" + e.statusCode() + "): " + firstLine(e), e);
+        } catch (AnthropicException e) {
+            // Network trouble, timeouts, a response we couldn't read: not an HTTP error, but just as fatal.
+            throw new LlmException("Claude request failed: " + e.getClass().getSimpleName() + ": " + firstLine(e), e);
         }
         StopReason stop = response.stopReason().orElse(null);
         if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined this request");
@@ -141,6 +145,12 @@ public class ClaudeLlmClient implements LlmClient {
                 .map(t -> t.text())
                 .findFirst()
                 .orElseThrow(() -> new LlmException("Claude returned no structured output"));
+    }
+
+    private static String firstLine(Exception e) {
+        String m = String.valueOf(e.getMessage()).strip();
+        m = m.lines().findFirst().orElse(m);
+        return m.length() > 300 ? m.substring(0, 300) + "…" : m;
     }
 
     private synchronized AnthropicClient client() {
