@@ -6,12 +6,11 @@ import com.anthropic.core.JsonValue;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.CacheControlEphemeral;
+import com.anthropic.models.messages.JsonOutputFormat;
+import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
-import com.anthropic.models.messages.StructuredMessage;
-import com.anthropic.models.messages.StructuredMessageCreateParams;
-import com.anthropic.models.messages.StructuredOutputConfig;
 import com.anthropic.models.messages.TextBlockParam;
 import com.creatorcrm.security.CryptoService;
 import com.creatorcrm.security.SecretName;
@@ -38,6 +37,7 @@ public class ClaudeLlmClient implements LlmClient {
 
     private AnthropicClient client;
     private String clientKeyHash;
+    private String baseUrl; // null = the real API; tests point it at a local stub
 
     public ClaudeLlmClient(SecretStore secrets, SettingsService settings) {
         this.secrets = secrets;
@@ -106,7 +106,10 @@ public class ClaudeLlmClient implements LlmClient {
 
     private <T> T call(String model, String effort, String system, String system2, String user,
                        Class<T> type, long maxTokens) {
-        StructuredOutputConfig.Builder<T> out = StructuredOutputConfig.<T>builder().format(type);
+        JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
+        OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
+        OutputConfig.Builder out = OutputConfig.builder()
+                .format(JsonOutputFormat.builder().schema(schema.build()).build());
         if (supportsEffort(model)) out.effort(OutputConfig.Effort.of(effort));
 
         List<TextBlockParam> systemBlocks = new ArrayList<>();
@@ -116,7 +119,7 @@ public class ClaudeLlmClient implements LlmClient {
         TextBlockParam last = systemBlocks.remove(systemBlocks.size() - 1);
         systemBlocks.add(last.toBuilder().cacheControl(CacheControlEphemeral.builder().build()).build());
 
-        StructuredMessageCreateParams.Builder<T> params = MessageCreateParams.builder()
+        MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
                 .outputConfig(out.build())
@@ -128,7 +131,7 @@ public class ClaudeLlmClient implements LlmClient {
                     .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
         }
 
-        StructuredMessage<T> response;
+        Message response;
         try {
             response = client().messages().create(params.build());
         } catch (AnthropicServiceException e) {
@@ -140,11 +143,22 @@ public class ClaudeLlmClient implements LlmClient {
         StopReason stop = response.stopReason().orElse(null);
         if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined this request");
         if (StopReason.MAX_TOKENS.equals(stop)) throw new LlmException("Claude response was cut off (max tokens)");
-        return response.content().stream()
+        String json = response.content().stream()
                 .flatMap(b -> b.text().stream())
                 .map(t -> t.text())
                 .findFirst()
                 .orElseThrow(() -> new LlmException("Claude returned no structured output"));
+        try {
+            return OutputSchemas.parse(json, type);
+        } catch (RuntimeException e) {
+            throw new LlmException("Claude's reply didn't match the expected format: " + firstLine(e), e);
+        }
+    }
+
+    /** For tests: send requests to a local stub instead of the real API. */
+    synchronized void useBaseUrl(String url) {
+        baseUrl = url;
+        clientKeyHash = null; // rebuild the client on next use
     }
 
     private static String firstLine(Exception e) {
@@ -158,7 +172,9 @@ public class ClaudeLlmClient implements LlmClient {
         String hash = CryptoService.sha256Hex(key);
         if (client == null || !hash.equals(clientKeyHash)) {
             if (client != null) client.close();
-            client = AnthropicOkHttpClient.builder().apiKey(key).maxRetries(3).build();
+            AnthropicOkHttpClient.Builder b = AnthropicOkHttpClient.builder().apiKey(key).maxRetries(3);
+            if (baseUrl != null) b.baseUrl(baseUrl);
+            client = b.build();
             clientKeyHash = hash;
         }
         return client;

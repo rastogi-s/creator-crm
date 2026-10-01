@@ -22,6 +22,9 @@ import jakarta.validation.constraints.Size;
 import java.security.Principal;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import com.creatorcrm.llm.ClassificationInput;
+import com.creatorcrm.llm.LlmClient;
+import com.creatorcrm.llm.LlmException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +59,7 @@ public class SettingsController {
     private final GmailOAuthController gmailOAuth;
     private final InstagramOAuthController instagramOAuth;
     private final IngestionService ingestion;
+    private final LlmClient llm;
     private final MessageRepo messages;
     private final AppUserRepo users;
     private final PasswordEncoder encoder;
@@ -67,8 +71,9 @@ public class SettingsController {
                               GmailOAuthController gmailOAuth, InstagramOAuthController instagramOAuth,
                               IngestionService ingestion, MessageRepo messages, AppUserRepo users,
                               PasswordEncoder encoder, CrmProperties props,
-                              com.creatorcrm.security.SessionEpoch sessions) {
+                              com.creatorcrm.security.SessionEpoch sessions, LlmClient llm) {
         this.sessions = sessions;
+        this.llm = llm;
         this.settings = settings;
         this.secrets = secrets;
         this.crypto = crypto;
@@ -138,11 +143,19 @@ public class SettingsController {
                 .apiKey(secrets.require(SecretName.ANTHROPIC_API_KEY)).maxRetries(0).build();
         try {
             c.models().retrieve(settings.writerModel());
-            return Map.of("ok", true);
         } catch (Exception e) {
             return Map.of("ok", false, "error", "The API key was rejected or the model is unavailable.");
         } finally {
             c.close();
+        }
+        try {
+            // Then one real analysis of a sample email: the same path every synced message takes.
+            llm.classify(new ClassificationInput(settings.today(), "EMAIL", "INBOUND", "", "", List.of(),
+                    "From: maya@example.com\nSubject: Paid collab?\n\nHi! Could you share your rates for one UGC video?"));
+            ingestion.processPendingAsync();
+            return Map.of("ok", true);
+        } catch (LlmException | LinkageError e) {
+            return Map.of("ok", false, "error", "The key works, but analysis failed: " + e.getMessage());
         }
     }
 

@@ -232,6 +232,12 @@ public class IngestionService {
                     // Bad key, rate limited, or Claude failing over and over: stop; the rest retry on the next run.
                     if (e.getMessage() != null && e.getMessage().matches("(?s).*\\((401|429)\\).*")) break;
                     if (++claudeFailuresInARow >= 3) break;
+                } catch (LinkageError e) {
+                    // A broken build (e.g. clashing library versions): every message would fail the same way.
+                    log.error("Analysis is broken in this build", e);
+                    write(AI_ERROR, OffsetDateTime.now() + " App error, please update Creator CRM: "
+                            + e.getClass().getSimpleName() + ": " + e.getMessage());
+                    break;
                 } catch (RuntimeException e) {
                     // Something specific to this message (e.g. saving the result). Show it, and keep going.
                     log.error("Processing failed for message {}", m.id, e);
