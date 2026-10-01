@@ -16,6 +16,8 @@ import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.settings.SettingsService;
 import com.creatorcrm.workflow.WorkflowEngine;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +28,8 @@ import org.springframework.stereotype.Service;
 public class MessageProcessor {
     private static final Logger log = LoggerFactory.getLogger(MessageProcessor.class);
     private static final int CONTEXT_MESSAGES = 4;
+    /** Older than this, a message is history (e.g. an import): update the deal, but draft no replies to it. */
+    private static final Duration DRAFT_CUTOFF = Duration.ofDays(60);
 
     private final LlmClient llm;
     private final WorkflowEngine workflow;
@@ -64,6 +68,9 @@ public class MessageProcessor {
                 conv.summary == null ? "" : conv.summary, recent, Untrusted.wrap(m)));
 
         WorkflowEngine.Outcome outcome = workflow.apply(m, conv, analysis);
+        // A newer email in the thread would supersede the draft at once (common when importing history).
+        if (m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF))
+                || messages.existsByConversationIdAndSentAtAfter(conv.id, m.sentAt)) return;
         for (Task t : outcome.tasksToDraft()) {
             try {
                 drafts.draftForTask(t);

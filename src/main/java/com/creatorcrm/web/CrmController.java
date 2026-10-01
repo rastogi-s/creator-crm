@@ -8,6 +8,7 @@ import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftStatus;
 import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
+import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.domain.Enums.TaskStatus;
 import com.creatorcrm.domain.Enums.TaskType;
@@ -32,6 +33,8 @@ import com.creatorcrm.workflow.FollowUpEngine;
 import com.creatorcrm.workflow.OutreachService;
 import com.creatorcrm.workflow.WorkflowEngine;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
@@ -289,6 +292,19 @@ public class CrmController {
 
     @PostMapping("/sync")
     public ResponseEntity<Map<String, String>> sync() {
+        executor.execute(() -> {
+            ingestion.syncAll();
+            jobs.prepareMorning();
+        });
+        return ResponseEntity.accepted().body(Map.of("status", "started"));
+    }
+
+    public record ImportRequest(@Min(1) @Max(730) int days) {}
+
+    /** Import older Gmail history, then analyze it oldest first. Runs in the background like a sync. */
+    @PostMapping("/sync/import")
+    public ResponseEntity<Map<String, String>> importHistory(@Valid @RequestBody ImportRequest r) {
+        ingestion.startImport(Platform.EMAIL, r.days());
         executor.execute(() -> {
             ingestion.syncAll();
             jobs.prepareMorning();

@@ -6,6 +6,7 @@ import com.creatorcrm.channels.PartialFetchException;
 import com.creatorcrm.config.CrmProperties;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Conversation;
+import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.LlmException;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,15 +67,32 @@ public class IngestionService {
 
     /** What the header shows: is work running, how much is waiting for AI, and why it might be stuck. */
     public record Status(boolean syncing, boolean analyzing, long waitingForAi, boolean aiConfigured,
-                         String aiError, long version) {}
+                         String aiError, String importingSince, long version) {}
 
     public Status status() {
+        String importing = connectors.stream().map(c -> read("sync." + c.platform() + IMPORT))
+                .flatMap(Optional::stream).findFirst().orElse(null);
         return new Status(syncLock.isLocked(), processLock.isLocked(),
                 messages.countByAiProcessedFalseAndFilteredReasonIsNull(), llm.isConfigured(),
-                read(AI_ERROR).orElse(null), version.get());
+                read(AI_ERROR).orElse(null), importing, version.get());
     }
 
     private static final String AI_ERROR = "ai.error";
+    private static final String IMPORT = ".import";
+    /** A big import can need many capped fetches; keep going in one sync instead of one batch per 30 minutes. */
+    private static final int MAX_ROUNDS_PER_SYNC = 20;
+
+    /**
+     * Import older history: the next syncs reach back to {@code days} ago (skipping what's stored), until one
+     * completes. Rate limits pause and resume it like any sync.
+     */
+    public void startImport(Platform platform, int days) {
+        if (days < 1 || days > 730) throw new IllegalArgumentException("Pick between 1 and 730 days");
+        ChannelConnector c = connectors.stream().filter(x -> x.platform() == platform).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown channel " + platform));
+        if (!c.isConnected()) throw new IllegalStateException("Connect " + platform.name().toLowerCase() + " first");
+        write("sync." + platform + IMPORT, OffsetDateTime.now().minusDays(days).toString());
+    }
 
     public SyncReport syncAll() {
         if (!syncLock.tryLock()) return new SyncReport(Map.of("sync", "already running"), 0, 0);
@@ -94,20 +113,33 @@ public class IngestionService {
                     result.put(c.platform().name(), "rate limited, resuming after " + pausedUntil.get());
                     continue;
                 }
-                OffsetDateTime since = read(key).map(OffsetDateTime::parse)
+                OffsetDateTime cursorSince = read(key).map(OffsetDateTime::parse)
                         .map(t -> t.minusHours(1)) // overlap; duplicates are ignored
                         .orElse(started.minusDays(props.gmail().initialLookbackDays()));
+                OffsetDateTime since = read(key + IMPORT).map(OffsetDateTime::parse)
+                        .filter(cursorSince::isAfter).orElse(cursorSince);
                 String prefix = c.platform().name().toLowerCase() + ":";
+                Predicate<String> known = id -> messages.existsByExternalId(prefix + id);
+                int n = 0;
                 try {
-                    int n = store(c.fetchSince(since, id -> messages.existsByExternalId(prefix + id)));
+                    for (int round = 1; ; round++) {
+                        try {
+                            n += store(c.fetchSince(since, known));
+                            break;
+                        } catch (PartialFetchException e) {
+                            n += store(e.fetched());
+                            boolean capOnly = e.getCause() == null && e.retryAfter().isEmpty() && !e.fetched().isEmpty();
+                            if (!capOnly || round >= MAX_ROUNDS_PER_SYNC) throw e;
+                        }
+                    }
                     stored += n;
                     write(key, started.toString());
                     write(key + ".error", "");
                     write(key + ".pausedUntil", "");
+                    write(key + IMPORT, "");
                     result.put(c.platform().name(), n + " new");
                 } catch (PartialFetchException e) {
-                    // Keep what we got; leave the cursor alone so the next sync fetches the rest.
-                    int n = store(e.fetched());
+                    // Keep what we got (stored above); leave the cursor alone so the next sync fetches the rest.
                     stored += n;
                     log.warn("Sync of {} partial ({} new): {}", c.platform(), n, e.getMessage());
                     Optional<OffsetDateTime> resume = e.retryAfter().map(t -> t.atZone(ZoneId.systemDefault()).toOffsetDateTime());
@@ -118,6 +150,7 @@ public class IngestionService {
                             : OffsetDateTime.now() + " " + e.getMessage() + " (saved " + n + "; " + next + ")");
                     result.put(c.platform().name(), n + " new, more pending");
                 } catch (Exception e) {
+                    stored += n;
                     log.warn("Sync of {} failed: {}", c.platform(), e.getMessage());
                     write(key + ".error", OffsetDateTime.now() + " " + e.getMessage());
                     result.put(c.platform().name(), "error: " + e.getMessage());
@@ -179,6 +212,13 @@ public class IngestionService {
         int n = 0;
         try {
             for (Message m : messages.findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc()) {
+                if (messages.existsByConversationIdAndAiProcessedTrueAndSentAtAfter(m.conversationId, m.sentAt)) {
+                    // Imported history from a thread already analyzed past this point: applying it now would move
+                    // the deal backwards. Keep it as context for future analysis instead.
+                    m.filteredReason = "older than messages already analyzed (kept as context)";
+                    messages.save(m);
+                    continue;
+                }
                 try {
                     processor.process(m);
                     n++;

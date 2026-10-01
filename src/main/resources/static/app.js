@@ -476,6 +476,7 @@
         }) }, channel.EMAIL.connected ? "Reconnect Gmail" : "Connect Gmail") : null,
         channel.EMAIL.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/google/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
       channelStatus(channel.EMAIL),
+      channel.EMAIL.connected ? importHistory() : null,
       el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts. The app cannot delete or change existing mail.")));
 
     // 3. Instagram
@@ -644,6 +645,23 @@
       ch.lastError ? channelError(ch.lastError) : null);
   }
 
+  function importHistory() {
+    const days = el("select", { "aria-label": "How far back" },
+      [["30", "Last 30 days"], ["90", "Last 3 months"], ["180", "Last 6 months"], ["365", "Last year"]]
+        .map(([v, label]) => el("option", { value: v }, label)));
+    days.value = "90";
+    return el("div", { class: "import-box" },
+      el("h4", {}, "Import older email"),
+      el("p", { class: "small muted" }, "Brings in past deals. Older email is analyzed oldest first so each deal's status builds up in order, and "
+        + "reply drafts are only written for unanswered email from the last 2 months. Already-imported email is skipped; "
+        + "Gmail rate limits pause and resume it automatically."),
+      el("div", { class: "row" }, days,
+        el("button", { class: "small", onclick: action(async () => {
+          await api("POST", "/api/sync/import", { days: Number(days.value) });
+          setTimeout(pollStatus, 1000);
+        }, "Import started. Progress shows at the top.") }, "Import")));
+  }
+
   // Short first line always visible; anything longer folds into "Details" so the page never scrolls sideways.
   function channelError(text) {
     const first = text.split("\n")[0];
@@ -681,8 +699,10 @@
     const n = s.waitingForAi;
     const msgs = n + " message" + (n === 1 ? "" : "s");
     let text = "", warn = false, title = "";
+    const since = s.importingSince ? fmtDate(s.importingSince.slice(0, 10)) : null;
     if (s.analyzing) text = "Analyzing " + msgs + "…";
-    else if (s.syncing) text = "Syncing…";
+    else if (s.syncing) text = since ? "Importing email since " + since + "…" : "Syncing…";
+    else if (since) text = "Import since " + since + " continues on the next sync";
     else if (n > 0 && !s.aiConfigured) {
       text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
     } else if (n > 0 && s.aiError) {

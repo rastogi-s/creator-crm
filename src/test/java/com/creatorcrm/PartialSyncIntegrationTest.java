@@ -9,6 +9,7 @@ import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.MessageRepo;
 import java.time.Duration;
 import java.time.Instant;
@@ -16,6 +17,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -68,6 +70,13 @@ class PartialSyncIntegrationTest {
     @Autowired FlakyConnector flaky;
     @Autowired IngestionService ingestion;
     @Autowired MessageRepo messages;
+    @Autowired AppStateRepo appState;
+
+    /** Test classes share one in-memory database; start this channel from scratch. */
+    @BeforeEach
+    void resetChannelState() {
+        appState.findAll().stream().filter(s -> s.stateKey.startsWith("sync.OTHER")).forEach(appState::delete);
+    }
 
     @Test
     void rateLimitedSyncKeepsProgressAndResumes() {
