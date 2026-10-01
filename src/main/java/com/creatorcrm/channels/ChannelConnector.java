@@ -5,6 +5,7 @@ import com.creatorcrm.domain.Enums.Platform;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * A messaging channel (Gmail, Instagram, ...). Add a new channel by implementing this interface as a
@@ -22,6 +23,14 @@ public interface ChannelConnector {
 
     /** New and sent messages since the given time (polling). Implementations may cap the count. */
     List<NormalizedMessage> fetchSince(OffsetDateTime since) throws Exception;
+
+    /**
+     * Like {@link #fetchSince(OffsetDateTime)}, but may skip downloading messages whose native id is already
+     * {@code known}. May throw {@link PartialFetchException} to hand back what it got before stopping early.
+     */
+    default List<NormalizedMessage> fetchSince(OffsetDateTime since, Predicate<String> known) throws Exception {
+        return fetchSince(since);
+    }
 
     /**
      * Why this draft cannot be sent through the API right now (e.g. Instagram's 24-hour window), or empty

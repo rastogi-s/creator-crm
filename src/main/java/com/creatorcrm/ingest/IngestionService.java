@@ -2,6 +2,7 @@ package com.creatorcrm.ingest;
 
 import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.channels.NormalizedMessage;
+import com.creatorcrm.channels.PartialFetchException;
 import com.creatorcrm.config.CrmProperties;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Conversation;
@@ -72,12 +73,21 @@ public class IngestionService {
                 OffsetDateTime since = read(key).map(OffsetDateTime::parse)
                         .map(t -> t.minusHours(1)) // overlap; duplicates are ignored
                         .orElse(started.minusDays(props.gmail().initialLookbackDays()));
+                String prefix = c.platform().name().toLowerCase() + ":";
                 try {
-                    int n = store(c.fetchSince(since));
+                    int n = store(c.fetchSince(since, id -> messages.existsByExternalId(prefix + id)));
                     stored += n;
                     write(key, started.toString());
                     write(key + ".error", "");
                     result.put(c.platform().name(), n + " new");
+                } catch (PartialFetchException e) {
+                    // Keep what we got; leave the cursor alone so the next sync fetches the rest.
+                    int n = store(e.fetched());
+                    stored += n;
+                    log.warn("Sync of {} partial ({} new): {}", c.platform(), n, e.getMessage());
+                    write(key + ".error", e.getCause() == null ? ""
+                            : OffsetDateTime.now() + " " + e.getMessage() + " (saved " + n + ", will continue next sync)");
+                    result.put(c.platform().name(), n + " new, more pending");
                 } catch (Exception e) {
                     log.warn("Sync of {} failed: {}", c.platform(), e.getMessage());
                     write(key + ".error", OffsetDateTime.now() + " " + e.getMessage());
@@ -144,7 +154,8 @@ public class IngestionService {
                     n++;
                 } catch (LlmException e) {
                     log.warn("AI analysis failed for message {}: {}", m.id, e.getMessage());
-                    if (e.getMessage() != null && e.getMessage().contains("(401)")) break; // bad key: stop
+                    // Bad key or rate limited: stop; unprocessed messages are retried on the next run.
+                    if (e.getMessage() != null && e.getMessage().matches(".*\\((401|429)\\).*")) break;
                 } catch (RuntimeException e) {
                     log.error("Processing failed for message {}", m.id, e);
                 }

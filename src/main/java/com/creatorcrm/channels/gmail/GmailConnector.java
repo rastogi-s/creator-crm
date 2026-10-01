@@ -2,6 +2,7 @@ package com.creatorcrm.channels.gmail;
 
 import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.channels.NormalizedMessage;
+import com.creatorcrm.channels.PartialFetchException;
 import com.creatorcrm.config.CrmProperties;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Direction;
@@ -9,9 +10,14 @@ import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
+import com.google.api.client.http.HttpBackOffIOExceptionHandler;
+import com.google.api.client.http.HttpBackOffUnsuccessfulResponseHandler;
+import com.google.api.client.http.HttpRequestInitializer;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
+import com.google.api.client.util.ExponentialBackOff;
 import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.ListMessagesResponse;
 import com.google.api.services.gmail.model.Message;
@@ -19,6 +25,7 @@ import com.google.api.services.gmail.model.MessagePart;
 import com.google.api.services.gmail.model.MessagePartHeader;
 import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.UserCredentials;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -30,6 +37,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -79,32 +87,87 @@ public class GmailConnector implements ChannelConnector {
                 .setClientSecret(secrets.require(SecretName.GOOGLE_CLIENT_SECRET))
                 .setRefreshToken(secrets.require(SecretName.GMAIL_REFRESH_TOKEN))
                 .build();
-        return new Gmail.Builder(transport(), JSON, new HttpCredentialsAdapter(creds))
+        return new Gmail.Builder(transport(), JSON, withRetries(new HttpCredentialsAdapter(creds)))
                 .setApplicationName("creator-crm")
+                .build();
+    }
+
+    /** Keeps the token-refresh handling and adds exponential backoff on 429 (rate limit), 5xx and network errors. */
+    static HttpRequestInitializer withRetries(HttpCredentialsAdapter auth) {
+        return request -> {
+            auth.initialize(request);
+            HttpBackOffUnsuccessfulResponseHandler backoff = new HttpBackOffUnsuccessfulResponseHandler(backOff())
+                    .setBackOffRequired(r -> r.getStatusCode() == 429 || r.getStatusCode() / 100 == 5);
+            request.setUnsuccessfulResponseHandler((req, res, retry) ->
+                    auth.handleResponse(req, res, retry) || backoff.handleResponse(req, res, retry));
+            request.setIOExceptionHandler(new HttpBackOffIOExceptionHandler(backOff()));
+        };
+    }
+
+    private static ExponentialBackOff backOff() {
+        return new ExponentialBackOff.Builder()
+                .setInitialIntervalMillis(1_000)
+                .setMaxIntervalMillis(30_000)
+                .setMaxElapsedTimeMillis(120_000)
                 .build();
     }
 
     @Override
     public List<NormalizedMessage> fetchSince(OffsetDateTime since) throws Exception {
+        return fetchSince(since, id -> false);
+    }
+
+    @Override
+    public List<NormalizedMessage> fetchSince(OffsetDateTime since, Predicate<String> known) throws Exception {
+        try {
+            return fetchNew(since, known);
+        } catch (GoogleJsonResponseException e) {
+            throw new IOException(brief(e), e);
+        }
+    }
+
+    /** "429: User-rate limit exceeded..." instead of the full HTTP dump Google puts in getMessage(). */
+    static String brief(Exception e) {
+        if (e instanceof GoogleJsonResponseException g && g.getDetails() != null && g.getDetails().getMessage() != null) {
+            return g.getStatusCode() + ": " + g.getDetails().getMessage();
+        }
+        String m = String.valueOf(e.getMessage());
+        return m.lines().findFirst().orElse(m);
+    }
+
+    private List<NormalizedMessage> fetchNew(OffsetDateTime since, Predicate<String> known) throws Exception {
         Gmail gmail = gmail();
         String me = gmail.users().getProfile("me").execute().getEmailAddress().toLowerCase();
         long after = since.toEpochSecond();
+        int cap = config.maxMessagesPerSync();
 
+        // Listing is cheap; downloading is not. Only download ids that aren't stored yet.
         Set<String> ids = new LinkedHashSet<>();
+        boolean more = false;
         for (String q : List.of(config.inboxQuery() + " after:" + after, "in:sent after:" + after)) {
             String page = null;
             do {
                 ListMessagesResponse r = gmail.users().messages().list("me").setQ(q).setPageToken(page)
                         .setMaxResults(100L).execute();
-                if (r.getMessages() != null) r.getMessages().forEach(m -> ids.add(m.getId()));
+                if (r.getMessages() != null) {
+                    r.getMessages().stream().map(m -> m.getId()).filter(id -> !known.test(id)).forEach(ids::add);
+                }
                 page = r.getNextPageToken();
-            } while (page != null && ids.size() < config.maxMessagesPerSync());
+            } while (page != null && ids.size() < cap);
+            more |= page != null;
         }
+        more |= ids.size() > cap;
 
         List<NormalizedMessage> out = new ArrayList<>();
-        for (String id : ids.stream().limit(config.maxMessagesPerSync()).toList()) {
-            out.add(parse(gmail.users().messages().get("me", id).setFormat("full").execute(), me));
+        for (String id : ids.stream().limit(cap).toList()) {
+            try {
+                out.add(parse(gmail.users().messages().get("me", id).setFormat("full").execute(), me));
+            } catch (Exception e) {
+                if (out.isEmpty()) throw e;
+                throw new PartialFetchException("Stopped after " + out.size() + " messages: " + brief(e), out, e);
+            }
         }
+        if (more) throw new PartialFetchException("More than " + cap + " new messages; continuing next sync", out, null);
         return out;
     }
 

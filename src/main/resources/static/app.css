@@ -166,6 +166,13 @@ button:disabled { opacity: .55; cursor: default; }
 .alert { padding: .6rem .8rem; border-radius: 8px; margin: .5rem 0; font-size: .9rem; }
 .alert.error { background: var(--danger-soft); color: var(--danger); }
 .alert.info { background: var(--surface-2); color: var(--muted); }
+.channel-error { overflow-wrap: anywhere; }
+.channel-error details { margin-top: .35rem; }
+.channel-error summary { cursor: pointer; font-size: .8rem; }
+.channel-error pre {
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow-y: auto;
+  margin: .35rem 0 0; font-size: .75rem;
+}
 
 .steps { counter-reset: step; list-style: none; padding: 0; }
 .steps > li { counter-increment: step; position: relative; padding-left: 2.25rem; margin-bottom: 1.25rem; }

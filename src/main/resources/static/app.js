@@ -637,10 +637,20 @@
   }
 
   function channelStatus(ch) {
-    return el("p", { class: "small" }, el("span", { class: "status-dot" + (ch.connected ? " on" : "") }),
-      ch.connected ? "Connected" + (ch.account ? " as " + ch.account : "") : "Not connected",
-      ch.lastSync ? " · last sync " + fmtDateTime(ch.lastSync) : "",
-      ch.lastError ? el("span", { class: "badge high" }, " Last error: " + ch.lastError) : null);
+    return el("div", {},
+      el("p", { class: "small" }, el("span", { class: "status-dot" + (ch.connected ? " on" : "") }),
+        ch.connected ? "Connected" + (ch.account ? " as " + ch.account : "") : "Not connected",
+        ch.lastSync ? " · last sync " + fmtDateTime(ch.lastSync) : ""),
+      ch.lastError ? channelError(ch.lastError) : null);
+  }
+
+  // Short first line always visible; anything longer folds into "Details" so the page never scrolls sideways.
+  function channelError(text) {
+    const first = text.split("\n")[0];
+    const summary = first.length > 160 ? first.slice(0, 160) + "…" : first;
+    return el("div", { class: "alert error channel-error" },
+      el("strong", {}, "Last error: "), summary,
+      text !== summary ? el("details", {}, el("summary", {}, "Details"), el("pre", {}, text)) : null);
   }
 
   // ---------- boot ----------
