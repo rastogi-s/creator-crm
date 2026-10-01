@@ -54,7 +54,7 @@ You can check a download against `SHA256SUMS.txt` on the release page.
 ### Server install (Docker)
 
 ```bash
-docker run -d --name creator-crm -p 127.0.0.1:8080:8080 -v creator-crm:/data ghcr.io/<owner>/creator-crm:latest
+docker run -d --name creator-crm -p 127.0.0.1:8080:8080 -v creator-crm:/data ghcr.io/rastogi-s/creator-crm:latest
 docker logs creator-crm 2>&1 | grep -A3 "setup code"
 ```
 
