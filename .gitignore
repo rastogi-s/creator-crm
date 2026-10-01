@@ -1,0 +1,8 @@
+data/
+target/
+.env
+*.key
+.idea/
+*.iml
+dist/
+packaging/creator-crm.jar

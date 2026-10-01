@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:crmtest;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+
+crm:
+  data-dir: ./target/test-data
+  schedule:
+    sync-cron: "-"
+    morning-digest-cron: "-"

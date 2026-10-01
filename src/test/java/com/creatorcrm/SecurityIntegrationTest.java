@@ -1,0 +1,135 @@
+package com.creatorcrm;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.creatorcrm.security.CryptoService;
+import com.creatorcrm.security.SecretName;
+import com.creatorcrm.security.SecretStore;
+import com.creatorcrm.security.SetupService;
+import java.net.CookieManager;
+import java.net.HttpCookie;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
+@TestPropertySource(properties = "spring.datasource.url=jdbc:h2:mem:sectest;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+class SecurityIntegrationTest {
+
+    @Value("${local.server.port}") int port;
+    @Autowired SetupService setup;
+    @Autowired SecretStore secrets;
+
+    private final CookieManager cookies = new CookieManager();
+    private final HttpClient http = HttpClient.newBuilder().cookieHandler(cookies).followRedirects(HttpClient.Redirect.NEVER).build();
+
+    private URI uri(String path) { return URI.create("http://localhost:" + port + path); }
+
+    private HttpResponse<String> get(String path) throws Exception {
+        return http.send(HttpRequest.newBuilder(uri(path)).GET().build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> post(String path, String contentType, String body, boolean withCsrf) throws Exception {
+        return send("POST", path, contentType, body, withCsrf);
+    }
+
+    private HttpResponse<String> send(String method, String path, String contentType, String body, boolean withCsrf) throws Exception {
+        HttpRequest.Builder b = HttpRequest.newBuilder(uri(path)).header("Content-Type", contentType)
+                .method(method, HttpRequest.BodyPublishers.ofString(body));
+        if (withCsrf) b.header("X-XSRF-TOKEN", csrf());
+        return http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private String csrf() {
+        return cookies.getCookieStore().getCookies().stream().filter(c -> c.getName().equals("XSRF-TOKEN"))
+                .map(HttpCookie::getValue).findFirst().orElse("");
+    }
+
+    @Test
+    @Order(1)
+    void beforeSetupEverythingRedirectsToSetupAndSetupNeedsTheConsoleCode() throws Exception {
+        assertThat(get("/").statusCode()).isEqualTo(302);
+        assertThat(get("/").headers().firstValue("Location").orElse("")).endsWith("/setup.html");
+        get("/api/setup/status"); // prime CSRF cookie
+
+        String body = "{\"code\":\"guess\",\"username\":\"admin\",\"password\":\"a-long-enough-password\"}";
+        assertThat(post("/api/setup/admin", "application/json", body, false).statusCode()).isEqualTo(403); // no CSRF
+        assertThat(post("/api/setup/admin", "application/json", body, true).statusCode()).isEqualTo(400);  // wrong code
+
+        String code = setup.setupCode();
+        String ok = "{\"code\":\"" + code + "\",\"username\":\"admin\",\"password\":\"a-long-enough-password\"}";
+        assertThat(post("/api/setup/admin", "application/json", ok, true).statusCode()).isEqualTo(200);
+        assertThat(post("/api/setup/admin", "application/json", ok, true).statusCode()).as("cannot be claimed twice").isIn(401, 403);
+    }
+
+    @Test
+    @Order(2)
+    void apiRequiresLoginAndCsrf() throws Exception {
+        assertThat(get("/api/today").statusCode()).isEqualTo(401);
+        get("/login.html");
+        get("/api/setup/status");
+        HttpResponse<String> bad = post("/login", "application/x-www-form-urlencoded", "username=admin&password=wrong", true);
+        assertThat(bad.headers().firstValue("Location").orElse("")).contains("error");
+        HttpResponse<String> good = post("/login", "application/x-www-form-urlencoded", "username=admin&password=a-long-enough-password", true);
+        assertThat(good.headers().firstValue("Location").orElse("")).doesNotContain("error");
+
+        assertThat(get("/api/today").statusCode()).isEqualTo(200);
+        assertThat(post("/api/settings/mcp-key", "application/json", "", false).statusCode()).as("CSRF required").isEqualTo(403);
+
+        // Credentials are write-only
+        assertThat(send("PUT", "/api/settings/credentials", "application/json", "{\"ANTHROPIC_API_KEY\":\"sk-ant-test-123\"}", true).statusCode()).isEqualTo(200);
+        assertThat(secrets.get(SecretName.ANTHROPIC_API_KEY)).contains("sk-ant-test-123");
+        assertThat(get("/api/settings").body()).doesNotContain("sk-ant-test-123");
+        // OAuth tokens can't be injected through the credentials endpoint
+        assertThat(send("PUT", "/api/settings/credentials", "application/json", "{\"GMAIL_REFRESH_TOKEN\":\"x\"}", true).statusCode()).isEqualTo(400);
+    }
+
+    @Test
+    @Order(3)
+    void mcpRequiresApiKey() throws Exception {
+        String init = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"t\",\"version\":\"1\"}}}";
+        HttpRequest.Builder b = HttpRequest.newBuilder(uri("/mcp")).header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream").POST(HttpRequest.BodyPublishers.ofString(init));
+        HttpClient plain = HttpClient.newHttpClient();
+        assertThat(plain.send(b.build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+        assertThat(plain.send(b.copy().header("Authorization", "Bearer wrong").build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+
+        secrets.put(SecretName.MCP_API_KEY_HASH, CryptoService.sha256Hex("crm_test_key"));
+        HttpResponse<String> ok = plain.send(b.copy().header("Authorization", "Bearer crm_test_key").build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(ok.statusCode()).isEqualTo(200);
+        assertThat(ok.body()).contains("creator-crm");
+    }
+
+    @Test
+    @Order(4)
+    void webhookRequiresValidSignature() throws Exception {
+        secrets.put(SecretName.INSTAGRAM_APP_SECRET, "app-secret");
+        String body = "{\"object\":\"instagram\",\"entry\":[]}";
+        HttpClient plain = HttpClient.newHttpClient();
+        HttpRequest.Builder b = HttpRequest.newBuilder(uri("/webhooks/instagram")).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        assertThat(plain.send(b.build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+        assertThat(plain.send(b.copy().header("X-Hub-Signature-256", "sha256=00").build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec("app-secret".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        String sig = "sha256=" + HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+        assertThat(plain.send(b.copy().header("X-Hub-Signature-256", sig).build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+    }
+}

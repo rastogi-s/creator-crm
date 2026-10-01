@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Creator CRM — Setup</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="auth">
+  <h1>Welcome to Creator CRM</h1>
+  <p class="muted">Create your admin account. You'll connect Claude, Gmail and Instagram on the next screen.</p>
+  <div class="card">
+    <form id="setup-form" autocomplete="off">
+      <label for="code">One-time setup code</label>
+      <input id="code" name="code" required autocomplete="one-time-code">
+      <p id="code-help" class="small muted">Printed in the server console/log when the app started. It proves you're the person who installed it.</p>
+
+      <label for="username">Username</label>
+      <input id="username" name="username" required minlength="3" maxlength="100" autocomplete="username">
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required minlength="12" autocomplete="new-password">
+      <p class="small muted">At least 12 characters. A passphrase is great.</p>
+
+      <label for="password2">Confirm password</label>
+      <input id="password2" type="password" required minlength="12" autocomplete="new-password">
+
+      <div id="error" class="alert error hidden" role="alert"></div>
+      <p><button class="primary" type="submit">Create account</button></p>
+    </form>
+  </div>
+</div>
+<script src="/setup.js"></script>
+</body>
+</html>

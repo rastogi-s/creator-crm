@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Creator CRM — Sign in</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="auth">
+  <h1>Creator CRM</h1>
+  <div class="card">
+    <div id="notice" class="alert info hidden" role="status"></div>
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" required autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required autocomplete="current-password">
+      <div id="error" class="alert error hidden" role="alert"></div>
+      <p><button class="primary" type="submit">Sign in</button></p>
+    </form>
+  </div>
+</div>
+<script src="/login.js"></script>
+</body>
+</html>

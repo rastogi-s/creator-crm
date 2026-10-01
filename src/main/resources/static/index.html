@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Creator CRM</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">Creator CRM</div>
+  <nav class="tabs" aria-label="Sections">
+    <button class="tab" data-tab="today">Today</button>
+    <button class="tab" data-tab="pipeline">Pipeline</button>
+    <button class="tab" data-tab="outreach">Outreach</button>
+    <button class="tab" data-tab="drafts">Drafts <span id="drafts-count" class="badge accent hidden"></span></button>
+    <button class="tab" data-tab="summary">Day summary</button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </nav>
+  <button id="sync-btn" class="small" title="Fetch new emails and DMs now">Sync now</button>
+  <button id="logout-btn" class="small">Sign out</button>
+</header>
+
+<main>
+  <section id="view-today" class="view"></section>
+  <section id="view-pipeline" class="view hidden"></section>
+  <section id="view-outreach" class="view hidden"></section>
+  <section id="view-drafts" class="view hidden"></section>
+  <section id="view-summary" class="view hidden"></section>
+  <section id="view-settings" class="view hidden"></section>
+</main>
+
+<div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+<aside id="drawer" class="drawer hidden" aria-label="Deal details"></aside>
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

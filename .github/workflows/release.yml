@@ -1,0 +1,141 @@
+# Publishing a version:  git tag v1.0.0 && git push origin v1.0.0
+# Builds and tests the app, makes installers for Windows / macOS / Linux, pushes a Docker image to
+# ghcr.io, and creates a GitHub Release with everything attached.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  jar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Set version from tag
+        run: bash ./mvnw -B -q versions:set -DnewVersion="${GITHUB_REF_NAME#v}" -DgenerateBackupPoms=false
+      - name: Build and test
+        run: bash ./mvnw -B verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jar
+          path: target/creator-manager-*.jar
+
+  installers:
+    needs: jar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            type: msi
+            suffix: windows-x64
+          - os: macos-latest
+            type: dmg
+            suffix: macos-apple-silicon
+          - os: macos-15-intel
+            type: dmg
+            suffix: macos-intel
+          - os: ubuntu-latest
+            type: deb
+            suffix: linux-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/download-artifact@v4
+        with:
+          name: jar
+          path: target
+      - name: Install WiX Toolset 3 (Windows installers)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip -OutFile wix.zip
+          Expand-Archive wix.zip -DestinationPath "$env:RUNNER_TEMP\wix"
+          "$env:RUNNER_TEMP\wix" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - name: Build installer
+        shell: bash
+        run: bash packaging/package.sh ${{ matrix.type }} "${GITHUB_REF_NAME#v}"
+      - name: Name it for the release page
+        shell: bash
+        run: |
+          mkdir -p dist
+          for f in target/installer/*.${{ matrix.type }}; do
+            cp "$f" "dist/Creator-CRM-${GITHUB_REF_NAME#v}-${{ matrix.suffix }}.${{ matrix.type }}"
+          done
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.suffix }}
+          path: dist/*
+
+  docker:
+    needs: jar
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: jar
+          path: target
+      - run: cp target/creator-manager-*.jar packaging/creator-crm.jar
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/creator-crm
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: packaging
+          file: packaging/Dockerfile.release
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  release:
+    needs: [jar, installers, docker]
+    if: ${{ !cancelled() && needs.jar.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.msi' -o -name '*.dmg' -o -name '*.deb' \) -exec cp {} release/ \;
+          cp artifacts/jar/creator-manager-*.jar "release/creator-crm-${GITHUB_REF_NAME#v}.jar"
+          (cd release && sha256sum * > SHA256SUMS.txt)
+          ls -la release
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

@@ -1,0 +1,36 @@
+# docker compose up -d        then: docker compose logs app | grep -A3 "setup code"
+services:
+  app:
+    build: .
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/creator_crm
+      DATABASE_USER: creator
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      # The URL you open in the browser. Use your https:// domain when deployed.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      # Set to "true" when served over HTTPS.
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      # Optional: supply the master encryption key instead of letting the app generate /data/master.key.
+      CRM_ENCRYPTION_KEY: ${CRM_ENCRYPTION_KEY:-}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "127.0.0.1:8080:8080"   # local only; put an HTTPS reverse proxy in front to expose it
+    volumes:
+      - crm-data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: creator_crm
+      POSTGRES_USER: creator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  crm-data:
+  pgdata:
