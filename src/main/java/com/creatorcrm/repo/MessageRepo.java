@@ -10,4 +10,6 @@ public interface MessageRepo extends JpaRepository<Message, Long> {
     List<Message> findByConversationIdOrderBySentAtAsc(Long conversationId);
 
     List<Message> findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc();
+
+    long countByAiProcessedFalseAndFilteredReasonIsNull();
 }

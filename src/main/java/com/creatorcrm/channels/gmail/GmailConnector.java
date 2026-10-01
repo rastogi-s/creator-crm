@@ -27,9 +27,11 @@ import com.google.auth.http.HttpCredentialsAdapter;
 import com.google.auth.oauth2.UserCredentials;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,6 +40,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
@@ -108,7 +112,7 @@ public class GmailConnector implements ChannelConnector {
         return new ExponentialBackOff.Builder()
                 .setInitialIntervalMillis(1_000)
                 .setMaxIntervalMillis(30_000)
-                .setMaxElapsedTimeMillis(120_000)
+                .setMaxElapsedTimeMillis(60_000)
                 .build();
     }
 
@@ -119,12 +123,49 @@ public class GmailConnector implements ChannelConnector {
 
     @Override
     public List<NormalizedMessage> fetchSince(OffsetDateTime since, Predicate<String> known) throws Exception {
+        List<NormalizedMessage> out = new ArrayList<>();
         try {
-            return fetchNew(since, known);
-        } catch (GoogleJsonResponseException e) {
-            throw new IOException(brief(e), e);
+            fetchNew(since, known, out);
+            return out;
+        } catch (PartialFetchException e) {
+            throw e;
+        } catch (Exception e) {
+            Optional<Instant> retryAt = rateLimitRetryAt(e, Instant.now());
+            if (retryAt.isPresent()) {
+                throw new PartialFetchException("Gmail rate limit (" + brief(e) + ")", out, e, retryAt.get());
+            }
+            if (!out.isEmpty()) throw new PartialFetchException("Stopped after " + out.size() + " messages: " + brief(e), out, e);
+            throw e instanceof GoogleJsonResponseException ? new IOException(brief(e), e) : e;
         }
     }
+
+    private static final Pattern RETRY_AFTER = Pattern.compile("(?i)retry after (\\d{4}-\\d{2}-\\d{2}T[0-9:.]+Z)");
+    private static final Set<String> RATE_LIMIT_REASONS = Set.of("rateLimitExceeded", "userRateLimitExceeded");
+
+    /**
+     * If Gmail rate-limited us, when to try again: the "Retry after" time Gmail gives, or a few minutes from now.
+     * Retrying sooner only extends the block.
+     */
+    static Optional<Instant> rateLimitRetryAt(Exception e, Instant now) {
+        if (!(e instanceof GoogleJsonResponseException g)) return Optional.empty();
+        boolean limited = g.getStatusCode() == 429 || (g.getStatusCode() == 403 && g.getDetails() != null
+                && g.getDetails().getErrors() != null
+                && g.getDetails().getErrors().stream().anyMatch(x -> RATE_LIMIT_REASONS.contains(x.getReason())));
+        if (!limited) return Optional.empty();
+        String msg = g.getDetails() != null && g.getDetails().getMessage() != null ? g.getDetails().getMessage() : "";
+        Matcher m = RETRY_AFTER.matcher(msg);
+        if (m.find()) {
+            try {
+                Instant at = Instant.parse(m.group(1));
+                if (at.isAfter(now)) return Optional.of(at.plusSeconds(30));
+            } catch (DateTimeParseException ignored) {
+                // fall through to the default pause
+            }
+        }
+        return Optional.of(now.plus(DEFAULT_PAUSE));
+    }
+
+    private static final Duration DEFAULT_PAUSE = Duration.ofMinutes(15);
 
     /** "429: User-rate limit exceeded..." instead of the full HTTP dump Google puts in getMessage(). */
     static String brief(Exception e) {
@@ -135,7 +176,10 @@ public class GmailConnector implements ChannelConnector {
         return m.lines().findFirst().orElse(m);
     }
 
-    private List<NormalizedMessage> fetchNew(OffsetDateTime since, Predicate<String> known) throws Exception {
+    /** Gmail allows ~50 message downloads/second per account, shared by every app on it; stay well under. */
+    private static final long MIN_MILLIS_BETWEEN_DOWNLOADS = 150;
+
+    private void fetchNew(OffsetDateTime since, Predicate<String> known, List<NormalizedMessage> out) throws Exception {
         Gmail gmail = gmail();
         String me = gmail.users().getProfile("me").execute().getEmailAddress().toLowerCase();
         long after = since.toEpochSecond();
@@ -158,17 +202,11 @@ public class GmailConnector implements ChannelConnector {
         }
         more |= ids.size() > cap;
 
-        List<NormalizedMessage> out = new ArrayList<>();
         for (String id : ids.stream().limit(cap).toList()) {
-            try {
-                out.add(parse(gmail.users().messages().get("me", id).setFormat("full").execute(), me));
-            } catch (Exception e) {
-                if (out.isEmpty()) throw e;
-                throw new PartialFetchException("Stopped after " + out.size() + " messages: " + brief(e), out, e);
-            }
+            if (!out.isEmpty()) Thread.sleep(MIN_MILLIS_BETWEEN_DOWNLOADS);
+            out.add(parse(gmail.users().messages().get("me", id).setFormat("full").execute(), me));
         }
         if (more) throw new PartialFetchException("More than " + cap + " new messages; continuing next sync", out, null);
-        return out;
     }
 
     static NormalizedMessage parse(Message m, String me) {

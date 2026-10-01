@@ -13,10 +13,13 @@ import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.MessageRepo;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +44,8 @@ public class IngestionService {
     private final CrmProperties props;
     private final ReentrantLock syncLock = new ReentrantLock();
     private final ReentrantLock processLock = new ReentrantLock();
+    /** Bumped whenever stored data changes, so open pages know to refresh. */
+    private final AtomicLong version = new AtomicLong(System.currentTimeMillis());
 
     public IngestionService(List<ChannelConnector> connectors, ConversationRepo conversations, MessageRepo messages,
                             AppStateRepo state, PreFilter preFilter, MessageProcessor processor, LlmClient llm,
@@ -58,6 +63,18 @@ public class IngestionService {
 
     public record SyncReport(Map<String, String> channels, int stored, int processed) {}
 
+    /** What the header shows: is work running, how much is waiting for AI, and why it might be stuck. */
+    public record Status(boolean syncing, boolean analyzing, long waitingForAi, boolean aiConfigured,
+                         String aiError, long version) {}
+
+    public Status status() {
+        return new Status(syncLock.isLocked(), processLock.isLocked(),
+                messages.countByAiProcessedFalseAndFilteredReasonIsNull(), llm.isConfigured(),
+                read(AI_ERROR).orElse(null), version.get());
+    }
+
+    private static final String AI_ERROR = "ai.error";
+
     public SyncReport syncAll() {
         if (!syncLock.tryLock()) return new SyncReport(Map.of("sync", "already running"), 0, 0);
         try {
@@ -70,6 +87,13 @@ public class IngestionService {
                     continue;
                 }
                 OffsetDateTime started = OffsetDateTime.now();
+                Optional<OffsetDateTime> pausedUntil = read(key + ".pausedUntil").map(OffsetDateTime::parse)
+                        .filter(started::isBefore);
+                if (pausedUntil.isPresent()) {
+                    // The channel told us to back off; calling it sooner only extends the block.
+                    result.put(c.platform().name(), "rate limited, resuming after " + pausedUntil.get());
+                    continue;
+                }
                 OffsetDateTime since = read(key).map(OffsetDateTime::parse)
                         .map(t -> t.minusHours(1)) // overlap; duplicates are ignored
                         .orElse(started.minusDays(props.gmail().initialLookbackDays()));
@@ -79,14 +103,19 @@ public class IngestionService {
                     stored += n;
                     write(key, started.toString());
                     write(key + ".error", "");
+                    write(key + ".pausedUntil", "");
                     result.put(c.platform().name(), n + " new");
                 } catch (PartialFetchException e) {
                     // Keep what we got; leave the cursor alone so the next sync fetches the rest.
                     int n = store(e.fetched());
                     stored += n;
                     log.warn("Sync of {} partial ({} new): {}", c.platform(), n, e.getMessage());
+                    Optional<OffsetDateTime> resume = e.retryAfter().map(t -> t.atZone(ZoneId.systemDefault()).toOffsetDateTime());
+                    write(key + ".pausedUntil", resume.map(OffsetDateTime::toString).orElse(""));
+                    String next = resume.map(t -> "paused until " + t.toLocalTime().withNano(0) + ", then continues automatically")
+                            .orElse("will continue next sync");
                     write(key + ".error", e.getCause() == null ? ""
-                            : OffsetDateTime.now() + " " + e.getMessage() + " (saved " + n + ", will continue next sync)");
+                            : OffsetDateTime.now() + " " + e.getMessage() + " (saved " + n + "; " + next + ")");
                     result.put(c.platform().name(), n + " new, more pending");
                 } catch (Exception e) {
                     log.warn("Sync of {} failed: {}", c.platform(), e.getMessage());
@@ -136,6 +165,7 @@ public class IngestionService {
             messages.save(m);
             n++;
         }
+        if (n > 0) version.incrementAndGet();
         return n;
     }
 
@@ -152,8 +182,11 @@ public class IngestionService {
                 try {
                     processor.process(m);
                     n++;
+                    version.incrementAndGet();
+                    if (read(AI_ERROR).isPresent()) write(AI_ERROR, "");
                 } catch (LlmException e) {
                     log.warn("AI analysis failed for message {}: {}", m.id, e.getMessage());
+                    write(AI_ERROR, OffsetDateTime.now() + " " + e.getMessage());
                     // Bad key or rate limited: stop; unprocessed messages are retried on the next run.
                     if (e.getMessage() != null && e.getMessage().matches(".*\\((401|429)\\).*")) break;
                 } catch (RuntimeException e) {

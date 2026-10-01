@@ -166,6 +166,14 @@ button:disabled { opacity: .55; cursor: default; }
 .alert { padding: .6rem .8rem; border-radius: 8px; margin: .5rem 0; font-size: .9rem; }
 .alert.error { background: var(--danger-soft); color: var(--danger); }
 .alert.info { background: var(--surface-2); color: var(--muted); }
+/* Its own row under the bar, so it never squeezes the tabs. */
+.topbar { flex-wrap: wrap; row-gap: .4rem; }
+.status-row { order: 10; flex: 0 0 100%; display: flex; justify-content: flex-end; min-width: 0; }
+.sync-status {
+  font-size: .8rem; color: var(--muted); background: var(--surface-2); padding: .2rem .6rem;
+  border-radius: 999px; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sync-status.warn { background: var(--warn-soft); color: var(--warn); }
 .channel-error { overflow-wrap: anywhere; }
 .channel-error details { margin-top: .35rem; }
 .channel-error summary { cursor: pointer; font-size: .8rem; }
@@ -185,7 +193,7 @@ button:disabled { opacity: .55; cursor: default; }
 
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; padding: .6rem 1rem; }
-  .tabs { order: 3; width: 100%; }
+  .tabs { order: 3; flex: 0 0 100%; }
   .item { flex-wrap: wrap; }
   .item .actions { width: 100%; padding-left: 2.25rem; }
 }

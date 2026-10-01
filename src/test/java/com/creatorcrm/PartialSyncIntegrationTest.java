@@ -10,6 +10,8 @@ import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.repo.MessageRepo;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,9 +28,11 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 class PartialSyncIntegrationTest {
 
-    /** Serves 5 messages but "rate limits" after 3 downloads per sync. */
+    /** Serves {@code total} messages but "rate limits" after 3 downloads per sync. */
     static class FlakyConnector implements ChannelConnector {
         final List<String> downloaded = new ArrayList<>();
+        int total = 5;
+        Instant retryAfter;
 
         public Platform platform() { return Platform.OTHER; }
         public boolean isConnected() { return true; }
@@ -41,10 +45,10 @@ class PartialSyncIntegrationTest {
 
         public List<NormalizedMessage> fetchSince(OffsetDateTime since, Predicate<String> known) throws Exception {
             List<NormalizedMessage> out = new ArrayList<>();
-            for (int i = 1; i <= 5; i++) {
+            for (int i = 1; i <= total; i++) {
                 String id = "m" + i;
                 if (known.test(id)) continue;
-                if (out.size() == 3) throw new PartialFetchException("429 rate limited", out, new RuntimeException("429"));
+                if (out.size() == 3) throw new PartialFetchException("429 rate limited", out, new RuntimeException("429"), retryAfter);
                 downloaded.add(id);
                 out.add(new NormalizedMessage(Platform.OTHER, id, "t-" + id, Direction.INBOUND, "a@b.test", "A",
                         "me@test", "a@b.test", "Hi", "hello", "", "", OffsetDateTime.now().minusMinutes(10 - i), true));
@@ -67,7 +71,11 @@ class PartialSyncIntegrationTest {
 
     @Test
     void rateLimitedSyncKeepsProgressAndResumes() {
+        long before = ingestion.status().version();
         var first = ingestion.syncAll();
+        // Pages poll this to know when to refresh. No Claude key in tests: the UI says so instead of staying blank.
+        assertThat(ingestion.status().version()).isGreaterThan(before);
+        assertThat(ingestion.status().syncing()).isFalse();
         assertThat(first.channels().get("OTHER")).isEqualTo("3 new, more pending");
         assertThat(ingestion.read("sync.OTHER")).isEmpty(); // cursor not advanced
         assertThat(ingestion.read("sync.OTHER.error")).hasValueSatisfying(e -> assertThat(e).contains("429"));
@@ -78,5 +86,16 @@ class PartialSyncIntegrationTest {
         assertThat(ingestion.read("sync.OTHER")).isPresent();
         assertThat(ingestion.read("sync.OTHER.error")).isEmpty();
         for (int i = 1; i <= 5; i++) assertThat(messages.existsByExternalId("other:m" + i)).isTrue();
+
+        // Channel says "retry after": keep what we got, then don't call it again until then.
+        flaky.total = 10;
+        flaky.retryAfter = Instant.now().plus(Duration.ofMinutes(10));
+        var third = ingestion.syncAll();
+        assertThat(third.channels().get("OTHER")).isEqualTo("3 new, more pending");
+        assertThat(ingestion.read("sync.OTHER.error")).hasValueSatisfying(e -> assertThat(e).contains("paused until"));
+
+        var fourth = ingestion.syncAll();
+        assertThat(fourth.channels().get("OTHER")).startsWith("rate limited, resuming after");
+        assertThat(flaky.downloaded).hasSize(8); // not called while paused
     }
 }

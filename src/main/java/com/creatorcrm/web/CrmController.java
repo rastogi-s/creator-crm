@@ -296,6 +296,11 @@ public class CrmController {
         return ResponseEntity.accepted().body(Map.of("status", "started"));
     }
 
+    @GetMapping("/sync/status")
+    public IngestionService.Status syncStatus() {
+        return ingestion.status();
+    }
+
     @GetMapping("/enums")
     public Map<String, List<String>> enums() {
         return Map.of(

@@ -660,13 +660,66 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
   document.getElementById("sync-btn").addEventListener("click", action(async () => {
     await api("POST", "/api/sync");
-    setTimeout(route, 8000);
-  }, "Syncing… new items will appear shortly"));
+    setTimeout(pollStatus, 1000);
+  }, "Syncing… new items appear as they're analyzed"));
+
+  // ---------- live sync status ----------
+  // Polls quickly while a sync or AI analysis is running, slowly otherwise. When stored data changes, the
+  // open page re-renders, unless the user is mid-edit (focused field or open deal drawer).
+
+  let seenVersion = null;
+  let staleView = false;
+  let statusTimer = null;
+
+  function userIsEditing() {
+    const a = document.activeElement;
+    const typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest("main, #drawer");
+    return Boolean(typing) || !document.getElementById("drawer").classList.contains("hidden");
+  }
+
+  function showStatus(s) {
+    const n = s.waitingForAi;
+    const msgs = n + " message" + (n === 1 ? "" : "s");
+    let text = "", warn = false, title = "";
+    if (s.analyzing) text = "Analyzing " + msgs + "…";
+    else if (s.syncing) text = "Syncing…";
+    else if (n > 0 && !s.aiConfigured) {
+      text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
+    } else if (n > 0 && s.aiError) {
+      text = msgs + " waiting: " + (/\(401\)/.test(s.aiError) ? "Claude API key rejected"
+        : /\(429\)/.test(s.aiError) ? "Claude rate limit, retrying next sync" : "AI error");
+      warn = true; title = s.aiError;
+    } else if (n > 0) text = msgs + " waiting for analysis";
+    const chip = document.getElementById("sync-status");
+    chip.textContent = text;
+    chip.title = title;
+    chip.className = "sync-status" + (warn ? " warn" : "");
+    document.getElementById("sync-status-row").classList.toggle("hidden", !text);
+  }
+
+  async function pollStatus() {
+    clearTimeout(statusTimer);
+    let busy = false;
+    try {
+      const s = await api("GET", "/api/sync/status");
+      busy = s.syncing || s.analyzing;
+      showStatus(s);
+      if (seenVersion !== null && s.version !== seenVersion) staleView = true;
+      seenVersion = s.version;
+      if (staleView && !userIsEditing() && !document.hidden) {
+        staleView = false;
+        await route();
+      }
+    } catch (e) { /* signed out or offline: try again later */ }
+    statusTimer = setTimeout(pollStatus, busy ? 4000 : 60000);
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollStatus(); });
   document.getElementById("logout-btn").addEventListener("click", async () => {
     await fetch("/logout", { method: "POST", credentials: "same-origin", headers: { "X-XSRF-TOKEN": csrf() } });
     location.replace("/login.html?logout");
   });
   window.addEventListener("hashchange", route);
+  pollStatus();
 
   api("GET", "/api/statuses").then((s) => { statuses = s; route(); });
 })();
