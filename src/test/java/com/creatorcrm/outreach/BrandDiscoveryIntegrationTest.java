@@ -93,6 +93,29 @@ class BrandDiscoveryIntegrationTest {
     }
 
     @Test
+    void sameInstagramHandleMeansSameBrandWhateverTheName() {
+        String t = tag();
+        Brand existing = new Brand();
+        existing.name = "Sunbloom Skincare " + t;
+        existing.nameKey = Brand.key(existing.name);
+        existing.instagram = "@sunbloom_" + t; // brands from DMs/manual logging may keep the @
+        existing.createdAt = OffsetDateTime.now();
+        brands.save(existing);
+        llm.nextLeads = new BrandLeads(List.of(lead("Fern " + t, "", "fernco_" + t, "", "")));
+        discovery.discover("plant brands", 3);
+
+        llm.nextLeads = new BrandLeads(List.of(
+                lead("Sunbloom " + t, "", "https://instagram.com/Sunbloom_" + t, "", ""),
+                lead("Fern and Co " + t, "", "@FernCo_" + t, "", ""),
+                lead("Moss " + t, "", "", "", "")));
+
+        assertThat(discovery.discover("plant brands", 5)).extracting(l -> l.name).containsExactly("Moss " + t);
+        assertThat(discovery.alreadyKnown("sunbloom_" + t)).isTrue();
+        assertThat(discovery.alreadyKnown("fernco_" + t)).isTrue();
+        assertThat(discovery.alreadyKnown("someone_new_" + t)).isFalse();
+    }
+
+    @Test
     void aLeadBecomesAPitchDraftThatStartsFollowUpsWhenSent() {
         String t = tag();
         llm.nextLeads = new BrandLeads(List.of(lead("Sol " + t, "https://sol.example", "", "pr@sol.example", "https://sol.example/press")));

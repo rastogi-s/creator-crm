@@ -96,7 +96,7 @@ public class BrandDiscoveryService {
             String name = clean(l.name(), 200);
             String key = Brand.key(name);
             if (key.isEmpty() || !seen.add(key)) continue;
-            if (brands.findByNameKey(key).isPresent() || leads.existsByNameKey(key)) continue; // already known
+            if (knownBrand(key, handle(l.instagram())).isPresent() || leadExists(key, handle(l.instagram()))) continue;
             BrandLead lead = new BrandLead();
             lead.name = name;
             lead.nameKey = key;
@@ -127,10 +127,10 @@ public class BrandDiscoveryService {
         String name = clean(p.name(), 200) != null ? clean(p.name(), 200) : p.username();
         String key = Brand.key(name);
         if (key.isEmpty()) key = Brand.key(p.username());
-        Optional<BrandLead> existing = leads.findFirstByNameKeyOrderByIdDesc(key)
-                .filter(l -> l.status == BrandLead.Status.NEW);
+        Optional<BrandLead> existing = openLead(key, p.username());
         if (existing.isPresent()) return leads.save(apply(existing.get(), p));
-        if (brands.findByNameKey(key).isPresent()) throw new IllegalStateException(name + " is already one of your brands");
+        Optional<Brand> brand = knownBrand(key, p.username());
+        if (brand.isPresent()) throw new IllegalStateException(brand.get().name + " is already one of your brands");
         BrandLead lead = newLead(name, key, BrandLead.Source.LOOKUP, LOOKUP_QUERY);
         lead.instagram = p.username();
         return leads.save(apply(lead, p));
@@ -139,6 +139,10 @@ public class BrandDiscoveryService {
     /** An account that tagged, mentioned or commented on her becomes a lead (or the existing lead for it). */
     @Transactional
     public BrandLead fromEngagement(InstagramEngagement e) {
+        Optional<BrandLead> sameHandle = leads.findFirstByInstagramIgnoreCaseAndStatus(e.username, BrandLead.Status.NEW);
+        if (sameHandle.isPresent()) return sameHandle.get();
+        Optional<Brand> brand = knownBrand(Brand.key(e.username), e.username);
+        if (brand.isPresent()) throw new IllegalStateException("@" + e.username + " is already one of your brands (" + brand.get().name + ")");
         Optional<BrandLookupService.Profile> p = Optional.empty();
         if (lookup.available()) {
             try {
@@ -151,9 +155,10 @@ public class BrandDiscoveryService {
         if (name == null) name = e.username;
         String key = Brand.key(name);
         if (key.isEmpty()) key = Brand.key(e.username);
-        Optional<BrandLead> existing = leads.findFirstByNameKeyOrderByIdDesc(key)
-                .filter(l -> l.status == BrandLead.Status.NEW);
+        Optional<BrandLead> existing = openLead(key, null);
         if (existing.isPresent()) return existing.get();
+        brand = knownBrand(key, null);
+        if (brand.isPresent()) throw new IllegalStateException("@" + e.username + " is already one of your brands (" + brand.get().name + ")");
         BrandLead lead = newLead(name, key, BrandLead.Source.INSTAGRAM, ENGAGED_QUERY);
         lead.instagram = handle(e.username);
         lead.fitReason = clean(engagementReason(e), 2000);
@@ -170,6 +175,40 @@ public class BrandDiscoveryService {
         BrandLookupService.Profile p = lookup.lookup(lead.instagram).orElseThrow(() -> new IllegalArgumentException(
                 "@" + lead.instagram + " isn't a business or creator account on Instagram, or doesn't exist"));
         return leads.save(apply(lead, p));
+    }
+
+    /**
+     * True when this Instagram account is already a brand (by handle or name) or has a lead in any state, so the
+     * "engaging with you" list doesn't offer it again.
+     */
+    public boolean alreadyKnown(String instagramHandle) {
+        String h = handle(instagramHandle);
+        if (h == null) return false;
+        return knownBrand(Brand.key(h), h).isPresent() || leadExists(Brand.key(h), h);
+    }
+
+    // The same brand can arrive from web research, Instagram engagement, a lookup, email or DMs: it is the same
+    // brand when either the normalized name or the Instagram handle matches.
+    private Optional<Brand> knownBrand(String key, String instagramHandle) {
+        Optional<Brand> b = key.isEmpty() ? Optional.empty() : brands.findByNameKey(key);
+        if (b.isEmpty() && instagramHandle != null) {
+            b = brands.findFirstByInstagramIgnoreCase(instagramHandle)
+                    .or(() -> brands.findFirstByInstagramIgnoreCase("@" + instagramHandle));
+        }
+        return b;
+    }
+
+    private boolean leadExists(String key, String instagramHandle) {
+        return (!key.isEmpty() && leads.existsByNameKey(key))
+                || (instagramHandle != null && leads.existsByInstagramIgnoreCase(instagramHandle));
+    }
+
+    private Optional<BrandLead> openLead(String key, String instagramHandle) {
+        Optional<BrandLead> l = leads.findFirstByNameKeyOrderByIdDesc(key).filter(x -> x.status == BrandLead.Status.NEW);
+        if (l.isEmpty() && instagramHandle != null) {
+            l = leads.findFirstByInstagramIgnoreCaseAndStatus(instagramHandle, BrandLead.Status.NEW);
+        }
+        return l;
     }
 
     static String engagementReason(InstagramEngagement e) {

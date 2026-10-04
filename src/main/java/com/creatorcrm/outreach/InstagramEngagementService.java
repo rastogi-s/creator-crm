@@ -64,10 +64,14 @@ public class InstagramEngagementService {
         this.discovery = discovery;
     }
 
-    /** New accounts worth a look: not dismissed, not already leads, and not known to be personal accounts. */
+    /**
+     * New accounts worth a look: not dismissed, not known to be personal accounts, and not already a brand or a
+     * lead from anywhere else (matched by handle or name).
+     */
     public List<Row> open() {
         return engagements.findByStatusOrderByLastSeenAtDesc(InstagramEngagement.Status.NEW).stream()
                 .filter(e -> !Boolean.FALSE.equals(e.isBusiness))
+                .filter(e -> !discovery.alreadyKnown(e.username))
                 .sorted(Comparator.comparing((InstagramEngagement e) -> e.mentions > 0 ? 0 : 1)
                         .thenComparing(e -> e.lastSeenAt, Comparator.reverseOrder()))
                 .map(e -> new Row(e.id, e.username, e.mentions, e.comments, e.lastKind, e.lastText, e.lastPermalink,

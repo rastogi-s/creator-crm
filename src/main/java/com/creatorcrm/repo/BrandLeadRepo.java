@@ -11,4 +11,8 @@ public interface BrandLeadRepo extends JpaRepository<BrandLead, Long> {
     boolean existsByNameKey(String nameKey);
 
     Optional<BrandLead> findFirstByNameKeyOrderByIdDesc(String nameKey);
+
+    boolean existsByInstagramIgnoreCase(String instagram);
+
+    Optional<BrandLead> findFirstByInstagramIgnoreCaseAndStatus(String instagram, BrandLead.Status status);
 }

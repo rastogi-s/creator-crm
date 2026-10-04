@@ -9,16 +9,18 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.creatorcrm.channels.instagram.InstagramApi;
+import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.BrandLead;
 import com.creatorcrm.domain.InstagramEngagement;
 import com.creatorcrm.repo.BrandLeadRepo;
+import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.InstagramEngagementRepo;
 import com.creatorcrm.repo.InstagramSeenEventRepo;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Map;
+import java.time.OffsetDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,7 @@ class InstagramEngagementIntegrationTest {
     @Autowired InstagramEngagementRepo engagements;
     @Autowired InstagramSeenEventRepo seen;
     @Autowired BrandLeadRepo leads;
+    @Autowired BrandRepo brands;
     @Autowired SecretStore secrets;
 
     private static JsonNode json(String s) throws Exception {
@@ -149,6 +152,24 @@ class InstagramEngagementIntegrationTest {
         assertThat(discovery.lookupHandle("glowco").id).isEqualTo(lead.id); // no duplicate lead
         assertThatThrownBy(() -> discovery.lookupHandle("bestie22")).hasMessageContaining("isn't a business or creator account");
         leads.deleteById(lead.id);
+    }
+
+    @Test
+    void brandsSheAlreadyWorksWithAreNotOfferedAgain() {
+        Brand b = new Brand();
+        b.name = "Glow Cosmetics Ltd"; // came in by email under another name
+        b.nameKey = Brand.key(b.name);
+        b.instagram = "GlowCo";
+        b.createdAt = OffsetDateTime.now();
+        b = brands.save(b);
+        try {
+            engagement.poll();
+            assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).containsExactly("bestie22");
+            Long id = engagements.findByUsername("glowco").orElseThrow().id;
+            assertThatThrownBy(() -> engagement.makeLead(id)).hasMessageContaining("already one of your brands (Glow Cosmetics Ltd)");
+        } finally {
+            brands.deleteById(b.id);
+        }
     }
 
     @Test
