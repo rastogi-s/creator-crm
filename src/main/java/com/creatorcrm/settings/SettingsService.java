@@ -44,11 +44,22 @@ public class SettingsService {
     /** "false" = drafts don't get examples of the creator's past messages. */
     public static final String LEARN_FROM_HISTORY = "learnFromHistory";
 
+    /** Invoice header and footer: who is billing, and how to pay. Blank until the creator fills them in. */
+    public static final String INVOICE_BUSINESS_NAME = "invoiceBusinessName";
+    public static final String INVOICE_ADDRESS = "invoiceAddress";
+    public static final String INVOICE_TAX_ID = "invoiceTaxId";
+    public static final String INVOICE_PAYMENT_DETAILS = "invoicePaymentDetails";
+    /** Invoice numbers are PREFIX-YEAR-NNN, e.g. INV-2026-001. */
+    public static final String INVOICE_PREFIX = "invoicePrefix";
+    /** Days from the invoice date to its due date. */
+    public static final String INVOICE_TERMS_DAYS = "invoiceTermsDays";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
 
     public static final Set<String> EDITABLE = Set.of(
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
-            FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY);
+            FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
+            INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -140,6 +151,19 @@ public class SettingsService {
         return Boolean.parseBoolean(raw(LEARN_FROM_HISTORY, "true"));
     }
 
+    /** The business name on invoices; the creator's name until one is set. */
+    public String invoiceBusinessName() { return raw(INVOICE_BUSINESS_NAME, creatorName()); }
+
+    public String invoiceAddress() { return raw(INVOICE_ADDRESS, ""); }
+
+    public String invoiceTaxId() { return raw(INVOICE_TAX_ID, ""); }
+
+    public String invoicePaymentDetails() { return raw(INVOICE_PAYMENT_DETAILS, ""); }
+
+    public String invoicePrefix() { return raw(INVOICE_PREFIX, "INV"); }
+
+    public int invoiceTermsDays() { return Integer.parseInt(raw(INVOICE_TERMS_DAYS, "30")); }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -164,6 +188,12 @@ public class SettingsService {
         m.put(FOLLOWUP_TIME, followupTime().toString());
         m.put(FOLLOWUP_AUTO_SEND, String.valueOf(followupAutoSend()));
         m.put(LEARN_FROM_HISTORY, String.valueOf(learnFromHistory()));
+        m.put(INVOICE_BUSINESS_NAME, raw(INVOICE_BUSINESS_NAME, ""));
+        m.put(INVOICE_ADDRESS, invoiceAddress());
+        m.put(INVOICE_TAX_ID, invoiceTaxId());
+        m.put(INVOICE_PAYMENT_DETAILS, invoicePaymentDetails());
+        m.put(INVOICE_PREFIX, invoicePrefix());
+        m.put(INVOICE_TERMS_DAYS, String.valueOf(invoiceTermsDays()));
         return m;
     }
 
@@ -196,6 +226,16 @@ public class SettingsService {
             }
             case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
+            }
+            case INVOICE_PREFIX -> {
+                if (!v.isBlank() && !v.trim().matches("[A-Za-z0-9]{1,10}")) {
+                    throw new IllegalArgumentException("Invoice prefix: 1-10 letters or digits, e.g. INV");
+                }
+            }
+            case INVOICE_TERMS_DAYS -> {
+                if (!v.isBlank() && !v.trim().matches("\\d{1,3}")) {
+                    throw new IllegalArgumentException("Payment terms must be a number of days, e.g. 30");
+                }
             }
             case CLASSIFIER_MODEL, WRITER_MODEL -> {
                 if (!v.matches("[a-z0-9.-]{3,64}")) throw new IllegalArgumentException("Invalid model id");

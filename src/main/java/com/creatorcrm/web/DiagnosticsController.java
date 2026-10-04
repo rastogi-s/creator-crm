@@ -21,6 +21,8 @@ public class DiagnosticsController {
 
     public record AutoReport(boolean enabled) {}
 
+    public record EmailTo(@Size(max = 254) String address) {}
+
     public record Problem(@Size(max = 4000) String note) {}
 
     private final ErrorReporter reporter;
@@ -37,6 +39,12 @@ public class DiagnosticsController {
     @PutMapping("/auto-report")
     public ErrorReporter.Status autoReport(@RequestBody AutoReport body) {
         reporter.setAutoReport(body.enabled());
+        return reporter.status();
+    }
+
+    @PutMapping("/email")
+    public ErrorReporter.Status email(@Valid @RequestBody EmailTo body) {
+        reporter.setEmailTo(body.address());
         return reporter.status();
     }
 
