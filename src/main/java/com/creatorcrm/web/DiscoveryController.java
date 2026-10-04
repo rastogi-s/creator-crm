@@ -1,5 +1,7 @@
 package com.creatorcrm.web;
 
+import com.creatorcrm.llm.ClaudeSpend;
+import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.domain.BrandLead;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.outreach.BrandDiscoveryService;
@@ -19,14 +21,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/leads")
 public class DiscoveryController {
 
-    public record Search(@Size(max = 300) String query, Integer count) {}
+    public record Search(@Size(max = 300) String query, Integer count, @Size(max = 20) String depth) {}
 
     public record Contact(@Size(max = 320) String email, @Size(max = 200) String instagram) {}
 
     private final BrandDiscoveryService discovery;
+    private final ClaudeSpend spend;
 
-    public DiscoveryController(BrandDiscoveryService discovery) {
+    public DiscoveryController(BrandDiscoveryService discovery, ClaudeSpend spend) {
         this.discovery = discovery;
+        this.spend = spend;
+    }
+
+    /** Quick / Standard / Thorough with their search caps and what a run costs (measured once there are runs). */
+    @GetMapping("/search-options")
+    public List<ClaudeSpend.DepthCost> searchOptions() {
+        return spend.researchCosts();
     }
 
     @GetMapping
@@ -37,7 +47,7 @@ public class DiscoveryController {
     /** Runs the web research synchronously; it can take a minute or two. */
     @PostMapping("/search")
     public List<BrandLead> search(@Valid @RequestBody Search s) {
-        return discovery.discover(s.query(), s.count() == null ? 5 : s.count());
+        return discovery.discover(s.query(), s.count() == null ? 5 : s.count(), SearchDepth.parse(s.depth()));
     }
 
     @PutMapping("/{id}/contact")

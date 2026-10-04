@@ -1,5 +1,23 @@
 [
   {
+    "version": "1.5.0",
+    "title": "Claude spending and credit warnings",
+    "features": [
+      {
+        "id": "claude-spend",
+        "title": "See what Claude costs, and get warned before credits run out",
+        "body": "Settings now shows how much has been spent on Claude in total, this month, and on reading messages, writing drafts and finding brands. Type in your credit balance from the Claude Console and a yellow banner appears when about 20% is left. If the credits run out, a red banner says so, the app stops trying until you top up, and the developer is told automatically.",
+        "tryIt": "#settings?spend"
+      },
+      {
+        "id": "cheaper-claude",
+        "title": "Claude costs less",
+        "body": "Reading your messages now uses Claude Sonnet, which costs about half as much and still sorts deals well. Drafts still use the best model. Find brands has a Search depth choice: Quick, Standard or Thorough, each showing roughly what one search costs. Big email imports are analyzed at half price in the background, so older deals fill in over a few hours. In Settings you can switch either model, with the rough cost next to each option.",
+        "tryIt": "#outreach"
+      }
+    ]
+  },
+  {
     "version": "1.4.0",
     "title": "Invoices and the Money tab",
     "features": [

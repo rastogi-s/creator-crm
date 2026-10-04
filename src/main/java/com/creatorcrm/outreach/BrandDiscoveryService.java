@@ -14,6 +14,7 @@ import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.links.LinkService;
 import com.creatorcrm.llm.BrandLeads;
 import com.creatorcrm.llm.BrandSearchInput;
+import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandLeadRepo;
@@ -62,6 +63,11 @@ public class BrandDiscoveryService {
 
     /** Research brands for the query and keep the new ones as leads. Returns the leads added. */
     public List<BrandLead> discover(String query, int count) {
+        return discover(query, count, SearchDepth.STANDARD);
+    }
+
+    /** As above, with a cap on web searches: fewer searches cost less but may find fewer brands. */
+    public List<BrandLead> discover(String query, int count, SearchDepth depth) {
         String q = query == null ? "" : query.strip();
         if (q.length() < 3) throw new IllegalArgumentException("Describe the kind of brands to look for");
         if (q.length() > 300) throw new IllegalArgumentException("Keep the search under 300 characters");
@@ -69,7 +75,7 @@ public class BrandDiscoveryService {
 
         List<String> known = new ArrayList<>();
         brands.findAll().stream().limit(EXCLUDE_LIMIT).forEach(b -> known.add(b.name));
-        BrandLeads found = llm.findBrands(new BrandSearchInput(q, n, known));
+        BrandLeads found = llm.findBrands(new BrandSearchInput(q, n, known, depth));
 
         List<BrandLead> added = new ArrayList<>();
         Set<String> seen = new HashSet<>();

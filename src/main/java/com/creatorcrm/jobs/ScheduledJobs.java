@@ -61,6 +61,13 @@ public class ScheduledJobs {
         log.info("Sync: {}", ingestion.syncAll());
     }
 
+    /** While older email is being analyzed in a half-price batch, check for its results every few minutes. */
+    @Scheduled(cron = "${crm.schedule.batch-check-cron:0 */5 * * * *}")
+    public void checkBatch() {
+        if (!setup.isSetupComplete() || !ingestion.batchInFlight()) return;
+        ingestion.processPending();
+    }
+
     /**
      * Checks every minute whether the daily follow-up run is due: once a day, at or after the follow-up time
      * set on the Settings page (creator's time zone). If the computer was off at that time, it runs as soon as

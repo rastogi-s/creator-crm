@@ -94,6 +94,9 @@ class ImportHistoryIntegrationTest {
         llm.draftCalls = 0;
         llm.classifyCalls = 0;
         llm.failWith = null;
+        llm.batch = false;
+        llm.batches.clear();
+        appState.findAll().stream().filter(s -> s.stateKey.startsWith("ai.")).forEach(appState::delete);
         // Earlier tests may leave unanalyzed mail behind; mark it handled so each test sees only its own.
         messages.findAll().stream().filter(m -> !m.aiProcessed && m.filteredReason == null)
                 .forEach(m -> { m.filteredReason = "test reset"; messages.save(m); });
@@ -188,5 +191,55 @@ class ImportHistoryIntegrationTest {
         llm.next.add(analysis(Intent.MEDIA_KIT_REQUEST, "Rec " + recent, true, List.of()));
         ingestion.processPending();
         assertThat(llm.draftCalls).isEqualTo(1);
+    }
+
+    @Test
+    void bigImportsAreAnalyzedInHalfPriceBatchesOneMessagePerThreadAtATime() {
+        llm.batch = true;
+        String id = UUID.randomUUID().toString().substring(0, 6);
+        NormalizedMessage first = mail("a" + id, 40, "Can you send your rates?");
+        NormalizedMessage second = mail("a" + id, 39, "Following up on rates");
+        List<NormalizedMessage> old = new ArrayList<>(List.of(first, second));
+        for (int i = 0; i < 19; i++) old.add(mail("s" + i + id, 30, "Old note " + i));
+        NormalizedMessage fresh = mail("new" + id, 1, "New collab?");
+        ingestion.store(old);
+        ingestion.store(List.of(fresh));
+        llm.next.add(analysis(Intent.NOT_BRAND_RELATED, "", false, List.of()));
+
+        // Round 1: the new email is analyzed now; the oldest waiting message of each old thread goes in one batch.
+        ingestion.processPending();
+        assertThat(llm.classifyCalls).isEqualTo(1);
+        assertThat(stored(fresh).aiProcessed).isTrue();
+        assertThat(llm.batches).hasSize(1);
+        assertThat(llm.batches.getFirst()).hasSize(20)
+                .containsKey(stored(first).id.toString()).doesNotContainKey(stored(second).id.toString());
+        assertThat(ingestion.status().inBatch()).isEqualTo(20);
+        assertThat(ingestion.batchInFlight()).isTrue();
+
+        // Still running: nothing changes, nothing is sent twice.
+        ingestion.processPending();
+        assertThat(llm.batches).hasSize(1);
+        assertThat(llm.classifyCalls).isEqualTo(1);
+        assertThat(stored(first).aiProcessed).isFalse();
+
+        // Finished: results are applied, then the thread's next message goes (only one left, so right away).
+        llm.batchDone = true;
+        llm.next.add(analysis(Intent.NOT_BRAND_RELATED, "", false, List.of()));
+        ingestion.processPending();
+        assertThat(old).allMatch(m -> stored(m).aiProcessed);
+        assertThat(llm.classifyCalls).isEqualTo(2);
+        assertThat(ingestion.batchInFlight()).isFalse();
+        assertThat(ingestion.status().inBatch()).isZero();
+    }
+
+    @Test
+    void aFewOldMessagesAreNotWorthABatch() {
+        llm.batch = true;
+        String t = "few" + UUID.randomUUID().toString().substring(0, 6);
+        ingestion.store(List.of(mail(t, 30, "Old one")));
+        llm.next.add(analysis(Intent.NOT_BRAND_RELATED, "", false, List.of()));
+        ingestion.processPending();
+        assertThat(llm.batches).isEmpty();
+        assertThat(llm.classifyCalls).isEqualTo(1);
     }
 }
