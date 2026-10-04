@@ -22,6 +22,7 @@ import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.outreach.BrandDiscoveryService;
+import com.creatorcrm.calendar.Exclusivity;
 import com.creatorcrm.contracts.ContractService;
 import com.creatorcrm.rates.RateAdvisor;
 import com.creatorcrm.rebook.WinBack;
@@ -70,6 +71,7 @@ public class CrmMcpTools {
     private final LeadScoring scoring;
     private final RateAdvisor rates;
     private final ContractService contracts;
+    private final Exclusivity exclusivity;
     private final BrandDiscoveryService discovery;
     private final InstagramStatsService instagram;
 
@@ -78,8 +80,9 @@ public class CrmMcpTools {
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
                        CrmProperties props, InvoiceService invoices, WinBack winBack, LeadScoring scoring,
                        BrandDiscoveryService discovery, InstagramStatsService instagram, RateAdvisor rates,
-                       ContractService contracts) {
+                       ContractService contracts, Exclusivity exclusivity) {
         this.contracts = contracts;
+        this.exclusivity = exclusivity;
         this.scoring = scoring;
         this.rates = rates;
         this.invoices = invoices;
@@ -183,6 +186,12 @@ public class CrmMcpTools {
             c.flags().forEach(f -> sb.append("- ").append(f.level()).append(": ").append(f.text()).append('\n'));
         }
         return sb.toString().strip();
+    }
+
+    @McpTool(name = "check_exclusivity", description = "Deals whose exclusivity windows clash: one brand's exclusivity period overlapping another brand's exclusivity or posting dates. Only the creator knows whether the brands compete.")
+    public String checkExclusivity() {
+        List<String> clashes = exclusivity.all();
+        return clashes.isEmpty() ? "No exclusivity clashes between open deals." : String.join("\n", clashes);
     }
 
     @McpTool(name = "suggest_rate", description = "What the creator could ask for on a deal: her price per deliverable (from her booked paid deals, or the rates in her profile) plus paid-usage and exclusivity uplifts, compared with the brand's offer. Advisory only; nothing is sent.")

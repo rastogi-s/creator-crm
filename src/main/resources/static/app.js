@@ -93,6 +93,22 @@
 
   function emptyLine(text) { return el("div", { class: "empty" }, text); }
 
+  // ---------- password managers ----------
+  // Browsers treat every password box on a page as one big login form: they fill her saved password into
+  // the first one (the Claude API key) and her username into whatever text box comes before it (a search
+  // box). Keys and tokens are marked as not-a-login, and each card that asks for her password gets its own
+  // form with a hidden username box, so the saved login never lands anywhere else.
+
+  const NOT_A_LOGIN = { autocomplete: "new-password", "data-lpignore": "true", "data-1p-ignore": "true", "data-bwignore": "true" };
+
+  function passwordForm(node) {
+    // Buttons in a form submit it by default, and Enter in a field "clicks" the first one. Neither should run an action.
+    node.querySelectorAll("button:not([type])").forEach((b) => { b.type = "button"; });
+    return el("form", { class: "password-form", onsubmit: (e) => e.preventDefault() },
+      el("input", { type: "text", name: "username", autocomplete: "username", hidden: true, tabindex: "-1", "aria-hidden": "true" }),
+      node);
+  }
+
   // ---------- list controls: search, filter chips, sortable columns ----------
 
   /** A view's filters and sort, kept in this browser so they survive a refresh. */
@@ -109,7 +125,8 @@
   }
 
   function searchBox(value, placeholder, onChange) {
-    const input = el("input", { type: "search", class: "search", value: value || "", placeholder, "aria-label": placeholder, maxlength: "100" });
+    const input = el("input", { type: "search", class: "search", value: value || "", placeholder, "aria-label": placeholder, maxlength: "100",
+      autocomplete: "off", name: "filter" });
     let timer;
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => onChange(input.value), 150); });
     return input;
@@ -823,10 +840,19 @@
         refresh();
       }, "Task added") }, "Add"))));
 
+    // Exclusivity: another brand's exclusive window (or date) clashes with this deal's
+    const clashes = await api("GET", "/api/opportunities/" + id + "/exclusivity");
+    if (clashes.length) {
+      drawer.appendChild(el("div", { class: "card", id: "exclusivity" }, el("h2", {}, "Exclusivity clash"),
+        el("ul", { class: "flags" }, clashes.map((x) => el("li", { class: "flag amber" }, el("span", { class: "mark" }, "!"),
+          el("span", {}, x.text, " ", el("a", { href: "#", onclick: (e) => { e.preventDefault(); openDeal(x.otherOpportunityId); } }, "Open " + x.otherBrand))))),
+        el("p", { class: "small muted" }, "Exclusivity comes from the contract or what the brand wrote. Only you know whether the brands compete.")));
+    }
+
     if (d.deadlines.length) {
       drawer.appendChild(card("Deadlines", el("ul", { class: "list" }, d.deadlines.map((x) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, pretty(x.type) + " — " + fmtDate(x.dueDate)),
-          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.description || ""))))))));
+          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "📅 on your calendar · " : "") + (x.description || ""))))))));
     }
 
     const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : ""), id: "msg-" + m.id },
@@ -1540,9 +1566,48 @@
 
   // ---------- Settings ----------
 
+  // Deal dates on a "Creator CRM" calendar in her Google account
+  async function calendarStep(root, c) {
+    const cal = await api("GET", "/api/calendar");
+    const li = el("li", { class: cal.state === "READY" && cal.on ? "done" : "", id: "settings-calendar" }, el("h3", {}, "Google Calendar"),
+      el("p", { class: "small muted" }, "Contracts to sign, content due, posting days and payments go on a calendar called Creator CRM in your Google account, "
+        + "so they show on your phone. Dates move when a deal changes and disappear when they're done. The app can't see your other calendars."));
+    if (cal.state === "NO_GOOGLE") {
+      li.appendChild(el("p", { class: "small" }, "Connect Gmail first (step 2). The calendar uses the same Google sign-in."));
+      return li;
+    }
+    if (cal.state === "NEEDS_RECONNECT") {
+      li.appendChild(el("p", { class: "small" }, "Press Reconnect Gmail once and allow calendar access on Google's screen."));
+      if (c.GOOGLE_CLIENT_ID && c.GOOGLE_CLIENT_SECRET) li.appendChild(el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        const r = await api("POST", "/oauth/google/start"); location.href = r.url;
+      }) }, "Reconnect Gmail")));
+      return li;
+    }
+    const on = el("input", { type: "checkbox", checked: cal.on, onchange: action(async (e) => {
+      await api("POST", "/api/calendar", { on: e.target.checked });
+      renderSettings(root);
+    }, "Saved") });
+    li.appendChild(el("label", { class: "check" }, on, " Put deal dates on my Google Calendar"));
+    li.appendChild(el("p", { class: "small" + (cal.error ? " warn" : "") }, cal.error ? cal.error
+      : cal.on ? cal.events + (cal.events === 1 ? " date" : " dates") + " on your Creator CRM calendar" + (cal.lastRun ? ", updated " + fmtDateTime(cal.lastRun) : "") + "."
+        : "Off. Turning it off removed the app's events."));
+    if (cal.on) li.appendChild(el("p", {}, el("button", { class: "small", onclick: action(async () => {
+      const r = await api("POST", "/api/calendar/sync");
+      if (r.error) throw new Error(r.error);
+      renderSettings(root);
+    }, "Calendar updated") }, "Update now")));
+    return li;
+  }
+
   async function renderSettings(root) {
+    // A second render (a sync finishing, a Save) can start while this one waits on the server. Only the newest
+    // one may add cards, or the page ends up with two of some cards.
+    const gen = String(Number(root.dataset.renderGen || 0) + 1);
+    root.dataset.renderGen = gen;
+    const stale = () => root.dataset.renderGen !== gen;
     const s = await api("GET", "/api/settings");
     updateStatus = await api("GET", "/api/updates").catch(() => updateStatus);
+    if (stale()) return;
     const c = s.credentials;
     const p = s.preferences;
     clear(root);
@@ -1550,7 +1615,7 @@
     root.appendChild(el("p", { class: "muted" }, "Everything here is stored encrypted in your own database. Saved credentials are never shown again — leave a field blank to keep the current value."));
 
     const secretField = (name, label, placeholder) => {
-      const input = el("input", { type: "password", autocomplete: "off", placeholder: c[name] ? "•••••••• (saved)" : placeholder || "" });
+      const input = el("input", Object.assign({ type: "password", placeholder: c[name] ? "•••••••• (saved)" : placeholder || "" }, NOT_A_LOGIN));
       input.dataset.name = name;
       return el("div", {}, el("label", {}, label), input);
     };
@@ -1582,7 +1647,7 @@
     const gmailBox = el("div", {}, secretField("GOOGLE_CLIENT_ID", "Google OAuth client ID"), secretField("GOOGLE_CLIENT_SECRET", "Google OAuth client secret"));
     steps.appendChild(el("li", { class: channel.EMAIL.connected ? "done" : "" },
       el("h3", {}, "Connect Gmail"),
-      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
+      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API and the Google Calendar API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
       el("div", { class: "code" }, s.googleRedirectUri),
       gmailBox,
       el("div", { class: "row" },
@@ -1593,7 +1658,7 @@
         channel.EMAIL.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/google/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
       channelStatus(channel.EMAIL),
       channel.EMAIL.connected ? importHistory() : null,
-      el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts. The app cannot delete or change existing mail.")));
+      el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts, and a Creator CRM calendar for deal dates. The app cannot delete or change existing mail or see your other calendars.")));
 
     // 3. Instagram
     const igBox = el("div", {}, secretField("INSTAGRAM_APP_ID", "Instagram app ID"), secretField("INSTAGRAM_APP_SECRET", "Instagram app secret"));
@@ -1793,7 +1858,12 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 10. MCP
+    // 10. Google Calendar
+    const calendar = await calendarStep(root, c);
+    if (stale()) return;
+    steps.appendChild(calendar);
+
+    // 11. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),
@@ -1811,24 +1881,26 @@
       keyOut,
       el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
 
-    root.appendChild(await claudeSpendCard(root));
-    root.appendChild(await learningCard(root));
+    const [spend, learning, startup, errorReports, autoBackup] = await Promise.all([claudeSpendCard(root), learningCard(root),
+      startWithWindowsCard(), errorReportsCard(root, c), autoBackupCard(root)]);
+    if (stale()) return;
+    root.appendChild(spend);
+    root.appendChild(learning);
     root.appendChild(updatesCard(root));
-    const startup = await startWithWindowsCard();
     if (startup) root.appendChild(startup);
-    root.appendChild(await errorReportsCard(root, c));
-    root.appendChild(await autoBackupCard(root));
+    root.appendChild(errorReports);
+    root.appendChild(autoBackup);
     root.appendChild(backupCard(root));
 
     // Password
     const cur = el("input", { type: "password", autocomplete: "current-password" });
     const nw = el("input", { type: "password", autocomplete: "new-password", minlength: "12" });
-    root.appendChild(card("Change password", el("div", { class: "grid" },
+    root.appendChild(passwordForm(card("Change password", el("div", { class: "grid" },
       el("div", {}, el("label", {}, "Current password"), cur), el("div", {}, el("label", {}, "New password (12+ characters)"), nw)),
       el("p", {}, el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/settings/password", { currentPassword: cur.value, newPassword: nw.value });
         cur.value = ""; nw.value = "";
-      }, "Password changed") }, "Change password"))));
+      }, "Password changed") }, "Change password")))));
 
     if (s.pendingAnalysis > 0) {
       root.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + " message(s) waiting for AI analysis" + (c.ANTHROPIC_API_KEY ? "." : " — add your Claude API key.")));
@@ -2004,7 +2076,7 @@
         }, "Backup saved") }, "Back up now") : null),
       el("p", { class: "small muted" }, "To restore one, use Restore from a backup below with the same passphrase."));
     c.id = "backup";
-    return c;
+    return passwordForm(c);
   }
 
   function backupCard() {
@@ -2033,7 +2105,7 @@
 
     // Restore
     const file = el("input", { type: "file", accept: ".crmbak" });
-    const rePass = el("input", { type: "password", autocomplete: "off" });
+    const rePass = el("input", Object.assign({ type: "password" }, NOT_A_LOGIN));
     const rePw = el("input", { type: "password", autocomplete: "current-password" });
     const restoreHeaders = () => ({ "Content-Type": "application/octet-stream", "X-XSRF-TOKEN": csrf(),
       "X-Backup-Passphrase": encodeURIComponent(rePass.value) });
@@ -2056,7 +2128,7 @@
       location.replace("/login.html");
     });
 
-    return card("Backup & restore",
+    return passwordForm(card("Backup & restore",
       el("p", { class: "small muted" }, "A backup is one encrypted file with all your deals, messages, settings and connected-account credentials. "
         + "It can be restored on any Creator CRM install (embedded database or PostgreSQL). Without the passphrase it can't be opened — and it can't be recovered if you forget it."),
       el("div", { class: "grid" },
@@ -2069,7 +2141,7 @@
         el("div", {}, el("label", {}, "Backup file"), file),
         el("div", {}, el("label", {}, "Backup passphrase"), rePass),
         el("div", {}, el("label", {}, "Your current password"), rePw)),
-      el("p", {}, el("button", { class: "danger small", onclick: doRestore }, "Restore…")));
+      el("p", {}, el("button", { class: "danger small", onclick: doRestore }, "Restore…"))));
   }
 
   function channelStatus(ch) {
@@ -2254,7 +2326,7 @@
     const d = await api("GET", "/api/diagnostics").catch(() => null);
     if (!d) return el("div");
     const tokenBox = el("div", {}, (() => {
-      const input = el("input", { type: "password", autocomplete: "off", placeholder: c.ERROR_REPORT_TOKEN ? "•••••••• (saved)" : "github_pat_…" });
+      const input = el("input", Object.assign({ type: "password", placeholder: c.ERROR_REPORT_TOKEN ? "•••••••• (saved)" : "github_pat_…" }, NOT_A_LOGIN));
       input.dataset.name = "ERROR_REPORT_TOKEN";
       return el("div", {}, el("label", {}, "Error-report token"), input);
     })());

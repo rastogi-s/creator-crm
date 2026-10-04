@@ -25,7 +25,7 @@ final class DemoInbox {
             new Mail("Bloomleaf Tea", "Jenna", "jenna@bloomleaf.example", 3, "Contract for the October campaign",
                     "Hi Ava, attached is the contract for the Bloomleaf Tea October campaign ($650). Please sign by the date in the agreement."),
             new Mail("Nova Nest Home", "Sam", "sam@novanest.example", 4, "Creative brief: cozy corner",
-                    "Hi Ava, here's the Nova Nest Home brief for the cozy-corner Reel: https://drive.novanest.example/cozy-corner-brief. Draft content is due soon."),
+                    "Hi Ava, here's the Nova Nest Home brief for the cozy-corner Reel: https://drive.novanest.example/cozy-corner-brief. Draft content is due soon. As agreed, please don't post for other home or lifestyle brands for a month after it goes live."),
             new Mail("Thread & Thimble", "Lee", "lee@threadthimble.example", 1, "Gifted collab: new knit line",
                     "Hello Ava! Thread & Thimble would love to send you our new knit line as a gifted collab."),
             new Mail("Lumen Labs", "Ria", "ria@lumenlabs.example", 6, "Invoice for the September Reel",
@@ -58,7 +58,7 @@ final class DemoInbox {
                 List.of(new ExtractedDeadline(DeadlineType.CONTRACT, today.plusDays(2).toString(), "Sign the contract")),
                 List.of(), true, Priority.HIGH, "Sign the Bloomleaf Tea contract", "Bloomleaf Tea sent the $650 October campaign contract.");
         if (t.contains("Nova Nest")) return withTask(a("Nova Nest Home", "Sam", Intent.CONTENT_BRIEF, OpportunityType.PAID, Compensation.PAID, 900,
-                "1 Reel", "Cozy corner",
+                "1 Reel", "1 month exclusivity for home and lifestyle brands", "Cozy corner",
                 List.of(new ExtractedDeadline(DeadlineType.CONTENT_DUE, today.plusDays(5).toString(), "Draft Reel due")),
                 List.of(), false, Priority.MEDIUM, "Film the Nova Nest Home cozy-corner Reel", "Nova Nest Home sent the cozy-corner brief."),
                 "Nova Nest Home wants one paid Reel ($900) showing a cozy reading corner styled with their throws and lamps. "

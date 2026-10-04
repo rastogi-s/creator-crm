@@ -13,6 +13,19 @@
     ]
   },
   {
+    "version": "1.22.0",
+    "title": "Deal dates on your Google Calendar",
+    "features": [
+      {
+        "id": "calendar-sync",
+        "title": "Your deal dates, on your phone",
+        "body": "Contracts to sign, content due, posting days and payments now go on a calendar called Creator CRM in your Google account. Dates move when a deal changes and disappear when they're done. To turn it on, press Reconnect Gmail in Settings once and allow calendar access. A deal also warns you when its dates clash with another brand's exclusivity, so you can check the two don't compete.",
+        "video": "calendar-sync.webm",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
     "version": "1.21.0",
     "title": "Contract check",
     "features": [

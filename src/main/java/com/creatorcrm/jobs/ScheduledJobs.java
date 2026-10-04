@@ -1,5 +1,6 @@
 package com.creatorcrm.jobs;
 
+import com.creatorcrm.calendar.CalendarSync;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
@@ -45,13 +46,15 @@ public class ScheduledJobs {
     private final PaymentReminders paymentReminders;
     private final WinBack winBack;
     private final InstagramEngagementService instagramEngagement;
+    private final CalendarSync calendar;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
                          PaymentReminders paymentReminders, WinBack winBack,
-                         InstagramEngagementService instagramEngagement) {
+                         InstagramEngagementService instagramEngagement, CalendarSync calendar) {
         this.instagramEngagement = instagramEngagement;
+        this.calendar = calendar;
         this.paymentReminders = paymentReminders;
         this.winBack = winBack;
         this.ingestion = ingestion;
@@ -72,6 +75,7 @@ public class ScheduledJobs {
         log.info("Sync: {}", ingestion.syncAll());
         int engaged = instagramEngagement.poll();
         if (engaged > 0) log.info("Instagram: {} new comments, tags or mentions", engaged);
+        calendar.sync(); // after new mail, so fresh deadlines show up on her calendar
     }
 
     /** While older email is being analyzed in a half-price batch, check for its results every few minutes. */
