@@ -991,23 +991,33 @@
     const auto = el("input", { type: "checkbox", checked: d.autoReport, onchange: action(async (e) => {
       await api("PUT", "/api/diagnostics/auto-report", { enabled: e.target.checked });
     }, "Saved") });
-    const line = !d.configured ? "Off: no error-report token saved yet."
+    const where = [d.github ? "GitHub" : null, d.emailTo && d.gmailConnected ? "email to " + d.emailTo : null].filter(Boolean).join(" and ");
+    const emailInput = el("input", { type: "email", value: d.emailTo || "", placeholder: "you@example.com", maxlength: "254" });
+    const line = !d.configured ? "Off: add an email address or GitHub token below."
       : !d.autoReport ? "Automatic reports are paused. Report a problem still works."
       : d.lastError ? d.lastError
-      : d.lastSentAt ? "On. Last report sent " + fmtDateTime(d.lastSentAt) + "."
-      : "On. Nothing has needed reporting since the app started.";
+      : d.lastSentAt ? "On (" + where + "). Last report sent " + fmtDateTime(d.lastSentAt) + "."
+      : "On (" + where + "). Nothing has needed reporting since the app started.";
     const recent = d.recent.length ? el("ul", { class: "small" }, ...d.recent.slice(0, 5).map((r) => el("li", {},
       r.title.replace(/^\[auto-report\] /, "") + " (" + r.count + "×, " + fmtDateTime(r.lastSeen) + ")",
       r.issueUrl ? el("span", {}, " · ", el("a", { href: r.issueUrl, target: "_blank", rel: "noopener noreferrer" }, "report")) : null))) : null;
     return card("Error reports",
       el("p", {}, el("span", { class: "muted" }, line)),
-      el("p", { class: "small muted" }, "When something goes wrong, the app sends a short report to the developer (a GitHub issue on "
+      el("p", { class: "small muted" }, "When something goes wrong, the app sends a short report to the developer (by email and/or a GitHub issue on "
         + d.repo + ") so it can be fixed in the next update. Repeats of the same error are grouped. Emails, phone numbers, Instagram handles, "
         + "passwords and keys are removed before anything is sent."),
       recent ? el("p", { class: "small" }, "Errors since the app started:") : null, recent,
       el("label", { class: "row check" }, auto, "Send error reports automatically"),
-      el("details", {}, el("summary", { class: "small" }, "Set up (for the developer)"),
-        el("p", { class: "small muted" }, "Create a fine-grained GitHub token with access to only " + d.repo
+      el("details", { open: !d.configured }, el("summary", { class: "small" }, "Set up (for the developer)"),
+        el("label", {}, "Email reports to"), emailInput,
+        el("p", { class: "small muted" }, d.gmailConnected
+          ? "Sent from the connected Gmail account, so a copy also appears in its Sent folder. Leave blank to turn email reports off."
+          : "Needs Gmail connected (step 2 above), because reports are sent from that account."),
+        el("div", { class: "row" }, el("button", { class: "small", onclick: action(async () => {
+          await api("PUT", "/api/diagnostics/email", { address: emailInput.value.trim() });
+          renderSettings(root);
+        }, "Saved") }, "Save email")),
+        el("p", { class: "small muted" }, "Optional, GitHub issues: create a fine-grained GitHub token with access to only " + d.repo
           + " and the permission Issues: Read and write (nothing else), then paste it here."),
         tokenBox,
         el("div", { class: "row" },
