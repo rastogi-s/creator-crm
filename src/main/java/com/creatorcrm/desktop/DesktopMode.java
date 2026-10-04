@@ -24,7 +24,11 @@ public final class DesktopMode {
     /** Added by the Windows startup entry: start in the tray without opening the browser. */
     public static final String BACKGROUND_ARG = "--background";
 
+    /** Added by the in-app updater's relaunch: her old browser tab reloads itself, so don't open another. */
+    public static final String AFTER_UPDATE_ARG = "--after-update";
+
     private static boolean background;
+    private static boolean afterUpdate;
 
     private DesktopMode() {}
 
@@ -46,10 +50,17 @@ public final class DesktopMode {
         return background;
     }
 
-    /** Takes out {@link #BACKGROUND_ARG}, which is ours, before Spring sees the arguments. */
+    /** True when the updater relaunched us after installing a new version. */
+    public static boolean afterUpdate() {
+        return afterUpdate;
+    }
+
+    /** Takes out {@link #BACKGROUND_ARG} and {@link #AFTER_UPDATE_ARG}, which are ours, before Spring sees the arguments. */
     public static String[] stripArgs(String[] args) {
-        background = java.util.Arrays.asList(args).contains(BACKGROUND_ARG);
-        return java.util.Arrays.stream(args).filter(a -> !BACKGROUND_ARG.equals(a)).toArray(String[]::new);
+        java.util.List<String> list = java.util.Arrays.asList(args);
+        background = list.contains(BACKGROUND_ARG);
+        afterUpdate = list.contains(AFTER_UPDATE_ARG);
+        return list.stream().filter(a -> !BACKGROUND_ARG.equals(a) && !AFTER_UPDATE_ARG.equals(a)).toArray(String[]::new);
     }
 
     /** Called from main() before Spring starts. May exit the JVM if the app is already running. */

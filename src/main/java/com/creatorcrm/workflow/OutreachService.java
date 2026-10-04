@@ -18,7 +18,9 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,8 +31,10 @@ public class OutreachService {
     public record PitchRequest(String brand, String contactName, String contactEmail, String instagram,
                                String platform, String opportunity, LocalDate pitchedAt, String notes, boolean force) {}
 
+    /** contactSearch holds every contact detail, so the Outreach search finds an email even when a name is shown. */
     public record PitchRow(Long opportunityId, String brand, String contact, LocalDate pitchedAt, String platform,
-                           String opportunity, String initialResponse, List<String> followUps, String status) {}
+                           String opportunity, String initialResponse, List<String> followUps, String status,
+                           boolean closed, LocalDate nextFollowUp, String contactSearch) {}
 
     public record Duplicate(Long opportunityId, String brand, String status, LocalDate since) {}
 
@@ -111,6 +115,8 @@ public class OutreachService {
             Brand b = brands.findById(o.brandId).orElse(null);
             List<String> fu = new ArrayList<>();
             List<FollowUp> list = followUps.findByOpportunityIdOrderByNumberAsc(o.id);
+            LocalDate next = list.stream().filter(f -> f.status == FollowUpStatus.SCHEDULED).map(f -> f.scheduledDate)
+                    .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(null);
             for (int n = 1; n <= settings.maxFollowups(); n++) {
                 int num = n;
                 fu.add(list.stream().filter(f -> f.number == num).reduce((a, x) -> x)
@@ -121,7 +127,9 @@ public class OutreachService {
             rows.add(new PitchRow(o.id, b == null ? "?" : b.name,
                     b == null ? "" : firstNonBlank(b.contactName, b.contactEmail, b.instagram),
                     o.pitchedAt, o.pitchPlatform, firstNonBlank(o.campaign, o.type.name()),
-                    o.initialResponse, fu, o.status.label));
+                    o.initialResponse, fu, o.status.label, !o.status.isOpen(), next,
+                    b == null ? "" : String.join(" ", Stream.of(b.contactName, b.contactEmail, b.instagram)
+                            .filter(v -> !blank(v)).toList())));
         }
         return rows;
     }

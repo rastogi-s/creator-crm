@@ -9,6 +9,7 @@ import java.awt.TrayIcon;
 import java.awt.event.ActionListener;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import javax.imageio.ImageIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,11 +34,17 @@ public class DesktopIntegration {
     private final SetupService setup;
     private final StartWithWindows startWithWindows;
     private final ConfigurableApplicationContext context;
+    private final LocalPageTracker pages;
 
-    public DesktopIntegration(SetupService setup, StartWithWindows startWithWindows, ConfigurableApplicationContext context) {
+    /** The old tab polls every 3 seconds; the margin covers browsers slowing timers in a background tab. */
+    static final Duration AFTER_UPDATE_WAIT = Duration.ofSeconds(30);
+
+    public DesktopIntegration(SetupService setup, StartWithWindows startWithWindows, ConfigurableApplicationContext context,
+                              LocalPageTracker pages) {
         this.setup = setup;
         this.startWithWindows = startWithWindows;
         this.context = context;
+        this.pages = pages;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -47,8 +54,24 @@ public class DesktopIntegration {
                 : DesktopMode.baseUrl() + "/setup.html#code=" + URLEncoder.encode(code, StandardCharsets.UTF_8);
         installTray();
         // Started by Windows at sign-in: stay in the tray. First-run setup still opens, since it needs her.
-        if (!DesktopMode.background() || code != null) DesktopMode.openBrowser(url);
+        if (code != null) DesktopMode.openBrowser(url);
+        else if (DesktopMode.afterUpdate()) openUnlessPageReconnects(url);
+        else if (!DesktopMode.background()) DesktopMode.openBrowser(url);
         Thread.ofVirtual().name("start-with-windows").start(startWithWindows::applyDefault);
+    }
+
+    /**
+     * After an in-app update her old tab is still open and polling, and reloads itself once we're back.
+     * Only open a new tab if no page on this computer checks in, e.g. she closed it during the install.
+     */
+    private void openUnlessPageReconnects(String url) {
+        Thread.ofVirtual().name("after-update-open").start(() -> {
+            try {
+                if (!pages.awaitLocalPage(AFTER_UPDATE_WAIT)) DesktopMode.openBrowser(url);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
     }
 
     private void installTray() {

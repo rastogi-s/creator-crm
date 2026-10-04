@@ -21,6 +21,8 @@ class UpdateScriptTest {
         // Single quotes in paths are doubled inside PowerShell's single-quoted strings.
         assertThat(s).contains("Ana O''Neil").doesNotContain("Ana O'Neil");
         assertThat(s.indexOf("msiexec")).isLessThan(s.indexOf("Start-Process -FilePath $app"));
+        // The relaunch tells the app her old tab will reload itself, so it doesn't open a second one.
+        assertThat(s).contains("Start-Process -FilePath $app -ArgumentList '--after-update'");
     }
 
     @Test
