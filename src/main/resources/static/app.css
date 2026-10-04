@@ -118,6 +118,8 @@ tr.clickable:hover td { background: var(--surface-2); }
 
 /* ---------- forms ---------- */
 label { display: block; font-weight: 600; font-size: .88rem; margin: .6rem 0 .25rem; }
+label.check { display: flex; gap: .5rem; align-items: center; font-weight: 500; }
+label.check input { width: auto; margin: 0; }
 input, select, textarea {
   width: 100%; font: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px; padding: .5rem .6rem;

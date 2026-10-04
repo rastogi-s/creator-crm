@@ -94,7 +94,7 @@
 
   // ---------- routing ----------
 
-  const views = { today: renderToday, pipeline: renderPipeline, outreach: renderOutreach,
+  const views = { today: renderToday, pipeline: renderPipeline, outreach: renderOutreach, links: renderLinks,
                   drafts: renderDrafts, summary: renderSummary, settings: renderSettings };
   let statuses = {};
 
@@ -373,6 +373,64 @@
         el("td", {}, r.status)))))));
   }
 
+  // ---------- Links ----------
+
+  async function renderLinks(root) {
+    const links = await api("GET", "/api/links");
+    clear(root);
+    root.appendChild(el("h1", {}, "My links"));
+    root.appendChild(el("p", { class: "muted" }, "Your profiles, website and portfolio in one place. Drafts use these exact links instead of placeholders like [MEDIA KIT LINK]."));
+
+    const url = el("input", { placeholder: "e.g. instagram.com/yourname", maxlength: "1000" });
+    const label = el("input", { placeholder: "Optional — filled in for Instagram, TikTok, YouTube…", maxlength: "100" });
+    const add = action(async () => {
+      if (!url.value.trim()) throw new Error("Paste a link first");
+      await api("POST", "/api/links", { url: url.value, label: label.value });
+      renderLinks(root);
+    }, "Link added");
+    url.addEventListener("keydown", (e) => { if (e.key === "Enter") add(e); });
+    label.addEventListener("keydown", (e) => { if (e.key === "Enter") add(e); });
+    root.appendChild(card("Add a link", el("div", { class: "grid" },
+      el("div", {}, el("label", {}, "Link"), url), el("div", {}, el("label", {}, "Label"), label)),
+      el("p", {}, el("button", { class: "primary", onclick: add }, "Add link"))));
+
+    if (!links.length) { root.appendChild(card(null, emptyLine("No links yet. Add your Instagram, TikTok, YouTube, website or portfolio."))); return; }
+    const asText = () => links.map((l) => l.label + ": " + l.url).join("\n");
+    root.appendChild(el("div", { class: "card" },
+      el("div", { class: "row" }, el("h3", {}, links.length + " link" + (links.length === 1 ? "" : "s")), el("div", { class: "spacer" }),
+        el("button", { class: "small", onclick: action(async () => { await navigator.clipboard.writeText(asText()); }, "All links copied") }, "Copy all")),
+      el("div", { class: "table-wrap" }, el("table", {}, el("tbody", {}, links.map((l, i) => linkRow(root, l, i, links.length)))))));
+  }
+
+  function linkRow(root, l, i, n) {
+    const safe = /^https?:\/\//i.test(l.url); // the server only stores http(s), but never render anything else as a link
+    const row = el("tr", {},
+      el("th", {}, l.label),
+      el("td", {}, safe ? el("a", { href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.url) : l.url),
+      el("td", {}, el("div", { class: "row" },
+        el("button", { class: "small", onclick: action(async () => { await navigator.clipboard.writeText(l.url); }, "Copied") }, "Copy"),
+        el("button", { class: "small", onclick: () => editLink(root, row, l) }, "Edit"),
+        el("button", { class: "small", title: "Move up", disabled: i === 0, onclick: action(async () => { await api("POST", "/api/links/" + l.id + "/move?up=true"); renderLinks(root); }) }, "↑"),
+        el("button", { class: "small", title: "Move down", disabled: i === n - 1, onclick: action(async () => { await api("POST", "/api/links/" + l.id + "/move?up=false"); renderLinks(root); }) }, "↓"),
+        el("button", { class: "small danger", onclick: action(async () => {
+          if (!confirm("Delete " + l.label + "?")) return;
+          await api("DELETE", "/api/links/" + l.id); renderLinks(root);
+        }, "Deleted") }, "Delete"))));
+    return row;
+  }
+
+  function editLink(root, row, l) {
+    const label = el("input", { value: l.label, maxlength: "100" });
+    const url = el("input", { value: l.url, maxlength: "1000" });
+    clear(row);
+    row.append(el("th", {}, label), el("td", {}, url), el("td", {}, el("div", { class: "row" },
+      el("button", { class: "small primary", onclick: action(async () => {
+        await api("PUT", "/api/links/" + l.id, { label: label.value, url: url.value }); renderLinks(root);
+      }, "Saved") }, "Save"),
+      el("button", { class: "small", onclick: () => renderLinks(root) }, "Cancel"))));
+    url.focus();
+  }
+
   // ---------- Drafts ----------
 
   async function renderDrafts(root) {
@@ -512,7 +570,6 @@
     const pf = {
       creatorName: el("input", { value: p.creatorName, maxlength: "200" }),
       creatorProfile: el("textarea", { class: "tall", maxlength: "20000" }),
-      followupCadenceDays: el("input", { value: p.followupCadenceDays, pattern: "[0-9, ]+" }),
       timezone: el("input", { value: p.timezone }),
       brandKeywords: el("textarea", { maxlength: "2000" }),
       classifierModel: el("input", { value: p.classifierModel }),
@@ -524,9 +581,7 @@
       el("h3", {}, "About you"),
       el("label", {}, "Your name (used in sign-offs)"), pf.creatorName,
       el("label", {}, "Voice, rates & rules — drafts only quote rates written here"), pf.creatorProfile,
-      el("div", { class: "grid" },
-        el("div", {}, el("label", {}, "Follow-up schedule (days before #1, #2, …)"), pf.followupCadenceDays),
-        el("div", {}, el("label", {}, "Time zone"), pf.timezone)),
+      el("label", {}, "Time zone"), pf.timezone,
       el("label", {}, "Brand keywords (emails without these in bulk/automated mail are skipped before AI)"), pf.brandKeywords,
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Classifier model"), pf.classifierModel),
@@ -537,7 +592,31 @@
         await api("PUT", "/api/settings/preferences", body);
       }, "Saved") }, "Save"))));
 
-    // 5. MCP
+    // 5. Follow-ups
+    const fu = {
+      followupCadenceDays: el("input", { value: p.followupCadenceDays, pattern: "[0-9, ]+" }),
+      followupTime: el("input", { type: "time", value: p.followupTime }),
+      followupAutoSend: el("input", { type: "checkbox", id: "followup-auto-send" }),
+    };
+    fu.followupAutoSend.checked = p.followupAutoSend === "true";
+    steps.appendChild(el("li", { class: "done" },
+      el("h3", {}, "Follow-ups"),
+      el("p", { class: "small muted" }, "Each day at this time the app syncs and drafts every follow-up that's due. Brands that reply drop out automatically."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Days to wait before follow-up #1, #2, …"), fu.followupCadenceDays),
+        el("div", {}, el("label", {}, "Daily follow-up time (your time zone)"), fu.followupTime)),
+      el("label", { class: "check", for: "followup-auto-send" }, fu.followupAutoSend,
+        " Send email follow-ups automatically at that time"),
+      el("p", { class: "small muted" }, "Off: follow-ups wait in Drafts for you to press Send. On: email follow-ups go out by themselves; replies, rates and anything else still need your approval. Instagram follow-ups always wait, because Meta only allows replies within 24 hours."),
+      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        if (fu.followupAutoSend.checked && p.followupAutoSend !== "true"
+            && !confirm("Email follow-ups will be sent without asking you first. Turn this on?")) return;
+        await api("PUT", "/api/settings/preferences", { followupCadenceDays: fu.followupCadenceDays.value,
+          followupTime: fu.followupTime.value, followupAutoSend: String(fu.followupAutoSend.checked) });
+        renderSettings(root);
+      }, "Saved") }, "Save"))));
+
+    // 6. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),

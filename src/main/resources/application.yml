@@ -79,4 +79,5 @@ crm:
     allow-send: false
   schedule:
     sync-cron: "0 */30 * * * *"
-    morning-digest-cron: "0 0 8 * * *"
+    # Checks each minute whether the daily follow-up run (time set on the Settings page) is due.
+    morning-check-cron: "0 * * * * *"
