@@ -22,6 +22,11 @@
     <button class="tab" data-tab="settings">Settings</button>
     <button class="tab" data-tab="help">Help</button>
   </nav>
+  <div class="global-search" role="search">
+    <input id="global-search" type="search" placeholder="Search… ( / )" aria-label="Search brands, contacts, emails and invoices"
+           autocomplete="off" maxlength="100" aria-controls="global-results" aria-expanded="false">
+    <div id="global-results" class="search-results hidden"></div>
+  </div>
   <button id="sync-btn" class="small" title="Fetch new emails and DMs now">Sync now</button>
   <button id="logout-btn" class="small">Sign out</button>
   <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite"></div>

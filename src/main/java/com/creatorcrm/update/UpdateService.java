@@ -309,7 +309,7 @@ public class UpdateService {
                 "$p = Start-Process -FilePath 'msiexec.exe' -ArgumentList " + ps(args) + " -Wait -PassThru",
                 "$app = " + ps(launcher),
                 "if (-not (Test-Path -LiteralPath $app)) { $app = Join-Path $env:LOCALAPPDATA 'Creator CRM\\Creator CRM.exe' }",
-                "if (Test-Path -LiteralPath $app) { Start-Process -FilePath $app }",
+                "if (Test-Path -LiteralPath $app) { Start-Process -FilePath $app -ArgumentList '" + DesktopMode.AFTER_UPDATE_ARG + "' }",
                 "");
     }
 

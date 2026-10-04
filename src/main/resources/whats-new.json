@@ -19,6 +19,19 @@
     ]
   },
   {
+    "version": "1.14.0",
+    "title": "Search and filters",
+    "features": [
+      {
+        "id": "search",
+        "title": "Find anything in seconds",
+        "body": "A search box at the top finds any brand, contact, old email or DM, or invoice, and opens it with one click. Press / to jump to it. Pipeline, Outreach, Money and Drafts each have their own search and filters, and you can click a column name to sort by it. Click a status count on Pipeline, or a total on Money, to see just those. Your filters stay as you left them. Inside a deal you can search the conversation. And after an update, the app now reloads the tab you already have open instead of opening a new one.",
+        "video": "search.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.13.0",
     "title": "A prettier Links page",
     "features": [

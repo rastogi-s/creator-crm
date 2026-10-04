@@ -93,6 +93,75 @@
 
   function emptyLine(text) { return el("div", { class: "empty" }, text); }
 
+  // ---------- list controls: search, filter chips, sortable columns ----------
+
+  /** A view's filters and sort, kept in this browser so they survive a refresh. */
+  function loadPrefs(view, defaults) {
+    try {
+      const saved = JSON.parse(localStorage.getItem("crm.view." + view));
+      if (saved && typeof saved === "object") return Object.assign({}, defaults, saved);
+    } catch (e) { /* private window or bad JSON */ }
+    return Object.assign({}, defaults);
+  }
+
+  function savePrefs(view, prefs) {
+    try { localStorage.setItem("crm.view." + view, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+  }
+
+  function searchBox(value, placeholder, onChange) {
+    const input = el("input", { type: "search", class: "search", value: value || "", placeholder, "aria-label": placeholder, maxlength: "100" });
+    let timer;
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => onChange(input.value), 150); });
+    return input;
+  }
+
+  /** Every word of the query appears somewhere in the fields, ignoring case. */
+  function matchesQuery(q, ...fields) {
+    const words = String(q || "").toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    const hay = fields.filter((f) => f !== null && f !== undefined).join(" ").toLowerCase();
+    return words.every((w) => hay.includes(w));
+  }
+
+  /** options: [[value, label], …]; picking the active chip again goes back to the first option ("All"). */
+  function chipRow(options, selected, onPick, label) {
+    return el("div", { class: "chips", role: "group", "aria-label": label || "Filter" }, options.map(([value, text]) =>
+      el("button", { class: "chip" + (value === selected ? " active" : ""), "aria-pressed": String(value === selected),
+        onclick: () => onPick(value === selected ? options[0][0] : value) }, text)));
+  }
+
+  /** keys: {column: row => comparable}. Blank values always sort last. */
+  function sortRows(rows, sort, keys) {
+    const key = keys[sort && sort.by];
+    if (!key) return rows;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return rows.slice().sort((a, b) => {
+      const x = key(a), y = key(b);
+      const xb = x === null || x === undefined || x === "", yb = y === null || y === undefined || y === "";
+      if (xb || yb) return xb === yb ? 0 : xb ? 1 : -1;
+      if (typeof x === "string") return x.localeCompare(y, undefined, { sensitivity: "base", numeric: true }) * dir;
+      return (x < y ? -1 : x > y ? 1 : 0) * dir;
+    });
+  }
+
+  /** cols: [[label, sortKey or null, first direction]]. Clicking the sorted column again flips it. */
+  function sortableHead(cols, sort, onSort) {
+    return el("thead", {}, el("tr", {}, cols.map(([label, key, firstDir]) => {
+      if (!key) return el("th", {}, label);
+      const active = sort.by === key;
+      return el("th", { "aria-sort": active ? (sort.dir === "asc" ? "ascending" : "descending") : "none" },
+        el("button", { class: "th-sort", title: "Sort by " + label.toLowerCase(),
+          onclick: () => onSort(active ? { by: key, dir: sort.dir === "asc" ? "desc" : "asc" } : { by: key, dir: firstDir || "asc" }) },
+          label, el("span", { class: "sort-mark", "aria-hidden": "true" }, active ? (sort.dir === "asc" ? " ▲" : " ▼") : "")));
+    })));
+  }
+
+  function shownLine(shown, total, noun, onClear) {
+    if (shown === total) return null;
+    return el("div", { class: "row small muted shown-line" }, "Showing " + shown + " of " + total + " " + noun + ".",
+      onClear ? el("button", { class: "small", onclick: onClear }, "Clear filters") : null);
+  }
+
   // ---------- routing ----------
 
   const views = { today: renderToday, pipeline: renderPipeline, money: renderMoney, outreach: renderOutreach, links: renderLinks,
@@ -205,6 +274,10 @@
 
   function stat(v, l) { return el("div", { class: "stat" }, el("div", { class: "v" }, String(v)), el("div", { class: "l" }, l)); }
 
+  function statButton(v, l, title, onclick) {
+    return el("button", { class: "stat clickable", title, onclick }, el("div", { class: "v" }, String(v)), el("div", { class: "l" }, l));
+  }
+
   function itemList(items, emptyText, numbered) {
     if (!items.length) return emptyLine(emptyText);
     return el("ul", { class: "list" }, items.map((it, i) => el("li", { class: "item" },
@@ -246,33 +319,34 @@
 
   // ---------- Pipeline ----------
 
-  let pipelineFilter = { status: "", closed: false, lead: "" };
+  const PIPELINE_DEFAULTS = { q: "", status: "", comp: "", lead: "", closed: false, sort: { by: "updatedAt", dir: "desc" } };
+  let pipelineFilter = loadPrefs("pipeline", PIPELINE_DEFAULTS);
 
   async function renderPipeline(root) {
-    const rows = await api("GET", "/api/pipeline?includeClosed=" + pipelineFilter.closed);
+    const f = pipelineFilter;
+    const rows = await api("GET", "/api/pipeline?includeClosed=" + f.closed);
     clear(root);
-    const statusSelect = el("select", { onchange: (e) => { pipelineFilter.status = e.target.value; renderPipeline(root); } },
+    const save = () => savePrefs("pipeline", f);
+    const statusOrder = Object.keys(statuses);
+    const statusSelect = el("select", { "aria-label": "Status", onchange: (e) => { f.status = e.target.value; save(); draw(); } },
       el("option", { value: "" }, "All statuses"),
-      Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: pipelineFilter.status === k }, v)));
-    const closedBox = el("input", { type: "checkbox", checked: pipelineFilter.closed,
-      onchange: (e) => { pipelineFilter.closed = e.target.checked; renderPipeline(root); } });
-    const leadSelect = el("select", { id: "lead-filter", onchange: (e) => { pipelineFilter.lead = e.target.value; renderPipeline(root); } },
-      [["", "All deals"], ["LEADS", "Leads only"], ["LOW", "Low-value leads"]].map(([v, t]) => el("option", { value: v, selected: pipelineFilter.lead === v }, t)));
+      Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: f.status === k }, v)));
+    const compSelect = el("select", { "aria-label": "Deal type", onchange: (e) => { f.comp = e.target.value; save(); draw(); } },
+      [["", "All deal types"], ["PAID", "Paid"], ["GIFTED", "Gifted"], ["AFFILIATE", "Affiliate"], ["UNKNOWN", "Not sure yet"]]
+        .map(([v, l]) => el("option", { value: v, selected: f.comp === v }, l)));
+    const closedBox = el("input", { type: "checkbox", checked: f.closed,
+      onchange: (e) => { f.closed = e.target.checked; save(); renderPipeline(root); } });
+    const leadSelect = el("select", { id: "lead-filter", "aria-label": "Leads", onchange: (e) => { f.lead = e.target.value; save(); draw(); } },
+      [["", "All deals"], ["LEADS", "Leads only"], ["LOW", "Low-value leads"]].map(([v, t]) => el("option", { value: v, selected: f.lead === v }, t)));
+    const search = searchBox(f.q, "Search brand, contact, campaign…", (v) => { f.q = v; save(); draw(); });
     root.appendChild(el("div", { class: "row" }, el("h1", {}, "Pipeline"), el("div", { class: "spacer" }),
-      el("div", {}, leadSelect), el("div", {}, statusSelect), el("label", { class: "row" }, closedBox, "Show closed")));
+      el("label", { class: "check" }, closedBox, "Show closed")));
+    root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), leadSelect, statusSelect, compSelect));
+    const chips = el("div", { class: "row card" });
+    const list = el("div", {});
+    root.append(chips, list);
 
-    const shown = rows.filter((r) => (!pipelineFilter.status || r.status === pipelineFilter.status)
-      && (pipelineFilter.lead !== "LEADS" || r.lead) && (pipelineFilter.lead !== "LOW" || r.lead === "LOW"));
-    const counts = {};
-    rows.forEach((r) => { counts[r.statusLabel] = (counts[r.statusLabel] || 0) + 1; });
-    root.appendChild(el("div", { class: "row card" }, Object.entries(counts).map(([k, v]) => el("span", { class: "badge" }, k + " · " + v))));
-
-    if (!shown.length) {
-      root.appendChild(card(null, emptyLine(pipelineFilter.lead ? "No leads match this filter." : "No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch.")));
-      return;
-    }
-
-    // Batch decline: tick leads, then write a polite decline draft for each.
+    // Batch decline: tick leads, then write a polite decline draft for each. Ticks survive filtering and sorting.
     const picked = new Set();
     const declineBtn = el("button", { class: "small", disabled: true, onclick: action(async () => {
       const n = picked.size;
@@ -282,39 +356,69 @@
       location.hash = "#drafts";
     }) }, "Decline selected");
     const sync = () => { declineBtn.disabled = picked.size === 0; declineBtn.textContent = picked.size ? "Decline selected (" + picked.size + ")" : "Decline selected"; };
-    const leadRows = shown.filter((r) => r.lead);
-    const pickAll = el("input", { type: "checkbox", title: "Select all leads shown", onclick: (e) => e.stopPropagation(), onchange: (e) => {
-      leadRows.forEach((r) => (e.target.checked ? picked.add(r.id) : picked.delete(r.id)));
-      root.querySelectorAll("input.pick").forEach((b) => { b.checked = e.target.checked; });
-      sync();
-    } });
-    if (leadRows.length) {
-      root.appendChild(el("div", { class: "row card", id: "decline-bar" },
-        el("span", { class: "small muted" }, "Not a fit? Tick the leads you'd like to turn down and press Decline selected. "
-          + "A short, polite no-thanks is written for each; nothing is sent until you approve it."),
-        el("div", { class: "spacer" }), declineBtn));
-    }
-    root.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, el("th", {}, leadRows.length ? pickAll : null),
-        ["Brand", "Lead", "Status", "Deal", "Budget", "Next follow-up", "Open tasks", "Updated"].map((h) => el("th", {}, h)))),
-      el("tbody", {}, shown.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.id) },
-        el("td", { onclick: (e) => e.stopPropagation() }, r.lead ? el("input", { type: "checkbox", class: "pick", onchange: (e) => {
-          if (e.target.checked) picked.add(r.id); else picked.delete(r.id);
+    const leadRank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+
+    function draw() {
+      // Status chips count every deal; clicking one filters to it, clicking again shows all.
+      const counts = {};
+      rows.forEach((r) => { counts[r.status] = (counts[r.status] || 0) + 1; });
+      clear(chips).append(...Object.keys(counts).sort((a, b) => statusOrder.indexOf(a) - statusOrder.indexOf(b)).map((k) =>
+        el("button", { class: "chip" + (f.status === k ? " active" : ""), "aria-pressed": String(f.status === k),
+          title: "Show only " + (statuses[k] || pretty(k)),
+          onclick: () => { f.status = f.status === k ? "" : k; statusSelect.value = f.status; save(); draw(); } },
+          (statuses[k] || pretty(k)) + " · " + counts[k])));
+      clear(list);
+      if (!rows.length) { list.appendChild(card(null, emptyLine("No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch."))); return; }
+      const shown = sortRows(rows.filter((r) => (!f.status || r.status === f.status) && (!f.comp || r.compensation === f.comp)
+        && (f.lead !== "LEADS" || r.lead) && (f.lead !== "LOW" || r.lead === "LOW")
+        && matchesQuery(f.q, r.brand, r.contact, r.campaign, r.statusLabel, pretty(r.type), pretty(r.compensation), r.budget, r.deliverables, r.nextStep)),
+      f.sort, {
+        brand: (r) => r.brand, lead: (r) => leadRank[r.lead], status: (r) => statusOrder.indexOf(r.status), nextFollowUp: (r) => r.nextFollowUp,
+        openTasks: (r) => r.openTasks, updatedAt: (r) => r.updatedAt,
+      });
+      const clearAll = () => { Object.assign(f, { q: "", status: "", comp: "", lead: "" }); search.value = ""; statusSelect.value = ""; compSelect.value = ""; leadSelect.value = ""; save(); draw(); };
+      const line = shownLine(shown.length, rows.length, "deals", clearAll);
+      if (line) list.appendChild(line);
+      if (!shown.length) { list.appendChild(card(null, emptyLine(f.lead ? "No leads match this filter." : "No deals match. Try fewer words or another filter."))); return; }
+      const leadRows = shown.filter((r) => r.lead);
+      const pickAll = el("input", { type: "checkbox", title: "Select all leads shown", "aria-label": "Select all leads shown",
+        checked: leadRows.length > 0 && leadRows.every((r) => picked.has(r.id)), onchange: (e) => {
+          leadRows.forEach((r) => (e.target.checked ? picked.add(r.id) : picked.delete(r.id)));
+          list.querySelectorAll("input.pick").forEach((b) => { b.checked = e.target.checked; });
           sync();
-        } }) : null),
-        el("td", {}, el("strong", {}, r.brand)),
-        el("td", {}, leadBadge(r.lead, r.leadWhy) || el("span", { class: "muted" }, "—")),
-        el("td", {}, r.statusLabel),
-        el("td", {}, pretty(r.type) + " · " + pretty(r.compensation)),
-        el("td", {}, r.budget || "—"),
-        el("td", {}, r.nextFollowUp ? "#" + r.nextFollowUpNumber + " · " + fmtDate(r.nextFollowUp) : "—"),
-        el("td", {}, String(r.openTasks)),
-        el("td", { class: "muted" }, fmtDate(r.updatedAt))))))));
+        } });
+      if (leadRows.length) {
+        list.appendChild(el("div", { class: "row card", id: "decline-bar" },
+          el("span", { class: "small muted" }, "Not a fit? Tick the leads you'd like to turn down and press Decline selected. "
+            + "A short, polite no-thanks is written for each; nothing is sent until you approve it."),
+          el("div", { class: "spacer" }), declineBtn));
+      }
+      list.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
+        sortableHead([[leadRows.length ? pickAll : "", null], ["Brand", "brand"], ["Lead", "lead", "desc"], ["Status", "status"], ["Deal", null], ["Budget", null],
+          ["Next follow-up", "nextFollowUp", "asc"], ["Open tasks", "openTasks", "desc"], ["Updated", "updatedAt", "desc"]],
+        f.sort, (s) => { f.sort = s; save(); draw(); }),
+        el("tbody", {}, shown.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.id) },
+          el("td", { onclick: (e) => e.stopPropagation() }, r.lead ? el("input", { type: "checkbox", class: "pick", checked: picked.has(r.id),
+            "aria-label": "Pick " + r.brand, onchange: (e) => {
+              if (e.target.checked) picked.add(r.id); else picked.delete(r.id);
+              sync();
+            } }) : null),
+          el("td", {}, el("strong", {}, r.brand), r.campaign ? el("div", { class: "small muted" }, r.campaign) : null),
+          el("td", {}, leadBadge(r.lead, r.leadWhy) || el("span", { class: "muted" }, "—")),
+          el("td", {}, r.statusLabel),
+          el("td", {}, pretty(r.type) + " · " + pretty(r.compensation)),
+          el("td", {}, r.budget || "—"),
+          el("td", {}, r.nextFollowUp ? "#" + r.nextFollowUpNumber + " · " + fmtDate(r.nextFollowUp) : "—"),
+          el("td", {}, String(r.openTasks)),
+          el("td", { class: "muted" }, fmtDate(r.updatedAt))))))));
+    }
+    draw();
   }
 
   // ---------- Money ----------
 
   let moneyYear = null;
+  const moneyFilter = loadPrefs("money", { q: "", show: "all" });
 
   function fmtMoney(currency, amount) {
     try {
@@ -348,13 +452,9 @@
       root.appendChild(el("div", { class: "alert info" }, "Your invoices still show placeholders for your address or payment details. ",
         el("a", { href: "#settings" }, "Add them in Settings, Invoices.")));
     }
-    root.appendChild(el("div", { class: "stats card" },
-      stat(moneyTotal(m.booked), "Booked, not invoiced yet"),
-      stat(moneyTotal(m.outstanding), "Invoiced, waiting for payment"),
-      stat(moneyTotal(m.paidThisMonth), "Paid this month"),
-      stat(moneyTotal(m.overdue), "Overdue")));
-
-    root.appendChild(card("Ready to invoice", m.readyToInvoice.length ? el("ul", { class: "list" }, m.readyToInvoice.map((r) => el("li", { class: "item" },
+    const f = moneyFilter;
+    const save = () => savePrefs("money", { q: f.q, show: f.show });
+    const ready = card("Ready to invoice", m.readyToInvoice.length ? el("ul", { class: "list" }, m.readyToInvoice.map((r) => el("li", { class: "item" },
       el("div", { class: "body" }, el("div", { class: "title" }, r.brand + (r.campaign ? " — " + r.campaign : "")),
         el("div", { class: "detail" }, r.amountText + " · " + r.status)),
       el("div", { class: "actions" },
@@ -363,22 +463,54 @@
           openInvoice(inv.id);
         }) }, "Create invoice"),
         el("button", { class: "small", onclick: () => openDeal(r.opportunityId) }, "Open deal")))))
-      : emptyLine("Every agreed paid deal has an invoice.")));
+      : emptyLine("Every agreed paid deal has an invoice."));
+    const list = el("div", {});
+    const pick = (show) => { f.show = show; save(); draw(); list.scrollIntoView({ behavior: "smooth", block: "start" }); };
+    // The totals double as shortcuts: each one shows the invoices behind it.
+    root.appendChild(el("div", { class: "stats card" },
+      statButton(moneyTotal(m.booked), "Booked, not invoiced yet", "Show deals ready to invoice", () => ready.scrollIntoView({ behavior: "smooth", block: "start" })),
+      statButton(moneyTotal(m.outstanding), "Invoiced, waiting for payment", "Show unpaid invoices", () => pick("unpaid")),
+      statButton(moneyTotal(m.paidThisMonth), "Paid this month", "Show paid invoices", () => pick("paid")),
+      statButton(moneyTotal(m.overdue), "Overdue", "Show overdue invoices", () => pick("overdue"))));
+    root.appendChild(ready);
 
     if (!m.months.length) { root.appendChild(card(null, emptyLine("No invoices in " + m.year + " yet."))); return; }
     root.appendChild(el("p", { class: "muted small" }, "Paid in " + m.year + ": " + moneyTotal(m.paidThisYear)));
-    for (const g of m.months) {
-      const label = new Date(g.month + "-01T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
-      root.appendChild(el("div", { class: "card table-wrap" }, el("h3", {}, label), el("table", {},
-        el("thead", {}, el("tr", {}, ["Invoice", "Brand", "Amount", "Issued", "Due", "Status"].map((h) => el("th", {}, h)))),
-        el("tbody", {}, g.invoices.map((inv) => el("tr", { class: "clickable", onclick: () => openInvoice(inv.id) },
-          el("td", {}, el("strong", {}, inv.number)),
-          el("td", {}, inv.brand),
-          el("td", {}, inv.amountText),
-          el("td", { class: "muted" }, fmtDate(inv.issuedDate)),
-          el("td", { class: "muted" }, fmtDate(inv.dueDate)),
-          el("td", {}, invoiceBadge(inv))))))));
+    const search = searchBox(f.q, "Search brand or invoice number…", (v) => { f.q = v; save(); draw(); });
+    const chips = el("div", {});
+    root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), chips));
+    root.appendChild(list);
+    const all = m.months.flatMap((g) => g.invoices);
+    const kinds = {
+      all: () => true, draft: (i) => i.status === "DRAFT", unpaid: (i) => i.status === "SENT",
+      overdue: (i) => i.status === "SENT" && i.daysOverdue > 0, paid: (i) => i.status === "PAID", void: (i) => i.status === "VOID",
+    };
+
+    function draw() {
+      clear(chips).appendChild(chipRow([["all", "All"], ["draft", "Not sent"], ["unpaid", "Unpaid"], ["overdue", "Overdue"], ["paid", "Paid"], ["void", "Void"]],
+        f.show, (v) => { f.show = v; save(); draw(); }, "Show invoices"));
+      clear(list);
+      const keep = (inv) => (kinds[f.show] || kinds.all)(inv) && matchesQuery(f.q, inv.number, inv.brand, inv.amountText);
+      const shown = all.filter(keep).length;
+      const line = shownLine(shown, all.length, "invoices", () => { f.q = ""; f.show = "all"; search.value = ""; save(); draw(); });
+      if (line) list.appendChild(line);
+      if (!shown) { list.appendChild(card(null, emptyLine("No invoices match."))); return; }
+      for (const g of m.months) {
+        const invoices = g.invoices.filter(keep);
+        if (!invoices.length) continue;
+        const label = new Date(g.month + "-01T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+        list.appendChild(el("div", { class: "card table-wrap" }, el("h3", {}, label), el("table", {},
+          el("thead", {}, el("tr", {}, ["Invoice", "Brand", "Amount", "Issued", "Due", "Status"].map((h) => el("th", {}, h)))),
+          el("tbody", {}, invoices.map((inv) => el("tr", { class: "clickable", onclick: () => openInvoice(inv.id) },
+            el("td", {}, el("strong", {}, inv.number)),
+            el("td", {}, inv.brand),
+            el("td", {}, inv.amountText),
+            el("td", { class: "muted" }, fmtDate(inv.issuedDate)),
+            el("td", { class: "muted" }, fmtDate(inv.dueDate)),
+            el("td", {}, invoiceBadge(inv))))))));
+      }
     }
+    draw();
   }
 
   async function openInvoice(id) {
@@ -591,15 +723,32 @@
           el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.description || ""))))))));
     }
 
+    const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : "") },
+      el("div", { class: "meta" }, (m.direction === "OUTBOUND" ? "You" : (m.from || "Brand")) + " · " + fmtDateTime(m.sentAt)
+        + (m.type ? " · " + pretty(m.type) : "")),
+      m.subject ? el("div", { class: "title small" }, m.subject) : null,
+      el("div", { class: "text" }, m.content || "")) }));
+    const msgCount = el("span", { class: "small muted", role: "status" });
+    const msgSearch = msgs.length > 2 ? searchBox("", "Search this conversation…", (q) => {
+      let hits = 0;
+      for (const x of msgs) {
+        const keep = matchesQuery(q, x.m.from, x.m.subject, x.m.content);
+        x.node.classList.toggle("hidden", !keep);
+        if (keep) hits++;
+      }
+      msgCount.textContent = q.trim() ? hits + " of " + msgs.length + " messages" : "";
+    }) : null;
     drawer.appendChild(card("Conversation",
-      d.messages.length ? d.messages.map((m) => el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : "") },
-        el("div", { class: "meta" }, (m.direction === "OUTBOUND" ? "You" : (m.from || "Brand")) + " · " + fmtDateTime(m.sentAt)
-          + (m.type ? " · " + pretty(m.type) : "")),
-        m.subject ? el("div", { class: "title small" }, m.subject) : null,
-        el("div", { class: "text" }, m.content || ""))) : emptyLine("No messages linked (e.g. a pitch logged manually).")));
+      msgSearch ? el("div", { class: "row filters" }, el("div", { class: "spacer" }, msgSearch), msgCount) : null,
+      msgs.length ? msgs.map((x) => x.node) : emptyLine("No messages linked (e.g. a pitch logged manually).")));
 
-    drawer.appendChild(card("Activity", d.activity.length ? el("ul", { class: "list" }, d.activity.slice(0, 30).map((a) =>
-      el("li", { class: "item" }, el("div", { class: "body" }, el("div", {}, a.text), el("div", { class: "detail" }, fmtDateTime(a.at)))))) : emptyLine("—")));
+    const activityItem = (a) => el("li", { class: "item" }, el("div", { class: "body" }, el("div", {}, a.text), el("div", { class: "detail" }, fmtDateTime(a.at))));
+    const activityList = el("ul", { class: "list" }, d.activity.slice(0, 30).map(activityItem));
+    const moreActivity = d.activity.length > 30 ? el("button", { class: "small", onclick: (e) => {
+      d.activity.slice(30).forEach((a) => activityList.appendChild(activityItem(a)));
+      e.currentTarget.remove();
+    } }, "Show all " + d.activity.length) : null;
+    drawer.appendChild(card("Activity", d.activity.length ? [activityList, moreActivity] : emptyLine("—")));
   }
 
   function facts(pairs) {
@@ -607,6 +756,8 @@
   }
 
   // ---------- Outreach ----------
+
+  const outreachFilter = loadPrefs("outreach", { q: "", response: "all", status: "", hideClosed: false, sort: { by: "pitchedAt", dir: "desc" } });
 
   async function renderOutreach(root) {
     const [rows, leads] = await Promise.all([api("GET", "/api/pitches"), api("GET", "/api/leads")]);
@@ -635,7 +786,13 @@
         toast(err.message, true);
       }
     }
-    root.appendChild(card("Log a pitch", el("div", { class: "grid" },
+    // Collapsible, so a long pitch table isn't pushed far down the page. Remembers whether it was open.
+    const logOpen = loadPrefs("outreach-log", { open: true }).open;
+    const logBox = el("details", { class: "card collapsible", open: logOpen },
+      el("summary", {}, el("h3", {}, "Log a pitch")));
+    logBox.addEventListener("toggle", () => savePrefs("outreach-log", { open: logBox.open }));
+    root.appendChild(logBox);
+    logBox.appendChild(el("div", {}, el("div", { class: "grid" },
       el("div", {}, el("label", {}, "Brand *"), f.brand), el("div", {}, el("label", {}, "Contact name"), f.contactName),
       el("div", {}, el("label", {}, "Contact email"), f.contactEmail), el("div", {}, el("label", {}, "Instagram"), f.instagram),
       el("div", {}, el("label", {}, "Platform"), f.platform), el("div", {}, el("label", {}, "Date pitched"), f.pitchedAt)),
@@ -643,15 +800,50 @@
       el("p", {}, el("button", { class: "primary", onclick: () => { if (f.brand.value.trim()) submit(false); else toast("Brand is required", true); } }, "Log pitch"))));
 
     if (!rows.length) { root.appendChild(card(null, emptyLine("No pitches yet."))); return; }
+    const pf = outreachFilter;
+    const save = () => savePrefs("outreach", pf);
     const n = rows[0].followUps.length;
-    root.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, ["Brand", "Contact", "Pitched", "Platform", "Opportunity", "Response"].concat(
-        Array.from({ length: n }, (_, i) => "FU #" + (i + 1))).concat(["Status"]).map((h) => el("th", {}, h)))),
-      el("tbody", {}, rows.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.opportunityId) },
-        el("td", {}, el("strong", {}, r.brand)), el("td", {}, r.contact || ""), el("td", {}, fmtDate(r.pitchedAt)),
-        el("td", {}, pretty(r.platform)), el("td", {}, r.opportunity || ""), el("td", {}, r.initialResponse ? pretty(r.initialResponse) : "—"),
-        r.followUps.map((x) => el("td", { class: x.startsWith("due") ? "" : "muted" }, x || "")),
-        el("td", {}, r.status)))))));
+    const statusNames = [...new Set(rows.map((r) => r.status))];
+    if (pf.status && !statusNames.includes(pf.status)) pf.status = "";
+    const statusSelect = el("select", { "aria-label": "Status", onchange: (e) => { pf.status = e.target.value; save(); draw(); } },
+      el("option", { value: "" }, "All statuses"), statusNames.map((v) => el("option", { value: v, selected: pf.status === v }, v)));
+    const hideClosed = el("input", { type: "checkbox", checked: pf.hideClosed, onchange: (e) => { pf.hideClosed = e.target.checked; save(); draw(); } });
+    const search = searchBox(pf.q, "Search brand, contact, pitch…", (v) => { pf.q = v; save(); draw(); });
+    const chips = el("div", {});
+    root.appendChild(el("h2", {}, "Your pitches"));
+    root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), chips, statusSelect,
+      el("label", { class: "check" }, hideClosed, "Hide closed")));
+    const list = el("div", {});
+    root.appendChild(list);
+    const responses = { all: () => true, none: (r) => !r.initialResponse, replied: (r) => !!r.initialResponse };
+
+    function draw() {
+      clear(chips).appendChild(chipRow([["all", "Any response"], ["none", "No reply yet"], ["replied", "Replied"]],
+        pf.response, (v) => { pf.response = v; save(); draw(); }, "Response"));
+      clear(list);
+      const shown = sortRows(rows.filter((r) => (responses[pf.response] || responses.all)(r) && (!pf.hideClosed || !r.closed)
+        && (!pf.status || r.status === pf.status)
+        && matchesQuery(pf.q, r.brand, r.contact, r.contactSearch, r.opportunity, r.initialResponse, pretty(r.platform), r.status)),
+      pf.sort, { brand: (r) => r.brand, pitchedAt: (r) => r.pitchedAt, nextFollowUp: (r) => r.nextFollowUp, status: (r) => r.status });
+      const line = shownLine(shown.length, rows.length, "pitches", () => {
+        Object.assign(pf, { q: "", response: "all", status: "", hideClosed: false });
+        search.value = ""; statusSelect.value = ""; hideClosed.checked = false; save(); draw();
+      });
+      if (line) list.appendChild(line);
+      if (!shown.length) { list.appendChild(card(null, emptyLine("No pitches match."))); return; }
+      list.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
+        sortableHead([["Brand", "brand"], ["Contact", null], ["Pitched", "pitchedAt", "desc"], ["Platform", null], ["Opportunity", null], ["Response", null]]
+          .concat(Array.from({ length: n }, (_, i) => ["FU #" + (i + 1), null]))
+          .concat([["Next due", "nextFollowUp", "asc"], ["Status", "status"]]),
+        pf.sort, (s) => { pf.sort = s; save(); draw(); }),
+        el("tbody", {}, shown.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.opportunityId) },
+          el("td", {}, el("strong", {}, r.brand)), el("td", {}, r.contact || ""), el("td", {}, fmtDate(r.pitchedAt)),
+          el("td", {}, pretty(r.platform)), el("td", {}, r.opportunity || ""), el("td", {}, r.initialResponse ? pretty(r.initialResponse) : "—"),
+          r.followUps.map((x) => el("td", { class: x.startsWith("due") ? "" : "muted" }, x || "")),
+          el("td", {}, r.nextFollowUp ? fmtDate(r.nextFollowUp) : "—"),
+          el("td", {}, r.status)))))));
+    }
+    draw();
   }
 
   function findBrandsCard(root, leads) {
@@ -937,6 +1129,8 @@
 
   // ---------- Drafts ----------
 
+  const draftsFilter = loadPrefs("drafts", { q: "", type: "all", order: "oldest" });
+
   async function renderDrafts(root) {
     const list = await api("GET", "/api/drafts");
     clear(root);
@@ -955,12 +1149,34 @@
           route();
         }) }, "Approve all declines")));
     }
+    // Filtering hides cards and sorting moves them, so text typed into a draft is never lost.
+    const df = draftsFilter;
+    const save = () => savePrefs("drafts", df);
+    const groups = {
+      all: () => true,
+      pitch: (d) => d.type === "PITCH" || d.type === "REPITCH",
+      followup: (d) => d.type === "FOLLOW_UP",
+      money: (d) => d.type === "PAYMENT_REMINDER" || d.type === "INVOICE",
+      reply: (d) => !["PITCH", "REPITCH", "FOLLOW_UP", "PAYMENT_REMINDER", "INVOICE"].includes(d.type),
+    };
+    const present = Object.keys(groups).filter((g) => g === "all" || list.some((x) => groups[g](x.draft)));
+    if (!present.includes(df.type)) df.type = "all";
+    const groupNames = { all: "All", pitch: "Pitches", followup: "Follow-ups", money: "Payment", reply: "Replies" };
+    const search = searchBox(df.q, "Search brand or text…", (v) => { df.q = v; save(); draw(); });
+    const chips = el("div", {});
+    const order = el("select", { "aria-label": "Order", onchange: (e) => { df.order = e.target.value; save(); draw(); } },
+      [["oldest", "Oldest first"], ["newest", "Newest first"], ["brand", "Brand A–Z"]].map(([v, l]) => el("option", { value: v, selected: df.order === v }, l)));
+    const shownAt = el("div", {});
+    const holder = el("div", {});
+    if (list.length > 1) root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), chips, order));
+    root.append(shownAt, holder);
+    const cards = [];
     for (const { draft: d, brand, blockedReason } of list) {
       const subject = el("input", { value: d.subject || "", maxlength: "1000" });
       const body = el("textarea", { class: "tall", maxlength: "20000" });
       body.value = d.body;
       const edits = () => ({ subject: subject.value, body: body.value });
-      root.appendChild(card(null,
+      const node = holder.appendChild(card(null,
         el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
         el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
@@ -981,7 +1197,26 @@
           el("div", { class: "spacer" }),
           el("button", { class: "danger", onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/discard"); route(); }, "Discarded") }, "Discard"),
           el("button", { onclick: () => openDeal(d.opportunityId) }, "Open deal"))));
+      cards.push({ node, d, brand, subject, body });
     }
+
+    function draw() {
+      clear(chips).appendChild(chipRow(present.map((g) => [g, groupNames[g]]), df.type, (v) => { df.type = v; save(); draw(); }, "Draft type"));
+      const sorted = sortRows(cards, df.order === "brand" ? { by: "brand", dir: "asc" } : { by: "at", dir: df.order === "newest" ? "desc" : "asc" },
+        { brand: (c) => c.brand, at: (c) => c.d.createdAt });
+      let shown = 0;
+      for (const c of sorted) {
+        const keep = groups[df.type](c.d) && matchesQuery(df.q, c.brand, pretty(c.d.type), c.subject.value, c.body.value, c.d.toAddress);
+        c.node.classList.toggle("hidden", !keep);
+        if (keep) shown++;
+        holder.appendChild(c.node);
+      }
+      clear(shownAt);
+      const line = shownLine(shown, cards.length, "drafts", () => { df.q = ""; df.type = "all"; search.value = ""; save(); draw(); });
+      if (line) shownAt.appendChild(line);
+      if (!shown) shownAt.appendChild(card(null, emptyLine("No drafts match.")));
+    }
+    draw();
   }
 
   // ---------- Day summary ----------
@@ -1767,6 +2002,74 @@
     await api("POST", "/api/sync");
     setTimeout(pollStatus, 1000);
   }, "Syncing… new items appear as they're analyzed"));
+
+  // ---------- header search ----------
+  // Finds deals by brand or contact, past emails and DMs, and invoices. "/" jumps to it from anywhere.
+
+  (function globalSearch() {
+    const input = document.getElementById("global-search");
+    const box = document.getElementById("global-results");
+    const groups = [["DEAL", "Deals"], ["MESSAGE", "Emails and DMs"], ["INVOICE", "Invoices"]];
+    let hits = [], active = -1, timer, seq = 0;
+
+    function close() { box.classList.add("hidden"); input.setAttribute("aria-expanded", "false"); active = -1; }
+    function open(hit) {
+      close();
+      input.blur();
+      if (hit.kind === "INVOICE" && hit.invoiceId) openInvoice(hit.invoiceId); else if (hit.opportunityId) openDeal(hit.opportunityId);
+    }
+    function paint() {
+      clear(box);
+      if (!hits.length) { box.appendChild(emptyLine("Nothing found for “" + input.value.trim() + "”.")); }
+      let i = 0;
+      for (const [kind, label] of groups) {
+        const mine = hits.filter((h) => h.kind === kind);
+        if (!mine.length) continue;
+        box.appendChild(el("div", { class: "group" }, label));
+        for (const h of mine) {
+          const idx = i++;
+          box.appendChild(el("button", { class: "hit" + (idx === active ? " active" : ""), type: "button",
+            onmousedown: (e) => e.preventDefault(), onclick: () => open(h) },
+            el("div", { class: "title" }, h.title), h.detail ? el("div", { class: "detail" }, h.detail) : null));
+        }
+      }
+      box.classList.remove("hidden");
+      input.setAttribute("aria-expanded", "true");
+    }
+    async function run() {
+      const q = input.value.trim();
+      if (q.length < 2) { hits = []; close(); return; }
+      const mine = ++seq;
+      try {
+        const found = await api("GET", "/api/search?q=" + encodeURIComponent(q));
+        if (mine !== seq) return; // a newer search already went out
+        // Keyboard order follows the groups, so arrow keys move down the list as shown.
+        hits = groups.flatMap(([kind]) => found.filter((h) => h.kind === kind)); active = -1; paint();
+      } catch (err) { toast(err.message, true); }
+    }
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 250); });
+    input.addEventListener("focus", () => { if (hits.length && input.value.trim().length >= 2) paint(); });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { input.value = ""; hits = []; close(); input.blur(); e.stopPropagation(); return; }
+      if (!hits.length) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        active = (active + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % hits.length;
+        paint();
+        const a = box.querySelector(".hit.active");
+        if (a) a.scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        open(hits[Math.max(active, 0)]);
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      const t = e.target;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); input.focus(); input.select(); }
+    });
+  })();
 
   // ---------- live sync status ----------
   // Polls quickly while a sync or AI analysis is running, slowly otherwise. When stored data changes, the

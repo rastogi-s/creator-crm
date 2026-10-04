@@ -67,7 +67,8 @@ public class CrmController {
     public record OpportunityView(Long id, String brand, String status, String statusLabel, String type,
                                   String compensation, String budget, String deliverables, String nextStep,
                                   String origin, LocalDate nextFollowUp, Integer nextFollowUpNumber,
-                                  long openTasks, OffsetDateTime updatedAt, String lead, String leadWhy) {}
+                                  long openTasks, OffsetDateTime updatedAt, String campaign, String contact,
+                                  String lead, String leadWhy) {}
 
     public record OpportunityDetail(OpportunityView summary, Opportunity opportunity, Brand brand, List<Task> tasks,
                                     List<FollowUp> followUps, List<Deadline> deadlines, List<MessageView> messages,
@@ -336,11 +337,18 @@ public class CrmController {
 
     private OpportunityView view(Opportunity o, LeadScoring.Score lead) {
         FollowUp next = followUps.scheduled(o.id).orElse(null);
-        return new OpportunityView(o.id, workflow.brandName(o), o.status.name(), o.status.label, o.type.name(),
+        Brand b = brands.findById(o.brandId).orElse(null);
+        return new OpportunityView(o.id, b == null ? "Brand" : b.name, o.status.name(), o.status.label, o.type.name(),
                 o.compensation.name(), o.budgetText, o.deliverables, o.nextStep, o.origin.name(),
                 next == null ? null : next.scheduledDate, next == null ? null : next.number,
-                tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN).size(), o.updatedAt,
+                tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN).size(), o.updatedAt, o.campaign,
+                b == null ? null : contactLine(b.contactName, b.contactEmail, b.instagram == null || b.instagram.isBlank() ? null : "@" + b.instagram),
                 lead == null ? null : lead.level().name(), lead == null ? null : lead.summary());
+    }
+
+    /** "Noor · noor@brand.com · @brand", for searching and showing who the deal is with. */
+    private static String contactLine(String... parts) {
+        return String.join(" · ", Arrays.stream(parts).filter(p -> p != null && !p.isBlank()).toList());
     }
 
     private static MessageView messageView(Message m) {
