@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.8.0",
+    "version": "1.10.0",
     "title": "Payment reminders",
     "features": [
       {
@@ -9,6 +9,19 @@
         "body": "When an invoice is 3, 7 and 14 days past its due date, a short reminder with the invoice attached is written for you, a little firmer each time. Today shows which brands are late, and every reminder waits in Drafts for you to check and send, even if follow-ups go out automatically. Reminders stop the moment you mark the invoice paid. Change the days, or turn reminders off, under Settings, Invoices.",
         "video": "payment-reminders.webm",
         "tryIt": "#today"
+      }
+    ]
+  },
+  {
+    "version": "1.9.0",
+    "title": "Automatic backups",
+    "features": [
+      {
+        "id": "auto-backup",
+        "title": "Your data is backed up every night",
+        "body": "Creator CRM now saves an encrypted backup of all your deals, messages and settings every night and keeps the last two weeks. When you have OneDrive, the backups go into it, so a copy is safe even if the laptop is lost or breaks. If the laptop is off at night, it backs up soon after you open the app. To turn it on, go to Settings, Automatic backups and choose a passphrase once. Write the passphrase down, because without it a backup can't be opened.",
+        "video": "auto-backup.webm",
+        "tryIt": "#settings?backup"
       }
     ]
   },

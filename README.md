@@ -167,6 +167,11 @@ Settings → **Backup & restore** → **Download backup** gives you one `.crmbak
 settings and credentials, encrypted with a passphrase you choose. Store the file and the passphrase separately;
 the passphrase can't be recovered.
 
+**Automatic backups** (Settings → **Automatic backups**): choose a passphrase once and the same file is written every
+night to a folder you pick (OneDrive by default when Windows has it, else Documents\Creator CRM Backups, or
+`<data-dir>/auto-backups` on a server). The newest 14 are kept; if the computer was off at 02:00 it backs up soon after
+the app starts. On Docker you can supply the passphrase as the `BACKUP_PASSPHRASE` environment variable.
+
 To move: install Creator CRM on the new machine, create a temporary admin, then **Restore** the file. Everything
 comes back, including your original login, connected Gmail/Instagram and Claude key. Restores work across database
 types (embedded ↔ PostgreSQL) and across installs with different master keys.

@@ -137,6 +137,33 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "auto-backup"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#settings?backup");
+    const card = page.locator("#backup");
+    await card.waitFor();
+    await card.scrollIntoViewIfNeeded();
+    await say("Automatic backups save all your deals, messages and settings every night, without you doing anything.", 4400);
+    await point(card.locator("input").nth(1));
+    await say("They go into this folder. When you have OneDrive, it's inside OneDrive, so a copy is safe even if the laptop is lost.", 4800);
+    const pw = card.locator("input[type=password]");
+    await pw.nth(0).fill(process.env.CRM_PASSWORD || "demo-password-123");
+    await pw.nth(1).pressSequentially("my secret backup phrase", { delay: 40 });
+    await pw.nth(2).pressSequentially("my secret backup phrase", { delay: 40 });
+    await say("Choose a backup passphrase once, and write it down somewhere safe. Without it a backup can't be opened.", 4600);
+    page.once("dialog", (d) => d.accept());
+    await click(card.getByRole("button", { name: "Save and turn on" }));
+    const fresh = page.locator("#backup");
+    await fresh.getByRole("button", { name: "Back up now" }).waitFor();
+    await fresh.scrollIntoViewIfNeeded();
+    await click(fresh.getByRole("button", { name: "Back up now" }));
+    await page.locator("#backup").getByText("Last backup").waitFor();
+    await page.locator("#backup").getByText("Last backup").evaluate((e) => e.scrollIntoView({ block: "center", behavior: "smooth" }));
+    await point(page.locator("#backup").getByText("Last backup"));
+    await say("Done. It keeps the last two weeks. If the laptop is off at night, it backs up soon after you open the app.", 4800);
+    await say("", 600);
+  },
+
   async "whats-new"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#whatsnew");

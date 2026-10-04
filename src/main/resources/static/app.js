@@ -124,7 +124,9 @@
     }
     try {
       await views[tab](document.getElementById("view-" + tab));
-      if (q.has("spend")) { const c = document.getElementById("spend"); if (c) c.scrollIntoView({ block: "start" }); }
+      for (const id of ["spend", "backup"]) {
+        if (q.has(id)) { const c = document.getElementById(id); if (c) c.scrollIntoView({ block: "start" }); }
+      }
     } catch (err) {
       toast(err.message, true);
     }
@@ -958,6 +960,7 @@
     const startup = await startWithWindowsCard();
     if (startup) root.appendChild(startup);
     root.appendChild(await errorReportsCard(root, c));
+    root.appendChild(await autoBackupCard(root));
     root.appendChild(backupCard(root));
 
     // Password
@@ -1091,6 +1094,60 @@
         + "from the bill."));
     card_.id = "spend";
     return card_;
+  }
+
+  // Nightly encrypted backups into a folder she picks (OneDrive by default), so a lost laptop doesn't lose deals.
+  async function autoBackupCard(root) {
+    const b = await api("GET", "/api/backup/auto");
+    const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+    const status = b.lastError
+      ? el("p", { class: "alert error" }, b.lastError)
+      : b.lastBackupAt
+        ? el("p", {}, el("span", { class: "status-dot on" }), "Last backup: " + fmtDateTime(b.lastBackupAt) + ", " + kb(b.lastSizeBytes))
+        : el("p", { class: "muted" }, b.enabled ? "No backup yet. The first one is made within a few minutes." : "Not set up yet.");
+    const folder = el("input", { value: b.folder, placeholder: b.defaultFolder, maxlength: "1000" });
+    const pw = el("input", { type: "password", autocomplete: "current-password" });
+    const pass = el("input", { type: "password", autocomplete: "new-password", minlength: "12" });
+    const pass2 = el("input", { type: "password", autocomplete: "new-password", minlength: "12" });
+    const on = el("input", { type: "checkbox", checked: b.enabled, disabled: !b.passphraseSet, onchange: action(async (e) => {
+      await api("PUT", "/api/backup/auto", { enabled: e.target.checked });
+      renderSettings(root);
+    }, "Saved") });
+    const save = action(async () => {
+      const body = { folder: folder.value };
+      if (pass.value || !b.passphraseSet) {
+        if (pass.value.length < 12) throw new Error("Backup passphrase must be at least 12 characters");
+        if (pass.value !== pass2.value) throw new Error("Passphrases don't match");
+        if (!confirm("Write this passphrase down and keep it somewhere safe, away from this computer. "
+          + "Without it the backups can't be opened, and it can't be recovered.")) return;
+        body.passphrase = pass.value;
+        body.currentPassword = pw.value;
+      }
+      await api("PUT", "/api/backup/auto", body);
+      renderSettings(root);
+    }, "Saved");
+    const c = card("Automatic backups",
+      el("p", { class: "small muted" }, "Every night the app saves an encrypted backup into this folder and keeps the newest " + b.keep
+        + ". If the computer is off at night, it backs up soon after you open the app. A folder inside OneDrive (the default when you "
+        + "have it) means a copy is safe even if this laptop is lost."),
+      status,
+      el("label", { class: "row check" }, on, "Back up automatically every night"),
+      el("label", {}, "Folder"), folder,
+      el("h3", {}, b.passphraseSet ? "Change the backup passphrase" : "Choose a backup passphrase"),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Your current password"), pw),
+        el("div", {}, el("label", {}, "Backup passphrase (12+ characters)"), pass),
+        el("div", {}, el("label", {}, "Confirm passphrase"), pass2)),
+      el("div", { class: "row" },
+        el("button", { class: "primary small", onclick: save }, b.passphraseSet ? "Save" : "Save and turn on"),
+        b.passphraseSet ? el("button", { class: "small", onclick: action(async () => {
+          const r = await api("POST", "/api/backup/auto/run");
+          if (r.lastError) throw new Error(r.lastError);
+          renderSettings(root);
+        }, "Backup saved") }, "Back up now") : null),
+      el("p", { class: "small muted" }, "To restore one, use Restore from a backup below with the same passphrase."));
+    c.id = "backup";
+    return c;
   }
 
   function backupCard() {
