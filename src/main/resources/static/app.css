@@ -175,6 +175,7 @@ button:disabled { opacity: .55; cursor: default; }
   background: var(--accent-soft); color: var(--text); border-radius: 8px; padding: .45rem .75rem; font-size: .9rem;
 }
 .update-banner.error { background: var(--danger-soft); color: var(--danger); }
+.update-banner.warn { background: var(--warn-soft); color: var(--warn); }
 a.btn { display: inline-block; text-decoration: none; }
 a.btn.small { padding: .25rem .55rem; font-size: .82rem; }
 a.btn:hover { background: var(--surface-2); }
@@ -215,3 +216,4 @@ label.check input { width: auto; }
   .item .actions { width: 100%; padding-left: 2.25rem; }
 }
 .row select.inline { width: auto; }
+#spend { scroll-margin-top: 8rem; }

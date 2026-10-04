@@ -5,6 +5,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.core.JsonValue;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.AnthropicServiceException;
+import com.anthropic.models.ErrorType;
 import com.anthropic.models.messages.CacheControlEphemeral;
 import com.anthropic.models.messages.JsonOutputFormat;
 import com.anthropic.models.messages.Message;
@@ -24,6 +25,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +39,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final SettingsService settings;
     private final LinkService links;
     private final InstagramStatsService instagramStats;
+    private final ClaudeSpend spend;
     private final String classifierSystem;
     private final String writerSystem;
     private final String researchSystem;
@@ -46,11 +49,12 @@ public class ClaudeLlmClient implements LlmClient {
     private String baseUrl; // null = the real API; tests point it at a local stub
 
     public ClaudeLlmClient(SecretStore secrets, SettingsService settings, LinkService links,
-                           InstagramStatsService instagramStats) {
+                           InstagramStatsService instagramStats, ClaudeSpend spend) {
         this.secrets = secrets;
         this.settings = settings;
         this.links = links;
         this.instagramStats = instagramStats;
+        this.spend = spend;
         this.classifierSystem = resource("prompts/classifier-system.md");
         this.writerSystem = resource("prompts/writer-system.md");
         this.researchSystem = resource("prompts/brand-research-system.md");
@@ -82,7 +86,7 @@ public class ClaudeLlmClient implements LlmClient {
         }
         user.append("NEW MESSAGE TO ANALYZE:\n").append(in.newMessage());
 
-        MessageAnalysis a = call(settings.classifierModel(), settings.classifierEffort(), classifierSystem, null,
+        MessageAnalysis a = call(ClaudeSpend.Feature.CLASSIFY, settings.classifierModel(), settings.classifierEffort(), classifierSystem, null,
                 user.toString(), MessageAnalysis.class, 4000, false);
         return AnalysisValidator.sanitize(a);
     }
@@ -116,7 +120,7 @@ public class ClaudeLlmClient implements LlmClient {
         if (!in.extraInstructions().isBlank()) {
             user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
         }
-        return call(settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
+        return call(ClaudeSpend.Feature.DRAFT, settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
                 DraftText.class, 4000, false);
     }
 
@@ -129,7 +133,7 @@ public class ClaudeLlmClient implements LlmClient {
             user.append("\nAlready in the creator's CRM, don't return these: ")
                     .append(String.join(", ", in.excludeBrands())).append('\n');
         }
-        return call(settings.writerModel(), settings.writerEffort(), researchSystem, creatorProfile(), user.toString(),
+        return call(ClaudeSpend.Feature.RESEARCH, settings.writerModel(), settings.writerEffort(), researchSystem, creatorProfile(), user.toString(),
                 BrandLeads.class, 16000, true);
     }
 
@@ -145,7 +149,7 @@ public class ClaudeLlmClient implements LlmClient {
     /** Server-side tool loops pause after a while; resume a few times before giving up. */
     private static final int MAX_CONTINUATIONS = 4;
 
-    private <T> T call(String model, String effort, String system, String system2, String user,
+    private <T> T call(ClaudeSpend.Feature feature, String model, String effort, String system, String system2, String user,
                        Class<T> type, long maxTokens, boolean webSearch) {
         JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
         OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
@@ -173,11 +177,11 @@ public class ClaudeLlmClient implements LlmClient {
                     .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
         }
 
-        Message response = create(params);
+        Message response = create(feature, params);
         for (int i = 0; i < MAX_CONTINUATIONS && StopReason.PAUSE_TURN.equals(response.stopReason().orElse(null)); i++) {
             // Send the paused turn back as-is; the API resumes the search where it left off.
             params.addMessage(response);
-            response = create(params);
+            response = create(feature, params);
         }
         StopReason stop = response.stopReason().orElse(null);
         if (StopReason.PAUSE_TURN.equals(stop)) throw new LlmException("Claude's web research didn't finish; try a narrower search");
@@ -196,15 +200,31 @@ public class ClaudeLlmClient implements LlmClient {
         }
     }
 
-    private Message create(MessageCreateParams.Builder params) {
+    private Message create(ClaudeSpend.Feature feature, MessageCreateParams.Builder params) {
+        Message response;
         try {
-            return client().messages().create(params.build());
+            response = client().messages().create(params.build());
         } catch (AnthropicServiceException e) {
+            if (isOutOfCredits(e)) {
+                spend.markOutOfCredits(firstLine(e));
+                throw new OutOfCreditsException(e);
+            }
             throw new LlmException("Claude API error (" + e.statusCode() + "): " + firstLine(e), e);
         } catch (AnthropicException e) {
             // Network trouble, timeouts, a response we couldn't read: not an HTTP error, but just as fatal.
             throw new LlmException("Claude request failed: " + e.getClass().getSimpleName() + ": " + firstLine(e), e);
         }
+        spend.record(feature, response);
+        return response;
+    }
+
+    /**
+     * The API's billing error (402), or the 400 it sends when the prepaid balance is used up
+     * ("Your credit balance is too low to access the Anthropic API").
+     */
+    static boolean isOutOfCredits(AnthropicServiceException e) {
+        if (e.statusCode() == 402 || e.errorType().filter(ErrorType.BILLING_ERROR::equals).isPresent()) return true;
+        return e.statusCode() == 400 && String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT).contains("credit balance");
     }
 
     /** For tests: send requests to a local stub instead of the real API. */

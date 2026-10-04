@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.5.0",
+    "title": "Claude spending and credit warnings",
+    "features": [
+      {
+        "id": "claude-spend",
+        "title": "See what Claude costs, and get warned before credits run out",
+        "body": "Settings now shows how much has been spent on Claude in total, this month, and on reading messages, writing drafts and finding brands. Type in your credit balance from the Claude Console and a yellow banner appears when about 20% is left. If the credits run out, a red banner says so, the app stops trying until you top up, and the developer is told automatically.",
+        "tryIt": "#settings?spend"
+      }
+    ]
+  },
+  {
     "version": "1.3.0",
     "title": "Report a problem",
     "features": [

@@ -2,6 +2,7 @@ package com.creatorcrm.llm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.data.Offset.offset;
 
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
@@ -30,12 +31,16 @@ class ClaudeLlmClientTest {
 
     @Autowired ClaudeLlmClient claude;
     @Autowired SecretStore secrets;
+    @Autowired ClaudeSpend spend;
 
     private HttpServer api;
     private final AtomicReference<String> lastRequest = new AtomicReference<>();
     private volatile String replyText;
     private final java.util.Deque<String> stopReasons = new java.util.concurrent.ConcurrentLinkedDeque<>();
     private final List<String> requests = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile Map<String, Object> usage = Map.of("input_tokens", 10, "output_tokens", 10);
+    private volatile int errorStatus;
+    private volatile String errorBody;
 
     @BeforeEach
     void startStub() throws Exception {
@@ -43,12 +48,20 @@ class ClaudeLlmClientTest {
         api.createContext("/v1/messages", ex -> {
             lastRequest.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             requests.add(lastRequest.get());
+            if (errorStatus != 0) {
+                byte[] err = errorBody.getBytes(StandardCharsets.UTF_8);
+                ex.getResponseHeaders().add("Content-Type", "application/json");
+                ex.sendResponseHeaders(errorStatus, err.length);
+                ex.getResponseBody().write(err);
+                ex.close();
+                return;
+            }
             String stop = stopReasons.isEmpty() ? "end_turn" : stopReasons.poll();
             String body = JsonMapper.shared().writeValueAsString(Map.of(
                     "id", "msg_test", "type", "message", "role", "assistant", "model", "claude-opus-5-5",
                     "content", List.of(Map.of("type", "text", "text", replyText)),
                     "stop_reason", stop,
-                    "usage", Map.of("input_tokens", 10, "output_tokens", 10)));
+                    "usage", usage));
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
             ex.sendResponseHeaders(200, bytes.length);
@@ -62,6 +75,7 @@ class ClaudeLlmClientTest {
 
     @AfterEach
     void stopStub() {
+        spend.setBalance(null);
         claude.useBaseUrl(null);
         api.stop(0);
     }
@@ -138,5 +152,70 @@ class ClaudeLlmClientTest {
         assertThatThrownBy(() -> claude.classify(sample()))
                 .isInstanceOf(LlmException.class)
                 .hasMessageContaining("expected format");
+    }
+
+    @Test
+    void eachReplyAddsItsCostToTheSpendTotals() {
+        replyText = "{\"subject\": \"Re: Collab\", \"body\": \"Hi!\"}";
+        usage = Map.of("input_tokens", 1_000_000, "output_tokens", 100_000, "cache_read_input_tokens", 1_000_000,
+                "cache_creation_input_tokens", 0, "server_tool_use", Map.of("web_search_requests", 2));
+        ClaudeSpend.Summary before = spend.summary();
+
+        claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "Maya", "", "", List.of(), "", List.of()));
+
+        // Opus 5.5: $4 input + $2 output + $0.20 cache reads + 2 searches × $0.01
+        ClaudeSpend.Summary after = spend.summary();
+        assertThat(after.trackedUsd() - before.trackedUsd()).isCloseTo(6.22, offset(0.011));
+        assertThat(after.byFeature().get("DRAFT") - before.byFeature().get("DRAFT")).isCloseTo(6.22, offset(0.011));
+        assertThat(after.calls()).isEqualTo(before.calls() + 1);
+        assertThat(after.trackedSince()).isNotNull();
+        assertThat(after.totalUsd()).isEqualTo(after.trackedUsd() + after.beforeUsd(), offset(0.011));
+    }
+
+    @Test
+    void lowBalanceWarnsAndRunningOutIsDetectedAndClearsOnTheNextReply() {
+        replyText = "{\"subject\": \"Re: Collab\", \"body\": \"Hi!\"}";
+        usage = Map.of("input_tokens", 1_000_000, "output_tokens", 0); // $4 per call
+        spend.setBalance(10.0);
+        assertThat(spend.summary().alert()).isNull();
+
+        claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "", "", "", List.of(), "", List.of()));
+        claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "", "", "", List.of(), "", List.of()));
+        ClaudeSpend.Summary low = spend.summary();
+        assertThat(low.remainingUsd()).isCloseTo(2.0, offset(0.011));
+        assertThat(low.alert().level()).isEqualTo("LOW");
+
+        // The prepaid balance is used up: the API answers 400 with this message.
+        errorStatus = 400;
+        errorBody = "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":"
+                + "\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"}}";
+        assertThatThrownBy(() -> claude.classify(sample())).isInstanceOf(OutOfCreditsException.class);
+        assertThat(spend.summary().alert().level()).isEqualTo("OUT");
+        assertThat(spend.outOfCredits()).isTrue();
+
+        errorStatus = 0;
+        claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "", "", "", List.of(), "", List.of()));
+        assertThat(spend.outOfCredits()).isFalse();
+    }
+
+    @Test
+    void billingErrorCountsAsOutOfCredits() {
+        errorStatus = 402;
+        errorBody = "{\"type\":\"error\",\"error\":{\"type\":\"billing_error\",\"message\":\"Billing problem\"}}";
+        assertThatThrownBy(() -> claude.classify(sample())).isInstanceOf(OutOfCreditsException.class);
+        assertThat(spend.outOfCredits()).isTrue();
+        spend.setBalance(20.0); // entering a new balance after topping up clears it
+        assertThat(spend.outOfCredits()).isFalse();
+        errorStatus = 0;
+    }
+
+    @Test
+    void otherBadRequestsAreNotCreditProblems() {
+        errorStatus = 400;
+        errorBody = "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"max_tokens: too large\"}}";
+        assertThatThrownBy(() -> claude.classify(sample())).isInstanceOf(LlmException.class)
+                .isNotInstanceOf(OutOfCreditsException.class);
+        assertThat(spend.outOfCredits()).isFalse();
+        errorStatus = 0;
     }
 }

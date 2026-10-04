@@ -124,6 +124,7 @@
     }
     try {
       await views[tab](document.getElementById("view-" + tab));
+      if (q.has("spend")) { const c = document.getElementById("spend"); if (c) c.scrollIntoView({ block: "start" }); }
     } catch (err) {
       toast(err.message, true);
     }
@@ -690,6 +691,7 @@
       keyOut,
       el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
 
+    root.appendChild(await claudeSpendCard(root));
     root.appendChild(await learningCard(root));
     root.appendChild(updatesCard(root));
     root.appendChild(await errorReportsCard(root, c));
@@ -755,6 +757,69 @@
       el("label", { class: "check", for: "learn-toggle" }, toggle, " Use my past messages when writing drafts"),
       el("div", { class: "stats" }, stat(stats.examples, "messages to learn from"), stat(stats.edited, "drafts you edited"), stat(stats.gotReply, "got a reply")),
       recent.length ? el("div", {}, rows) : emptyLine("Nothing yet. Send a draft or write to a brand and it will show up here."));
+  }
+
+  // ---------- Claude spending and credits ----------
+  // The API can't report the credit balance, so the app adds up an estimate of each call's cost and counts down
+  // from the balance last typed in here.
+
+  const usd = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function showCreditBanner(sp) {
+    const b = clear(document.getElementById("credit-banner"));
+    const a = sp && sp.alert;
+    b.classList.toggle("hidden", !a);
+    if (!a) return;
+    b.classList.toggle("error", a.level === "OUT");
+    b.classList.toggle("warn", a.level !== "OUT");
+    b.appendChild(el("span", {}, el("strong", {}, a.level === "OUT" ? "⚠️ Out of Claude credits. " : "Claude credits low. "),
+      a.message.replace(/^Claude credits[^.:]*[.:]\s*/, "")));
+    b.appendChild(el("span", { class: "spacer" }));
+    b.appendChild(el("a", { class: "btn small", href: "#settings?spend" }, "Details"));
+  }
+
+  async function refreshCredits() {
+    try { showCreditBanner(await api("GET", "/api/claude-spend")); } catch (e) { /* signed out or offline */ }
+  }
+
+  async function claudeSpendCard(root) {
+    const sp = await api("GET", "/api/claude-spend").catch(() => null);
+    if (!sp) return el("div");
+    showCreditBanner(sp);
+    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", RESEARCH: "Finding brands" };
+    const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
+      value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
+    const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });
+    const save = (path, input) => action(async () => {
+      const v = input.value.trim();
+      await api("PUT", "/api/claude-spend/" + path, { usd: v === "" ? null : Number(v) });
+      renderSettings(root);
+    }, "Saved");
+    const since = sp.trackedSince ? "since " + fmtDate(sp.trackedSince) + (sp.beforeUsd ? ", plus " + usd(sp.beforeUsd) + " from before" : "") : "nothing yet";
+    const left = sp.outOfCreditsSince ? el("p", { class: "alert error" }, "Out of credits since " + fmtDateTime(sp.outOfCreditsSince)
+        + ". Add credits in the Claude Console, then enter the new balance below.")
+      : sp.remainingUsd != null ? el("p", { class: sp.alert ? "alert error" : "" }, "About " + usd(sp.remainingUsd) + " of credit left (you entered "
+        + usd(sp.balanceUsd) + " on " + fmtDate(sp.balanceAt) + ").")
+      : el("p", { class: "small muted" }, "Enter your balance below to get a warning before the credits run out.");
+    const card_ = card("Claude spending",
+      el("div", { class: "stats" },
+        stat(usd(sp.totalUsd), "spent in total (" + since + ")"),
+        stat(usd(sp.thisMonthUsd), "this month"),
+        stat(sp.calls.toLocaleString(), "Claude requests")),
+      el("ul", { class: "small" }, Object.entries(sp.byFeature).map(([k, v]) => el("li", {}, (names[k] || pretty(k)) + ": " + usd(v))),
+        sp.months.length > 1 ? sp.months.map((m) => el("li", { class: "muted" }, m.month + ": " + usd(m.usd))) : null),
+      left,
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Credit balance right now ($)"), balance,
+          el("div", { class: "row" }, el("button", { class: "primary small", onclick: save("balance", balance) }, "Save balance"))),
+        el("div", {}, el("label", {}, "Spent before this app started counting ($)"), before,
+          el("div", { class: "row" }, el("button", { class: "small", onclick: save("spent-before", before) }, "Save")))),
+      el("p", { class: "small muted" }, "Find both at console.anthropic.com: Billing shows the balance, Usage/Cost shows what was spent. "
+        + "Enter the balance again whenever you top up. You'll see a warning at the top when about 20% is left, and a red one if "
+        + "the credits run out. The totals are estimates from Claude's token counts and published prices, and may differ a little "
+        + "from the bill."));
+    card_.id = "spend";
+    return card_;
   }
 
   function backupCard() {
@@ -1147,6 +1212,8 @@
   });
   window.addEventListener("hashchange", route);
   pollStatus();
+  refreshCredits();
+  setInterval(refreshCredits, 5 * 60 * 1000);
 
   refreshUpdate();
   setInterval(refreshUpdate, 30 * 60 * 1000);

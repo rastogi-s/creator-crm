@@ -10,6 +10,7 @@ import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.LlmException;
+import com.creatorcrm.llm.OutOfCreditsException;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.MessageRepo;
@@ -229,7 +230,9 @@ public class IngestionService {
                 } catch (LlmException e) {
                     log.warn("AI analysis failed for message {}: {}", m.id, e.getMessage());
                     write(AI_ERROR, OffsetDateTime.now() + " " + e.getMessage());
-                    // Bad key, rate limited, or Claude failing over and over: stop; the rest retry on the next run.
+                    // Out of credits, bad key, rate limited, or Claude failing over and over: stop; the rest retry on
+                    // the next run.
+                    if (e instanceof OutOfCreditsException) break;
                     if (e.getMessage() != null && e.getMessage().matches("(?s).*\\((401|429)\\).*")) break;
                     if (++claudeFailuresInARow >= 3) break;
                 } catch (LinkageError e) {
