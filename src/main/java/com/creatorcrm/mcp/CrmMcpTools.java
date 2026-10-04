@@ -22,6 +22,7 @@ import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.outreach.BrandDiscoveryService;
+import com.creatorcrm.contracts.ContractService;
 import com.creatorcrm.rates.RateAdvisor;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.scoring.LeadScoring;
@@ -68,6 +69,7 @@ public class CrmMcpTools {
     private final WinBack winBack;
     private final LeadScoring scoring;
     private final RateAdvisor rates;
+    private final ContractService contracts;
     private final BrandDiscoveryService discovery;
     private final InstagramStatsService instagram;
 
@@ -75,7 +77,9 @@ public class CrmMcpTools {
                        DraftRepo drafts, WorkflowEngine workflow, FollowUpEngine followUps, DraftService draftService,
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
                        CrmProperties props, InvoiceService invoices, WinBack winBack, LeadScoring scoring,
-                       BrandDiscoveryService discovery, InstagramStatsService instagram, RateAdvisor rates) {
+                       BrandDiscoveryService discovery, InstagramStatsService instagram, RateAdvisor rates,
+                       ContractService contracts) {
+        this.contracts = contracts;
         this.scoring = scoring;
         this.rates = rates;
         this.invoices = invoices;
@@ -163,6 +167,20 @@ public class CrmMcpTools {
                 .map(o -> "[opp " + o.id + "] " + workflow.brandName(o) + " — " + scores.get(o.id).level() + " ("
                         + scores.get(o.id).summary() + ")" + (o.budgetText == null || o.budgetText.isBlank() ? "" : ", " + o.budgetText))
                 .collect(Collectors.joining("\n"));
+    }
+
+    @McpTool(name = "get_contract_check", description = "The contract check for a deal: the terms read from each contract the brand sent (payment, fee, usage, exclusivity, revisions, kill fee) and the flags raised against the creator's limits. Advisory only; the creator decides whether to sign.")
+    public String contractCheck(@McpToolParam(description = "Opportunity id") Long id) {
+        List<ContractService.View> list = contracts.forDeal(id);
+        if (list.isEmpty()) return "No contract on this deal yet.";
+        StringBuilder sb = new StringBuilder();
+        for (ContractService.View c : list) {
+            sb.append(c.fileName() == null ? "Contract" : c.fileName()).append(" (").append(c.status()).append(")\n");
+            if (c.note() != null) sb.append(c.note()).append('\n');
+            if (c.terms() != null) sb.append(c.terms().summary()).append('\n');
+            c.flags().forEach(f -> sb.append("- ").append(f.level()).append(": ").append(f.text()).append('\n'));
+        }
+        return sb.toString().strip();
     }
 
     @McpTool(name = "suggest_rate", description = "What the creator could ask for on a deal: her price per deliverable (from her booked paid deals, or the rates in her profile) plus paid-usage and exclusivity uplifts, compared with the brand's offer. Advisory only; nothing is sent.")

@@ -126,6 +126,35 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "contract-check"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Bloomleaf Tea" });
+    await row.waitFor();
+    await say("Bloomleaf Tea emailed a contract. Claude has already read it.", 3600);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#contract-check");
+    await box.waitFor();
+    await box.scrollIntoViewIfNeeded();
+    await point(box.locator(".badge"));
+    await say("The contract check shows what to push back on and what to look at.", 4000);
+    await point(box.locator("li.flag.red").first());
+    await say("Red is outside your limits: here, waiting 60 days to be paid, and unlimited revisions.", 4600);
+    await point(box.locator("li.flag.amber").first());
+    await say("Amber is worth a look, like a year of ads, exclusivity, or no kill fee.", 4200);
+    await point(box.locator("summary"));
+    await say("Contract on DocuSign? Paste its text here and it's checked the same way.", 4200);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await click(page.locator(".tab[data-tab=settings]"));
+    const limits = page.locator("#settings-contracts");
+    await limits.waitFor();
+    await limits.scrollIntoViewIfNeeded();
+    await point(limits.locator("input").first());
+    await say("Set your own limits in Settings. It's a checklist, not legal advice; you decide what to sign.", 4600);
+    await say("", 600);
+  },
+
   async "rate-advisor"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

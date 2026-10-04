@@ -277,3 +277,12 @@ details.collapsible[open] > summary { margin-bottom: .5rem; }
 #rate-advisor table.lines td { padding: .2rem 0; border-bottom: 1px solid var(--border); }
 #rate-advisor table.lines td.num { text-align: right; font-variant-numeric: tabular-nums; }
 #rate-advisor p.warn { color: var(--warn); font-weight: 600; }
+
+/* Contract check on the deal */
+#contract-check ul.flags { list-style: none; padding: 0; margin: .5rem 0; }
+#contract-check li.flag { display: flex; gap: .6rem; padding: .35rem 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+#contract-check li.flag .mark { flex: 0 0 1.4rem; height: 1.4rem; border-radius: 50%; text-align: center; font-weight: 700; line-height: 1.4rem; font-size: .8rem; }
+#contract-check li.flag.red .mark { background: var(--danger-soft, #fde2e1); color: var(--danger, #b91c1c); }
+#contract-check li.flag.amber .mark { background: var(--warn-soft); color: var(--warn); }
+#contract-check li.flag.ok .mark { background: var(--ok-soft, #dcfce7); color: var(--ok, #15803d); }
+#contract-check textarea { width: 100%; min-height: 8rem; }

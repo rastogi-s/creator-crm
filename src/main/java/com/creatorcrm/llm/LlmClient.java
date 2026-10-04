@@ -23,6 +23,9 @@ public interface LlmClient {
     /** Research brands on the web that could be pitched. Results are suggestions the creator reviews. */
     BrandLeads findBrands(BrandSearchInput input);
 
+    /** Read a brand contract's terms. The app's own rules then check them against the creator's limits. */
+    ContractTerms extractContractTerms(ContractInput input);
+
     boolean isConfigured();
 
     /** Whether {@link #submitClassifyBatch} works: classification at half price, results within hours. */

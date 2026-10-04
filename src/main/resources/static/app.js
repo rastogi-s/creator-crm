@@ -684,6 +684,45 @@
       }
     }
 
+    // Contract check: terms read from the contract the brand sent, against her limits
+    const contracts = await api("GET", "/api/opportunities/" + id + "/contracts");
+    if (contracts.length || ["CONTRACT_PENDING", "CONTRACT_TO_SIGN"].includes(o.status)) {
+      const icon = { RED: "✕", AMBER: "!", OK: "✓" };
+      const box = el("div", { class: "card", id: "contract-check" }, el("h2", {}, "Contract check"));
+      for (const c of contracts) {
+        const head = el("div", { class: "row" }, el("strong", {}, c.fileName || "Contract"), el("div", { class: "spacer" }),
+          c.status === "CHECKED" ? el("span", { class: "badge " + (c.red ? "overdue" : c.amber ? "medium" : "ok") },
+            c.red || c.amber ? [c.red ? c.red + " to push back on" : null, c.amber ? c.amber + " to look at" : null].filter(Boolean).join(" · ") : "Looks fine") : null);
+        box.appendChild(head);
+        if (c.note) box.appendChild(el("p", { class: "small muted" }, c.note));
+        if (c.terms && c.terms.summary) box.appendChild(el("p", { class: "small" }, c.terms.summary));
+        if (c.flags.length) {
+          box.appendChild(el("ul", { class: "flags" }, c.flags.map((f) => el("li", { class: "flag " + f.level.toLowerCase() },
+            el("span", { class: "mark", "aria-label": { RED: "Push back", AMBER: "Look at", OK: "Fine" }[f.level] }, icon[f.level]), el("span", {}, f.text)))));
+        }
+        if (c.terms && c.terms.deadlines && c.terms.deadlines.length) {
+          box.appendChild(el("p", { class: "small" }, "Dates in the contract: " + c.terms.deadlines.map((x) => fmtDate(x.date) + " " + x.what).join("; ")));
+        }
+        if (c.status === "CHECKED") {
+          box.appendChild(el("p", {}, el("button", { class: "small", onclick: action(async () => {
+            await api("POST", "/api/contracts/" + c.id + "/recheck"); refresh();
+          }, "Checked again with your current limits") }, "Check again")));
+        }
+      }
+      const needsText = !contracts.some((c) => c.status === "CHECKED");
+      const paste = el("textarea", { maxlength: "60000", placeholder: "Paste the contract's text, e.g. copied from the DocuSign page" });
+      box.appendChild(el("details", needsText ? { open: true } : {},
+        el("summary", { class: "small" }, contracts.length ? "Check another version" : "No contract file yet. Paste its text to check it"),
+        paste,
+        el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+          await api("POST", "/api/opportunities/" + id + "/contracts", { text: paste.value });
+          refresh();
+        }, "Contract checked") }, "Check this contract"))));
+      box.appendChild(el("p", { class: "small muted" }, "Claude reads the terms and the app checks them against your limits in Settings, Contract check. "
+        + "It's a checklist, not legal advice; you decide what to sign."));
+      drawer.appendChild(box);
+    }
+
     // Invoices
     const invoiceAsked = d.tasks.some((t) => t.status === "OPEN" && t.type === "SEND_INVOICE");
     if (o.compensation !== "GIFTED" || invoices.length) {
@@ -1611,7 +1650,28 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 9. MCP
+    // 9. Contract check
+    const ck = {
+      contractMaxPaymentDays: el("input", { type: "number", min: "0", max: "999", value: p.contractMaxPaymentDays }),
+      contractFreeUsageMonths: el("input", { type: "number", min: "0", max: "999", value: p.contractFreeUsageMonths }),
+      contractRevisionsIncluded: el("input", { type: "number", min: "0", max: "99", value: p.contractRevisionsIncluded }),
+    };
+    steps.appendChild(el("li", { class: "done", id: "settings-contracts" },
+      el("h3", {}, "Contract check"),
+      el("p", { class: "small muted" }, "When a brand emails a contract as a PDF, Claude reads its terms and the app flags anything outside these limits. "
+        + "Contracts on DocuSign and similar sites can't be opened by the app; paste their text on the deal instead. Each contract costs one Claude call."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Get paid within (days)"), ck.contractMaxPaymentDays),
+        el("div", {}, el("label", {}, "Paid usage your fee includes (months)"), ck.contractFreeUsageMonths),
+        el("div", {}, el("label", {}, "Revision rounds you include"), ck.contractRevisionsIncluded)),
+      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        const body = {};
+        for (const [k, v] of Object.entries(ck)) body[k] = v.value;
+        await api("PUT", "/api/settings/preferences", body);
+        renderSettings(root);
+      }, "Saved") }, "Save"))));
+
+    // 10. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),
@@ -1735,7 +1795,7 @@
     const sp = await api("GET", "/api/claude-spend").catch(() => null);
     if (!sp) return el("div");
     showCreditBanner(sp);
-    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands" };
+    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts" };
     const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
       value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
     const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

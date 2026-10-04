@@ -240,6 +240,40 @@ public class GmailConnector implements ChannelConnector {
                 bulk);
     }
 
+    /** A file attached to an email. */
+    public record FileAttachment(String fileName, byte[] data) {}
+
+    /**
+     * The PDF attachments of one message, for the contract check: at most {@code max} files, each at most
+     * {@code maxBytes}. Needs only the read-only scope the app already has.
+     */
+    public List<FileAttachment> pdfAttachments(String messageId, int max, long maxBytes) throws Exception {
+        Gmail gmail = gmail();
+        Message m = gmail.users().messages().get("me", messageId).setFormat("full").execute();
+        List<MessagePart> parts = new ArrayList<>();
+        collectParts(m.getPayload(), parts);
+        List<FileAttachment> out = new ArrayList<>();
+        for (MessagePart p : parts) {
+            if (out.size() >= max) break;
+            String name = p.getFilename() == null ? "" : p.getFilename();
+            boolean pdf = "application/pdf".equalsIgnoreCase(p.getMimeType()) || name.toLowerCase().endsWith(".pdf");
+            if (!pdf || p.getBody() == null) continue;
+            Integer size = p.getBody().getSize();
+            if (size != null && size > maxBytes) continue;
+            byte[] data = p.getBody().getAttachmentId() != null
+                    ? gmail.users().messages().attachments().get("me", messageId, p.getBody().getAttachmentId()).execute().decodeData()
+                    : p.getBody().decodeData();
+            if (data != null && data.length > 0 && data.length <= maxBytes) out.add(new FileAttachment(name.isBlank() ? "contract.pdf" : name, data));
+        }
+        return out;
+    }
+
+    private static void collectParts(MessagePart part, List<MessagePart> out) {
+        if (part == null) return;
+        out.add(part);
+        if (part.getParts() != null) part.getParts().forEach(p -> collectParts(p, out));
+    }
+
     @Override
     public Optional<String> pushDraft(Draft draft) throws Exception {
         if (!config.pushDraftsToGmail()) return Optional.empty();
