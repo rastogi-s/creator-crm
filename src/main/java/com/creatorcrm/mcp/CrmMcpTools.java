@@ -24,6 +24,7 @@ import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.outreach.BrandDiscoveryService;
 import com.creatorcrm.calendar.Exclusivity;
 import com.creatorcrm.contracts.ContractService;
+import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.rates.RateAdvisor;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.scoring.LeadScoring;
@@ -72,6 +73,7 @@ public class CrmMcpTools {
     private final RateAdvisor rates;
     private final ContractService contracts;
     private final Exclusivity exclusivity;
+    private final CampaignResults results;
     private final BrandDiscoveryService discovery;
     private final InstagramStatsService instagram;
 
@@ -80,7 +82,8 @@ public class CrmMcpTools {
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
                        CrmProperties props, InvoiceService invoices, WinBack winBack, LeadScoring scoring,
                        BrandDiscoveryService discovery, InstagramStatsService instagram, RateAdvisor rates,
-                       ContractService contracts, Exclusivity exclusivity) {
+                       ContractService contracts, Exclusivity exclusivity, CampaignResults results) {
+        this.results = results;
         this.contracts = contracts;
         this.exclusivity = exclusivity;
         this.scoring = scoring;
@@ -186,6 +189,27 @@ public class CrmMcpTools {
             c.flags().forEach(f -> sb.append("- ").append(f.level()).append(": ").append(f.text()).append('\n'));
         }
         return sb.toString().strip();
+    }
+
+    @McpTool(name = "get_campaign_results", description = "How a deal's post did: its link, posting date, and reach, views, likes, comments, saves and shares (from Instagram Insights a week after posting, or typed in by the creator), plus whether a results recap was drafted.")
+    public String campaignResults(@McpToolParam(description = "Opportunity id") Long id) {
+        return results.forDeal(id).map(v -> {
+            StringBuilder sb = new StringBuilder();
+            sb.append("Post: ").append(nz(v.postUrl())).append('\n');
+            if (v.postedAt() != null) sb.append("Posted: ").append(v.postedAt().toLocalDate()).append('\n');
+            sb.append("Reach ").append(n(v.reach())).append(", views ").append(n(v.views())).append(", likes ").append(n(v.likes()))
+                    .append(", comments ").append(n(v.comments())).append(", saves ").append(n(v.saves())).append(", shares ").append(n(v.shares()));
+            if (v.engagementRate() != null) sb.append(", engagement rate ").append(v.engagementRate()).append('%');
+            sb.append("\nSource: ").append(v.source());
+            if (v.numbersDue() != null) sb.append(" (Instagram numbers due ").append(v.numbersDue()).append(')');
+            if (v.error() != null) sb.append("\nProblem: ").append(v.error());
+            sb.append(v.recapDraftedAt() == null ? "\nNo recap drafted yet." : "\nRecap drafted " + v.recapDraftedAt().toLocalDate() + ".");
+            return sb.toString();
+        }).orElse("No post linked to this deal yet.");
+    }
+
+    private static String n(Long v) {
+        return v == null ? "-" : String.format("%,d", v);
     }
 
     @McpTool(name = "check_exclusivity", description = "Deals whose exclusivity windows clash: one brand's exclusivity period overlapping another brand's exclusivity or posting dates. Only the creator knows whether the brands compete.")

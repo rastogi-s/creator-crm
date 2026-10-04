@@ -1,6 +1,7 @@
 package com.creatorcrm.jobs;
 
 import com.creatorcrm.calendar.CalendarSync;
+import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
@@ -47,12 +48,15 @@ public class ScheduledJobs {
     private final WinBack winBack;
     private final InstagramEngagementService instagramEngagement;
     private final CalendarSync calendar;
+    private final CampaignResults results;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
                          PaymentReminders paymentReminders, WinBack winBack,
-                         InstagramEngagementService instagramEngagement, CalendarSync calendar) {
+                         InstagramEngagementService instagramEngagement, CalendarSync calendar,
+                         CampaignResults results) {
+        this.results = results;
         this.instagramEngagement = instagramEngagement;
         this.calendar = calendar;
         this.paymentReminders = paymentReminders;
@@ -133,8 +137,9 @@ public class ScheduledJobs {
         }
         int reminders = paymentReminders.draftDue(settings.today());
         int repitches = winBack.draftDue(settings.today());
-        log.info("Morning prep: {} follow-up drafts, {} payment reminders, {} re-pitches, {} deals marked cold",
-                drafted, reminders, repitches, cold);
+        int recaps = results.daily();
+        log.info("Morning prep: {} follow-up drafts, {} payment reminders, {} re-pitches, {} results recaps, {} deals marked cold",
+                drafted, reminders, repitches, recaps, cold);
         return drafted;
     }
 

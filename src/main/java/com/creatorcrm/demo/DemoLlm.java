@@ -68,6 +68,17 @@ public class DemoLlm implements LlmClient {
                             + (gifted ? ", this time as a paid collab" : "") + ". One idea: a 3-part Reel series showing how it fits "
                             + "into my weekly routine.\n\nWould you be open to a quick chat?\n\nBest,\nAva");
         }
+        if ("RESULTS_RECAP".equals(input.draftType())) {
+            // extraInstructions: "Results recap: ... Numbers: 18,450 accounts reached, .... Quote these ..." from CampaignResults.
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Numbers: (.+?)\\. Quote").matcher(input.extraInstructions());
+            String numbers = m.find() ? m.group(1) : "[NUMBERS]";
+            boolean gifted = input.extraInstructions().contains("paid collab");
+            return new DraftText("How our " + input.brandName() + " post did",
+                    "Hi " + who + ",\n\nThank you again for the collab! I wanted to share how the post did after its first week: "
+                            + numbers + ". The saves were the standout: people kept it to come back to.\n\n"
+                            + "The full results are in the attached one-pager. I'd love to do more together"
+                            + (gifted ? ", maybe a paid Reel series next" : "") + ".\n\nBest,\nAva");
+        }
         if ("INVOICE".equals(input.draftType())) {
             // extraInstructions starts "Send invoice INV-... for USD ..., due ....", written by InvoiceService.
             String what = input.extraInstructions();

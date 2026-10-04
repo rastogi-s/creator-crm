@@ -15,6 +15,7 @@ public class Activity {
     public static final String DRAFT_SENT = "DRAFT_SENT";
     public static final String INVOICE = "INVOICE";
     public static final String CONTRACT = "CONTRACT";
+    public static final String RESULTS = "RESULTS";
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
     public Long opportunityId;

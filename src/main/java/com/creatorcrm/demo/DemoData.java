@@ -5,6 +5,9 @@ import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.calendar.CalendarSync;
+import com.creatorcrm.domain.CampaignResult;
+import com.creatorcrm.repo.CampaignResultRepo;
+import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.contracts.ContractService;
 import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.invoices.InvoiceService;
@@ -56,6 +59,8 @@ public class DemoData implements ApplicationRunner {
     private final ContractService contracts;
     private final ContractRepo contractRepo;
     private final CalendarSync calendar;
+    private final CampaignResults results;
+    private final CampaignResultRepo resultRepo;
 
     static final String DEMO_CONTRACT = """
             INFLUENCER AGREEMENT between Bloomleaf Tea Co. ("Brand") and Ava Rivera ("Creator").
@@ -71,8 +76,10 @@ public class DemoData implements ApplicationRunner {
                     OutreachService outreach, InvoiceService invoices, OpportunityRepo opportunities,
                     WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
                     ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
-                    CalendarSync calendar) {
+                    CalendarSync calendar, CampaignResults results, CampaignResultRepo resultRepo) {
         this.calendar = calendar;
+        this.results = results;
+        this.resultRepo = resultRepo;
         this.contracts = contracts;
         this.contractRepo = contractRepo;
         this.activity = activity;
@@ -148,6 +155,30 @@ public class DemoData implements ApplicationRunner {
                 .ifPresent(o -> {
                     contractRepo.findByOpportunityIdOrderByIdDesc(o.id).forEach(contractRepo::delete);
                     contracts.checkText(o.id, "Bloomleaf-October-agreement.pdf", DEMO_CONTRACT);
+                });
+        // Petal & Pine's candle post, three weeks old, with its Instagram numbers read a week after it went up
+        // (demo mode has no Instagram), and the results recap drafted for her to check.
+        opportunities.findAll().stream()
+                .filter(o -> "Petal & Pine".equals(workflow.brandName(o))).findFirst()
+                .ifPresent(o -> {
+                    CampaignResult r = new CampaignResult();
+                    r.opportunityId = o.id;
+                    r.postUrl = "https://www.instagram.com/p/DemoCandleSet/";
+                    r.mediaId = "demo-media-1";
+                    r.mediaType = "FEED";
+                    r.postedAt = now.minusDays(22);
+                    r.source = CampaignResult.Source.INSTAGRAM;
+                    r.reach = 18_450L;
+                    r.views = 26_310L;
+                    r.likes = 1_284L;
+                    r.comments = 96L;
+                    r.saves = 412L;
+                    r.shares = 138L;
+                    r.fetchedAt = now.minusDays(15);
+                    r.createdAt = now.minusDays(21);
+                    r.updatedAt = now.minusDays(15);
+                    resultRepo.save(r);
+                    results.draftRecap(o.id);
                 });
         // Deal dates on the pretend Google Calendar, as if she had connected it.
         calendar.sync();
