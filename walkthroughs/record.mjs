@@ -182,6 +182,32 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "ask-claude"(page) {
+    const { pause, say, point, click } = helpers(page);
+    await page.goto(BASE + "/#drafts");
+    await page.locator("#view-drafts .card h3").first().waitFor();
+    await pause(2500); // let the first refresh settle so the card isn't replaced mid-shot
+    const draft = page.locator("#view-drafts .card", { hasText: "Glowberry Skin — Reply" }).first();
+    const box = draft.locator(".ask-claude");
+    await point(box);
+    await say("Under every draft you can now ask Claude to change it.", 3400);
+    await click(box.getByRole("button", { name: "Warmer" }));
+    await box.getByText("Changed.").waitFor();
+    await point(draft.locator("textarea"));
+    await say("Claude rewrites it in your voice and keeps the facts and numbers.", 4000);
+    await point(box.getByRole("button", { name: "Undo" }));
+    await say("Not quite right? Undo puts back the version from before.", 3600);
+    await click(box.getByRole("button", { name: "Undo" }));
+    const ask = box.getByRole("textbox");
+    await click(ask);
+    await ask.pressSequentially("mention I'm free to film in March", { delay: 60 });
+    await say("Or type exactly what you want changed.", 2800);
+    await click(box.getByRole("button", { name: "Change" }));
+    await box.getByText("Changed.").waitFor();
+    await say("Nothing is sent. The draft waits here until you read it and press Send.", 4200);
+    await say("", 600);
+  },
+
   async "search"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#pipeline");

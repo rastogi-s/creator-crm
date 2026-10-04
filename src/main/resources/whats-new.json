@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.18.0",
+    "title": "Ask Claude to change a draft",
+    "features": [
+      {
+        "id": "ask-claude",
+        "title": "Ask Claude to change a draft",
+        "body": "Under every draft there's now an Ask Claude to change it box. Press Warmer, Shorter, More formal or Add my rates, or type what you want, like 'mention I'm free in March'. Claude rewrites the draft in your voice and keeps the facts and numbers. Nothing is sent: it waits for you to read it and press Send. Undo puts back the version from before. Each change costs about 3 cents of Claude credit.",
+        "video": "ask-claude.webm",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.17.0",
     "title": "Rate advisor",
     "features": [

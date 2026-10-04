@@ -58,6 +58,19 @@ public class FakeLlm implements LlmClient {
         return new DraftText("Re: collab", "Hi Maya, thanks! [" + input.draftType() + "]");
     }
 
+    public String lastRevisionRequest;
+    public DraftText lastRevisionCurrent;
+    public DraftInput lastRevisionInput;
+
+    @Override
+    public DraftText reviseDraft(DraftInput input, DraftText current, String request) {
+        lastRevisionInput = input;
+        lastRevisionCurrent = current;
+        lastRevisionRequest = request;
+        if (failDraftsWith != null) throw failDraftsWith;
+        return new DraftText(current.subject(), current.body() + " [" + request + "]");
+    }
+
     /** What the next brand search returns. */
     public BrandLeads nextLeads = new BrandLeads(List.of());
 

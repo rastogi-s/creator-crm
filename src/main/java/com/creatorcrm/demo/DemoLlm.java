@@ -80,6 +80,36 @@ public class DemoLlm implements LlmClient {
                         + ". For one Reel with 30 days of organic usage my rate is [RATE FOR 1 REEL].\n\nBest,\nAva");
     }
 
+    /** A canned edit per quick button, so the walkthrough shows the text really changing. */
+    @Override
+    public DraftText reviseDraft(DraftInput input, DraftText current, String request) {
+        String r = request.toLowerCase(java.util.Locale.ROOT);
+        String body = current.body();
+        int greetingEnd = body.indexOf("\n\n");
+        if (r.contains("short")) {
+            String[] parts = body.split("\n\n");
+            if (parts.length > 3) body = parts[0] + "\n\n" + parts[1] + "\n\n" + parts[parts.length - 1];
+            int firstStop = body.indexOf(". ", greetingEnd < 0 ? 0 : greetingEnd);
+            int paraEnd = body.indexOf("\n\n", greetingEnd + 2);
+            if (firstStop > 0 && paraEnd > firstStop) body = body.substring(0, firstStop + 1) + body.substring(paraEnd);
+        } else if (r.contains("warm")) {
+            if (greetingEnd > 0) body = body.substring(0, greetingEnd + 2) + "I hope your week is off to a lovely start! "
+                    + body.substring(greetingEnd + 2);
+            body = body.replace("Best,", "Warmly,");
+        } else if (r.contains("formal")) {
+            body = body.replaceFirst("^Hi ", "Dear ").replace("Thanks so much", "Thank you very much")
+                    .replace("I'd love to", "I would be glad to").replace("Best,", "Kind regards,");
+        } else if (r.startsWith("mention ") && body.lastIndexOf("\n\n") > 0) {
+            String add = request.strip().substring(8).strip();
+            add = Character.toUpperCase(add.charAt(0)) + add.substring(1) + (add.endsWith(".") ? "" : ".");
+            int signOff = body.lastIndexOf("\n\n");
+            body = body.substring(0, signOff) + "\n\n" + add + body.substring(signOff);
+        } else {
+            body = body + "\n\n(Demo mode: Claude would apply \"" + request + "\" here.)";
+        }
+        return new DraftText(current.subject(), body);
+    }
+
     @Override
     public BrandLeads findBrands(BrandSearchInput input) {
         List<BrandLeads.Lead> sample = List.of(

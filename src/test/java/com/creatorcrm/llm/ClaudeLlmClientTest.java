@@ -136,6 +136,18 @@ class ClaudeLlmClientTest {
     }
 
     @Test
+    void revisesADraftWithTheRequestAndCountsItSeparately() {
+        usage = Map.of("input_tokens", 3000, "output_tokens", 600);
+        replyText = "{\"subject\": \"Re: Collab\", \"body\": \"Hi Maya! So happy you reached out. My rate is $500.\"}";
+        DraftText d = claude.reviseDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "Maya", "", "", List.of(), "",
+                List.of()), new DraftText("Re: Collab", "Hi Maya, my rate is $500."), "Make it warmer");
+        assertThat(d.body()).contains("So happy");
+        assertThat(lastRequest.get()).contains("<current_draft>").contains("Hi Maya, my rate is $500.")
+                .contains("The creator's request: Make it warmer");
+        assertThat(spend.summary().byFeature().get("REVISE")).isGreaterThan(0);
+    }
+
+    @Test
     void brandResearchUsesWebSearchAndResumesPausedTurns() {
         replyText = "{\"leads\": [{\"name\": \"Glow Co\", \"website\": \"https://glow.example\", \"instagram\": \"glowco\","
                 + " \"contactEmail\": \"collabs@glow.example\", \"contactSourceUrl\": \"https://glow.example/contact\","
