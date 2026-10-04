@@ -1,10 +1,13 @@
 package com.creatorcrm.demo;
 
+import com.creatorcrm.llm.BrandLeads;
+import com.creatorcrm.llm.BrandSearchInput;
 import com.creatorcrm.llm.ClassificationInput;
 import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
+import java.util.List;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -26,6 +29,20 @@ public class DemoLlm implements LlmClient {
         return new DraftText("Re: " + input.brandName() + " collab",
                 "Hi " + who + ",\n\nThanks so much for thinking of me! I'd love to work with " + input.brandName()
                         + ". For one Reel with 30 days of organic usage my rate is [RATE FOR 1 REEL].\n\nBest,\nAva");
+    }
+
+    @Override
+    public BrandLeads findBrands(BrandSearchInput input) {
+        List<BrandLeads.Lead> sample = List.of(
+                new BrandLeads.Lead("Dewdrop Skin", "https://dewdrop.example", "dewdropskin", "creators@dewdrop.example",
+                        "https://dewdrop.example/creators", "Runs a creator program for skincare routines.",
+                        "A 7-day morning routine series with their gel cleanser"),
+                new BrandLeads.Lead("Trailmix Co", "https://trailmix.example", "trailmixco", "",
+                        "", "Sponsors outdoor and wellness creators of a similar size.",
+                        "A weekend hike vlog featuring their snack packs"));
+        return new BrandLeads(sample.stream()
+                .filter(l -> input.excludeBrands().stream().noneMatch(l.name()::equalsIgnoreCase))
+                .limit(Math.max(1, input.count())).toList());
     }
 
     @Override

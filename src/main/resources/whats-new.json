@@ -1,5 +1,23 @@
 [
   {
+    "version": "1.2.0",
+    "title": "Brand outreach and Instagram stats",
+    "features": [
+      {
+        "id": "find-brands",
+        "title": "Find brands to pitch",
+        "body": "On the Outreach page, describe the kind of brands you want to work with. Claude searches the web for brands that fit you, finds the partnerships email each brand publishes (with the page it came from) and suggests a pitch idea. Draft pitch puts a personal pitch in Drafts for you to edit and send. Nothing is sent without your click.",
+        "tryIt": "#outreach"
+      },
+      {
+        "id": "instagram-stats",
+        "title": "Your Instagram numbers in every draft",
+        "body": "Once Instagram is connected, Settings shows your followers, engagement rate and 28-day reach, refreshed every day. Drafts quote these exact numbers when brands ask for your stats.",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
     "version": "1.1.0",
     "title": "One-click updates and walkthrough videos",
     "features": [
