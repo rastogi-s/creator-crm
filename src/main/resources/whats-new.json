@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.19.0",
+    "title": "A friendlier Day summary",
+    "features": [
+      {
+        "id": "day-summary",
+        "title": "Your day at a glance",
+        "body": "Day summary has a fresh look. At the top you see how many things you got done, what's still to do, new deals and what's lined up for tomorrow; press any of them to jump there. Each thing you did today shows the brand and the time. Things still waiting have Done and Open buttons right there, and if drafts are ready to send there's a button to review them.",
+        "video": "day-summary.webm",
+        "tryIt": "#summary"
+      }
+    ]
+  },
+  {
     "version": "1.18.0",
     "title": "Ask Claude to change a draft",
     "features": [

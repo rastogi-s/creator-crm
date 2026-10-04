@@ -182,6 +182,29 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "day-summary"(page) {
+    const { pause, say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await page.locator("#view-today h1").waitFor();
+    await pause(2500);
+    await page.locator("#view-today button:text-is('Done')").first().click();
+    await pause(3800); // let the toast fade before filming
+    await page.goto(BASE + "/#summary");
+    await page.locator("#view-summary .eod-hero").waitFor();
+    await say("Day summary now shows your day at a glance.", 3400);
+    await point(page.locator("#view-summary .eod-stats"));
+    await say("What you got done, what's still waiting, new deals and tomorrow. Press a number to jump there.", 4400);
+    await point(page.locator("#eod-done"));
+    await say("Everything you did today, with the brand and the time.", 3600);
+    await click(page.locator(".eod-stat", { hasText: "Still to do" }));
+    await pause(900);
+    await point(page.locator("#eod-waiting button:text-is('Done')").first());
+    await say("Things still waiting on you, most important first. Press Done when you've handled one.", 4400);
+    await click(page.locator(".eod-stat", { hasText: "For tomorrow" }));
+    await pause(900);
+    await say("And what's lined up for tomorrow, so you can close the laptop knowing where to start.", 4400);
+    await say("", 600);
+  },
   async "ask-claude"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");
