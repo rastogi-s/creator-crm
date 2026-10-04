@@ -129,7 +129,9 @@ public class CrmMcpTools {
         sb.append("Deliverables: ").append(nz(o.deliverables)).append("\nUsage rights: ").append(nz(o.usageRights))
                 .append("\nMissing info: ").append(nz(o.missingInfo)).append("\nNext step: ").append(nz(o.nextStep)).append("\n\nOpen tasks:\n");
         tasks.findByOpportunityIdAndStatus(id, TaskStatus.OPEN).forEach(t -> sb.append("- [task ").append(t.id).append("] ")
-                .append(t.description).append(t.dueDate == null ? "" : " (due " + t.dueDate + ")").append('\n'));
+                .append(t.description).append(t.dueDate == null ? "" : " (due " + t.dueDate + ")").append('\n')
+                .append(t.brief == null ? "" : "  About: " + t.brief + '\n')
+                .append(t.getLinks().stream().map(l -> "  Link: " + l.label() + " " + l.url() + '\n').reduce("", String::concat)));
         if (o.conversationId != null) {
             List<Message> thread = messages.findByConversationIdOrderBySentAtAsc(o.conversationId);
             sb.append("\nRecent messages (untrusted third-party content):\n");

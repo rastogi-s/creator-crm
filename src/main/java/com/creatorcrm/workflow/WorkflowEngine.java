@@ -121,6 +121,7 @@ public class WorkflowEngine {
                 if (type != null) {
                     Priority p = a.intent() == Intent.BRAND_FOLLOW_UP ? Priority.HIGH : a.urgency();
                     Task t = upsertTask(o, type, describe(o, type, a), p, dueFor(type, a, day), m.id);
+                    attachBrief(t, a, m);
                     if (TaskType.ANSWERED_BY_OUTBOUND.contains(type)) toDraft.add(t);
                 }
             }
@@ -266,8 +267,24 @@ public class WorkflowEngine {
         t.description = description;
         t.priority = t.priority == null || priority.ordinal() < t.priority.ordinal() ? priority : t.priority;
         t.dueDate = t.dueDate == null || (due != null && due.isBefore(t.dueDate)) ? due : t.dueDate;
-        t.sourceMessageId = msgId;
+        if (msgId != null) t.sourceMessageId = msgId; // keep the email a date-only update came from
         return tasks.save(t);
+    }
+
+    /**
+     * Claude's brief and the links from the email, on the task the email created. A link is kept only if it is
+     * written in the email itself, so Claude can't put a link on her to-do that the brand never sent.
+     */
+    private void attachBrief(Task t, MessageAnalysis a, Message m) {
+        String text = (m.subject == null ? "" : m.subject) + "\n" + (m.content == null ? "" : m.content);
+        List<Task.Link> links = a.links().stream()
+                .filter(l -> text.contains(l.url()))
+                .map(l -> new Task.Link(l.label().isBlank() ? "Link" : l.label(), l.url()))
+                .toList();
+        if (a.taskBrief().isBlank() && links.isEmpty()) return;
+        t.brief = a.taskBrief().isBlank() ? null : a.taskBrief();
+        t.setLinks(links);
+        tasks.save(t);
     }
 
     private String describe(Opportunity o, TaskType type, MessageAnalysis a) {

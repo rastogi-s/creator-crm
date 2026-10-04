@@ -76,4 +76,25 @@ class MailTextTest {
     void htmlIsReducedToText() {
         assertThat(MailText.htmlToText("<p>Hello <b>there</b></p><script>alert(1)</script>").strip()).isEqualTo("Hello there");
     }
+
+    @Test
+    void htmlLinksKeepTheirUrl() {
+        String text = MailText.htmlToText("<p>Hi Ava!</p><p>Please <a class=\"btn\" href=\"https://forms.example/apply?x=1&amp;y=2\">"
+                + "<b>fill in our form</b></a> by Friday.</p><a href='https://brand.example/'>https://brand.example/</a>"
+                + "<a href=\"mailto:hi@brand.example\">email us</a>");
+        assertThat(text).contains("fill in our form (https://forms.example/apply?x=1&y=2)")
+                .contains("https://brand.example/")
+                .doesNotContain("https://brand.example/ (https://brand.example/)")
+                .contains("email us");
+    }
+
+    @Test
+    void gmailLinkOnlyForGmailMessages() {
+        assertThat(GmailLinks.url("email:18c2f0a9b3d4e5f6", "ava@gmail.com"))
+                .isEqualTo("https://mail.google.com/mail/?authuser=ava%40gmail.com#all/18c2f0a9b3d4e5f6");
+        assertThat(GmailLinks.url("email:18c2f0a9b3d4e5f6", "")).isEqualTo("https://mail.google.com/mail/#all/18c2f0a9b3d4e5f6");
+        assertThat(GmailLinks.url("instagram:aWdfZAG93", "ava@gmail.com")).isNull();
+        assertThat(GmailLinks.url("email:demo-1", "ava@gmail.com")).isNull();
+        assertThat(GmailLinks.url(null, "")).isNull();
+    }
 }

@@ -37,7 +37,7 @@ public class FakeLlm implements LlmClient {
                                            List<MessageAnalysis.ExtractedDeadline> deadlines) {
         return new MessageAnalysis(intent != Intent.NOT_BRAND_RELATED, brand, "Maya", intent, OpportunityType.UGC,
                 Compensation.PAID, 500, "USD", "$500", "1 UGC video", "", "Fall launch",
-                deadlines, List.of(), requiresReply, Priority.MEDIUM, "", "Summary for " + brand);
+                deadlines, List.of(), requiresReply, Priority.MEDIUM, "", "Summary for " + brand, "", List.of());
     }
 
     public static MessageAnalysis.ExtractedDeadline deadline(DeadlineType type, String date) {

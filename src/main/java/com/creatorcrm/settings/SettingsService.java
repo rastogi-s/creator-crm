@@ -72,6 +72,8 @@ public class SettingsService {
 
     /** "false" = deal dates stay off her Google Calendar (and any already there are removed). */
     public static final String CALENDAR_SYNC = "calendarSync";
+    /** Her own rules for how Claude reads emails and writes to-dos, added to the classifier's instructions. */
+    public static final String TASK_RULES = "taskRules";
 
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
@@ -81,7 +83,7 @@ public class SettingsService {
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
             WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
-            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC);
+            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -138,6 +140,8 @@ public class SettingsService {
     public String creatorName() { return raw(CREATOR_NAME, props.defaults().creatorName()); }
 
     public String creatorProfile() { return raw(CREATOR_PROFILE, profileTemplate); }
+
+    public String taskRules() { return raw(TASK_RULES, ""); }
 
     public String classifierModel() { return raw(CLASSIFIER_MODEL, props.defaults().classifierModel()); }
 
@@ -251,6 +255,7 @@ public class SettingsService {
         m.put(CONTRACT_FREE_USAGE_MONTHS, String.valueOf(contractFreeUsageMonths()));
         m.put(CONTRACT_REVISIONS_INCLUDED, String.valueOf(contractRevisionsIncluded()));
         m.put(CALENDAR_SYNC, String.valueOf(calendarSync()));
+        m.put(TASK_RULES, taskRules());
         return m;
     }
 

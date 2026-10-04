@@ -99,6 +99,37 @@ class WorkflowIntegrationTest {
     }
 
     @Test
+    void applicationFormTaskCarriesBriefLinksAndSourceEmail() {
+        thread = "bloom" + UUID.randomUUID().toString().substring(0, 6);
+        String brand = "Bloom " + thread;
+        com.creatorcrm.llm.MessageAnalysis base = analysis(Intent.APPLICATION_FORM, brand, true, List.of());
+        com.creatorcrm.llm.MessageAnalysis a = new com.creatorcrm.llm.MessageAnalysis(base.brandRelated(), base.brandName(),
+                base.contactName(), base.intent(), base.opportunityType(), base.compensation(), base.budgetAmount(),
+                base.currency(), base.budgetText(), base.deliverables(), base.usageRights(), base.campaign(),
+                base.deadlines(), base.missingInfo(), base.requiresReply(), base.urgency(), base.suggestedAction(),
+                base.updatedSummary(),
+                "Bloom's creator program pays $500 per UGC video. The form asks for your handles and audience stats.",
+                List.of(new com.creatorcrm.llm.MessageAnalysis.TaskLink("Application form", "https://forms.bloom.test/apply?ref=ava"),
+                        new com.creatorcrm.llm.MessageAnalysis.TaskLink("Made up", "https://evil.test/login")));
+
+        email(Direction.INBOUND, 0, "Join our creator program! Apply here: https://forms.bloom.test/apply?ref=ava", a);
+
+        Task t = open(opp()).stream().filter(x -> x.type == TaskType.COMPLETE_APPLICATION).findFirst().orElseThrow();
+        assertThat(t.brief).contains("creator program");
+        // Only links that really are in the email reach the to-do.
+        assertThat(t.getLinks()).containsExactly(new Task.Link("Application form", "https://forms.bloom.test/apply?ref=ava"));
+        assertThat(messages.findById(t.sourceMessageId).orElseThrow().content).contains("Apply here");
+
+        DigestService.Item item = digest.morning().urgent().stream()
+                .filter(i -> t.id.equals(i.refId()) && "TASK".equals(i.kind())).findFirst()
+                .or(() -> digest.morning().upcoming().stream().filter(i -> t.id.equals(i.refId()) && "TASK".equals(i.kind())).findFirst())
+                .orElseThrow();
+        assertThat(item.task().brief()).isEqualTo(t.brief);
+        assertThat(item.task().links()).hasSize(1);
+        assertThat(item.task().messageId()).isEqualTo(t.sourceMessageId);
+    }
+
+    @Test
     void inboundDealLifecycle() {
         thread = "glow" + UUID.randomUUID().toString().substring(0, 6);
         String brand = "Glow " + thread;
