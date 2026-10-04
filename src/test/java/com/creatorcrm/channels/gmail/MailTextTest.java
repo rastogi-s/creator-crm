@@ -97,4 +97,29 @@ class MailTextTest {
         assertThat(GmailLinks.url("email:demo-1", "ava@gmail.com")).isNull();
         assertThat(GmailLinks.url(null, "")).isNull();
     }
+
+    private static com.google.api.services.gmail.model.MessagePart part(String mime, String text) {
+        return new com.google.api.services.gmail.model.MessagePart().setMimeType(mime)
+                .setBody(new com.google.api.services.gmail.model.MessagePartBody().encodeData(text.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void applyHereLinkMissingFromPlainTextComesFromTheHtml() {
+        var email = new com.google.api.services.gmail.model.MessagePart().setMimeType("multipart/alternative").setParts(List.of(
+                part("text/plain", "Hi Ava!\nWe'd love you in our creator program. Apply here by Friday.\n\nUnsubscribe"),
+                part("text/html", "<p>Hi Ava!</p><p>We'd love you in our creator program. Apply <a href=\"https://forms.bloom.example/apply?id=7\">here</a>"
+                        + " by Friday.</p><p><a href=\"https://bloom.example/unsubscribe?u=1\">Unsubscribe</a></p>")));
+        String body = MailText.bodyOf(email);
+        assertThat(body).startsWith("Hi Ava!")
+                .contains("Links in this email:\n- We'd love you in our creator program. Apply here (https://forms.bloom.example/apply?id=7) by Friday.")
+                .doesNotContain("unsubscribe?u=1");
+    }
+
+    @Test
+    void noLinkListWhenThePlainTextAlreadyHasTheUrl() {
+        var email = new com.google.api.services.gmail.model.MessagePart().setMimeType("multipart/alternative").setParts(List.of(
+                part("text/plain", "Apply here <https://forms.bloom.example/apply>"),
+                part("text/html", "Apply <a href=\"https://forms.bloom.example/apply\">here</a>")));
+        assertThat(MailText.bodyOf(email)).isEqualTo("Apply here <https://forms.bloom.example/apply>");
+    }
 }

@@ -276,15 +276,23 @@ public class WorkflowEngine {
      * written in the email itself, so Claude can't put a link on her to-do that the brand never sent.
      */
     private void attachBrief(Task t, MessageAnalysis a, Message m) {
-        String text = (m.subject == null ? "" : m.subject) + "\n" + (m.content == null ? "" : m.content);
+        String text = sameUrl((m.subject == null ? "" : m.subject) + "\n" + (m.content == null ? "" : m.content));
         List<Task.Link> links = a.links().stream()
-                .filter(l -> text.contains(l.url()))
+                .filter(l -> text.contains(sameUrl(l.url())))
                 .map(l -> new Task.Link(l.label().isBlank() ? "Link" : l.label(), l.url()))
                 .toList();
         if (a.taskBrief().isBlank() && links.isEmpty()) return;
         t.brief = a.taskBrief().isBlank() ? null : a.taskBrief();
         t.setLinks(links);
         tasks.save(t);
+    }
+
+    /**
+     * Spelling differences that don't change where a link goes: "&amp;" for "&", a trailing slash or full stop.
+     * Applied to both the email and Claude's link before checking the link is really in the email.
+     */
+    public static String sameUrl(String s) {
+        return s.replace("&amp;", "&").replaceAll("[/.,;:!?]+(?=\\s|$|[)>\\]\"'])", "");
     }
 
     private String describe(Opportunity o, TaskType type, MessageAnalysis a) {
