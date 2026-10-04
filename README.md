@@ -16,7 +16,10 @@ message before anything is sent.
 - **Pipeline**: every brand with a status (🆕 New Lead → 💰 Negotiating → ✍️ Contract to Sign → 🎬 Content
   To Create → 👀 Awaiting Approval → 💵 Payment Pending → …), updated automatically from new messages.
 - **Follow-up engine**: #1 after 4 days, then 5, 7, 7, 7 (configurable). Stops when the brand replies;
-  marks the deal 🧊 Cold if there's still no answer after the final one.
+  marks the deal 🧊 Cold if there's still no answer after the final one. You pick the daily time follow-ups
+  are drafted, and can opt in to sending email follow-ups automatically at that time.
+- **Links page**: your Instagram, TikTok, YouTube, website and portfolio in one list you can add to any time.
+  Drafts use these exact links instead of placeholders.
 - **Outreach database**: brands you've pitched, with follow-up #1–#5 dates, and duplicate-pitch protection.
 - **Drafts in your voice**: replies, rates, negotiation, follow-ups, declines, "ask for budget / usage
   rights", and so on. Email drafts are also saved in your Gmail Drafts folder.
@@ -104,8 +107,11 @@ Every credential you enter is **your own** and is stored encrypted (AES-256-GCM)
    Meta only allows **replies within 24 hours** of the brand's last message. Outside that window (cold
    pitches, most follow-ups) the app shows **Copy** and **I sent it myself** instead of **Send**.
 4. **About you**: your name, voice, rates and rules. Drafts only quote rates written here; missing numbers
-   become placeholders like `[RATE FOR 1 REEL]`. You can also adjust the follow-up cadence and time zone here.
-5. **MCP** (optional): generate an API key, then:
+   become placeholders like `[RATE FOR 1 REEL]`. You can also set your time zone here.
+5. **Follow-ups**: the days to wait before each follow-up, the daily time they're drafted, and an opt-in switch
+   to send **email** follow-ups automatically at that time. Replies, rates, other drafts and Instagram DMs
+   always wait for your approval.
+6. **MCP** (optional): generate an API key, then:
 
    ```bash
    claude mcp add --transport http creator-crm http://localhost:8080/mcp --header "Authorization: Bearer <key>"
@@ -130,8 +136,9 @@ Gmail / Instagram ──► ingestion (dedupe) ──► pre-filter (code) ─�
   than the whole thread, which keeps token use low.
 - `IntentRules` is a single table mapping "what the message means" to "status + task". Edit it to change
   the workflow.
-- Schedules: sync every 30 minutes; at 08:00 a fresh sync plus follow-up drafts for everything due today.
-  Both are configurable in `application.yml`.
+- Schedules: sync every 30 minutes (`application.yml`); once a day at your follow-up time (Settings, default
+  08:00) a fresh sync plus follow-up drafts for everything due today. If the app wasn't running at that time,
+  the daily run happens as soon as it starts.
 
 ## Backups and moving to another machine
 
@@ -159,7 +166,7 @@ new machine.
 | MCP | Separate API key (only its SHA-256 hash stored), stateless, no sending by default |
 | Instagram webhook | HMAC-SHA256 signature (`X-Hub-Signature-256`) verified with constant-time compare |
 | OAuth | Your own client credentials, `state` bound to your session, least-privilege scopes |
-| Sending | Only via an explicit click on a specific draft; Instagram's 24-hour rule enforced |
+| Sending | Only via an explicit click on a specific draft, except email follow-ups when you turn on auto-send; Instagram's 24-hour rule enforced |
 | Prompt injection | Emails/DMs wrapped as untrusted data; model output is schema-constrained and validated; the AI can't trigger actions |
 | XSS / header injection | Third-party text rendered with `textContent` only; CR/LF stripped from email headers |
 | Network | Binds to `127.0.0.1` by default. To expose it, put it behind HTTPS and set `HOST=0.0.0.0`, `PUBLIC_BASE_URL=https://…`, `SECURE_COOKIES=true` |

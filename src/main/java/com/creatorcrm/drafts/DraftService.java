@@ -39,7 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * AI drafts and the human approval queue. Nothing is sent unless {@link #send} is called for that
- * specific draft, which only happens from an explicit click in the dashboard.
+ * specific draft, which only happens from an explicit click in the dashboard, or the creator has opted in
+ * to automatic email follow-ups ({@link #sendFollowUpAutomatically}).
  */
 @Service
 public class DraftService {
@@ -187,10 +188,27 @@ public class DraftService {
         Draft d = pending(draftId);
         if (editedBody != null && !editedBody.isBlank()) d.body = editedBody.strip();
         if (editedSubject != null && d.channel == Platform.EMAIL) d.subject = editedSubject.strip();
+        return deliver(d, false);
+    }
+
+    /**
+     * Opt-in automatic send, used by the daily follow-up run. Only email follow-ups qualify: anything else
+     * (replies, rates, Instagram DMs) always waits for the creator's click.
+     */
+    @Transactional
+    public Draft sendFollowUpAutomatically(Long draftId) {
+        Draft d = pending(draftId);
+        if (d.type != DraftType.FOLLOW_UP || d.channel != Platform.EMAIL) {
+            throw new IllegalStateException("Only email follow-ups can be sent automatically");
+        }
+        return deliver(d, true);
+    }
+
+    private Draft deliver(Draft d, boolean automatic) {
         sendBlockedReason(d).ifPresent(reason -> { throw new IllegalStateException(reason); });
         try {
             ChannelConnector.SentMessage sent = channels.get(d.channel).send(d);
-            recordOutbound(d, sent);
+            recordOutbound(d, sent, automatic);
             d.status = DraftStatus.SENT;
             d.sentAt = OffsetDateTime.now();
             d.error = null;
@@ -206,7 +224,7 @@ public class DraftService {
     @Transactional
     public Draft markSentManually(Long draftId) {
         Draft d = pending(draftId);
-        recordOutbound(d, null);
+        recordOutbound(d, null, false);
         d.status = DraftStatus.SENT;
         d.sentAt = OffsetDateTime.now();
         return drafts.save(d);
@@ -233,7 +251,7 @@ public class DraftService {
         return d;
     }
 
-    private void recordOutbound(Draft d, ChannelConnector.SentMessage sent) {
+    private void recordOutbound(Draft d, ChannelConnector.SentMessage sent, boolean automatic) {
         Opportunity o = opportunities.findById(d.opportunityId).orElseThrow();
         if (sent != null) {
             Conversation conv = d.conversationId == null ? null : conversations.findById(d.conversationId).orElse(null);
@@ -265,7 +283,8 @@ public class DraftService {
         }
         workflow.onCreatorMessage(o, intentOf(d.type), settings.today());
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
-                d.type.name().toLowerCase().replace('_', ' ') + " sent to " + workflow.brandName(o)));
+                d.type.name().toLowerCase().replace('_', ' ') + (automatic ? " sent automatically to " : " sent to ")
+                        + workflow.brandName(o)));
     }
 
     private static Intent intentOf(DraftType type) {

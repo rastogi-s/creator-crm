@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -33,9 +34,16 @@ public class SettingsService {
     public static final String WRITER_MODEL = "writerModel";
     public static final String TIMEZONE = "timezone";
     public static final String BRAND_KEYWORDS = "brandKeywords";
+    /** Local time (HH:mm) of the daily follow-up run: sync, draft today's follow-ups, optionally send them. */
+    public static final String FOLLOWUP_TIME = "followupTime";
+    /** "true" = email follow-ups drafted in the daily run are sent without waiting for approval. */
+    public static final String FOLLOWUP_AUTO_SEND = "followupAutoSend";
+
+    static final String DEFAULT_FOLLOWUP_TIME = "08:00";
 
     public static final Set<String> EDITABLE = Set.of(
-            CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS);
+            CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
+            FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -96,6 +104,14 @@ public class SettingsService {
         return c.get(Math.min(n, c.size()) - 1);
     }
 
+    public LocalTime followupTime() {
+        return LocalTime.parse(raw(FOLLOWUP_TIME, DEFAULT_FOLLOWUP_TIME));
+    }
+
+    public boolean followupAutoSend() {
+        return Boolean.parseBoolean(raw(FOLLOWUP_AUTO_SEND, "false"));
+    }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -117,6 +133,8 @@ public class SettingsService {
         m.put(WRITER_MODEL, writerModel());
         m.put(TIMEZONE, zone().getId());
         m.put(BRAND_KEYWORDS, String.join(", ", brandKeywords()));
+        m.put(FOLLOWUP_TIME, followupTime().toString());
+        m.put(FOLLOWUP_AUTO_SEND, String.valueOf(followupAutoSend()));
         return m;
     }
 
@@ -142,6 +160,14 @@ public class SettingsService {
                 }
             }
             case TIMEZONE -> { if (!v.isBlank()) ZoneId.of(v.trim()); }
+            case FOLLOWUP_TIME -> {
+                if (!v.isBlank() && !v.trim().matches("([01]\\d|2[0-3]):[0-5]\\d")) {
+                    throw new IllegalArgumentException("Follow-up time must be HH:mm, e.g. 08:00");
+                }
+            }
+            case FOLLOWUP_AUTO_SEND -> {
+                if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException("Auto-send must be true or false");
+            }
             case CLASSIFIER_MODEL, WRITER_MODEL -> {
                 if (!v.matches("[a-z0-9.-]{3,64}")) throw new IllegalArgumentException("Invalid model id");
             }

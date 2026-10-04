@@ -29,5 +29,5 @@ public record CrmProperties(
     /** MCP can read and update the CRM; sending messages through MCP stays off unless explicitly enabled. */
     public record Mcp(boolean allowSend) {}
 
-    public record Schedule(String syncCron, String morningDigestCron) {}
+    public record Schedule(String syncCron, String morningCheckCron) {}
 }
