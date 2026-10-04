@@ -191,6 +191,7 @@
       el("div", { class: "actions" },
         it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
         it.kind === "DEADLINE" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/deadlines/" + it.refId + "/done"); route(); }, "Deadline cleared") }, "Done") : null,
+        it.kind === "INVOICE" && /reminder ready/.test(it.detail) ? el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review reminder") : null,
         it.kind === "INVOICE" ? el("button", { class: "small", title: "The money arrived", onclick: action(async () => {
           if (!confirm("Mark this invoice as paid today?")) return;
           await api("POST", "/api/invoices/" + it.refId + "/paid"); route();
@@ -334,7 +335,9 @@
       drawer.appendChild(card(null,
         facts([["Brand", inv.brand], ["Bill to", inv.billTo && el("span", { style: "white-space: pre-line" }, inv.billTo)], ["Email", inv.billToEmail], ["Total", inv.amountText],
                ["Issued", fmtDate(inv.issuedDate)], ["Due", fmtDate(inv.dueDate)], ["Sent", fmtDate(inv.sentAt)],
-               ["Paid", fmtDate(inv.paidDate)], ["Notes", inv.notes]]),
+               ["Paid", fmtDate(inv.paidDate)],
+               ["Reminders", inv.remindersSent ? inv.remindersSent + " sent, last on " + fmtDate(inv.lastReminderOn) : null],
+               ["Notes", inv.notes]]),
         el("ul", { class: "list" }, inv.lineItems.map((li) => el("li", { class: "item" },
           el("div", { class: "body" }, li.description), el("div", {}, fmtMoney(inv.currency, li.amount))))),
         el("div", { class: "row" },
@@ -345,6 +348,9 @@
           el("button", { class: "primary small", onclick: action(async () => {
             await api("POST", "/api/invoices/" + id + "/paid", { paidDate: paidOn.value || null }); refresh();
           }, "Marked paid 🎉") }, "Mark paid"),
+          el("button", { class: "small", title: "A polite payment reminder with the invoice attached, for you to check in Drafts", onclick: action(async () => {
+            await api("POST", "/api/invoices/" + id + "/reminder"); closeDrawer(); location.hash = "#drafts"; route();
+          }, "Payment reminder is in Drafts") }, "Write a reminder"),
           el("button", { class: "small", title: "Put the invoice email in Drafts again", onclick: action(async () => {
             await api("POST", "/api/invoices/" + id + "/email"); closeDrawer(); location.hash = "#drafts"; route();
           }, "Invoice email is in Drafts") }, "Email again"),
@@ -720,6 +726,7 @@
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
         el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
         d.invoiceId ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
+        d.type === "PAYMENT_REMINDER" ? el("div", { class: "small muted" }, "Payment reminders always wait for you here, even when follow-ups are sent automatically.") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
         el("label", {}, "Message"), body,
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
@@ -903,6 +910,7 @@
       invoicePaymentDetails: el("textarea", { maxlength: "2000", placeholder: "Bank name, account holder, account number / IBAN, or PayPal email" }),
       invoicePrefix: el("input", { value: p.invoicePrefix, maxlength: "10" }),
       invoiceTermsDays: el("input", { type: "number", min: "0", max: "365", value: p.invoiceTermsDays }),
+      paymentReminderDays: el("input", { value: p.paymentReminderDays, pattern: "[0-9, ]*", placeholder: "Off" }),
     };
     iv.invoiceAddress.value = p.invoiceAddress;
     iv.invoicePaymentDetails.value = p.invoicePaymentDetails;
@@ -917,6 +925,10 @@
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Invoice number prefix (" + (p.invoicePrefix || "INV") + "-" + new Date().getFullYear() + "-001)"), iv.invoicePrefix),
         el("div", {}, el("label", {}, "Payment due after (days)"), iv.invoiceTermsDays)),
+      el("label", {}, "Payment reminders: days after the due date"), iv.paymentReminderDays,
+      el("p", { class: "small muted" }, "On each of these days a polite reminder with the invoice attached is drafted for an unpaid invoice. "
+        + "Reminders always wait in Drafts for you, stop as soon as you mark the invoice paid, and pause while you're checking a payment "
+        + "the brand says it sent. Leave blank to turn them off."),
       el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
         const body = {};
         for (const [k, v] of Object.entries(iv)) body[k] = v.value;

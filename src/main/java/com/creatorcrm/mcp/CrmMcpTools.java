@@ -126,7 +126,8 @@ public class CrmMcpTools {
         List<InvoiceService.InvoiceView> unpaid = invoices.unpaid();
         if (unpaid.isEmpty()) return "No unpaid invoices.";
         return unpaid.stream().map(i -> "[opp " + i.opportunityId() + "] " + i.brand() + " — " + i.number() + " " + i.amountText()
-                + ", due " + i.dueDate() + (i.daysOverdue() > 0 ? " (overdue by " + i.daysOverdue() + " days)" : ""))
+                + ", due " + i.dueDate() + (i.daysOverdue() > 0 ? " (overdue by " + i.daysOverdue() + " days)" : "")
+                + (i.remindersSent() > 0 ? ", " + i.remindersSent() + " reminder(s) sent" : ""))
                 .collect(Collectors.joining("\n"));
     }
 

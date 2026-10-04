@@ -10,6 +10,7 @@ import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.invoices.PaymentReminders;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.DraftRepo;
@@ -39,10 +40,13 @@ public class ScheduledJobs {
     private final SettingsService settings;
     private final SetupService setup;
     private final InstagramStatsService instagramStats;
+    private final PaymentReminders paymentReminders;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
-                         SettingsService settings, SetupService setup, InstagramStatsService instagramStats) {
+                         SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
+                         PaymentReminders paymentReminders) {
+        this.paymentReminders = paymentReminders;
         this.ingestion = ingestion;
         this.followUps = followUps;
         this.followUpRepo = followUpRepo;
@@ -98,7 +102,10 @@ public class ScheduledJobs {
         state.save(s);
     }
 
-    /** Morning prep: mark cold deals and pre-draft today's follow-ups for one-click approval. */
+    /**
+     * Morning prep: mark cold deals, pre-draft today's follow-ups and payment reminders for one-click approval.
+     * Payment reminders never go out automatically (see {@link #autoSendFollowUps}).
+     */
     public int prepareMorning() {
         int cold = followUps.markColdDeals(settings.today());
         int drafted = 0;
@@ -111,7 +118,8 @@ public class ScheduledJobs {
                 }
             }
         }
-        log.info("Morning prep: {} follow-up drafts, {} deals marked cold", drafted, cold);
+        int reminders = paymentReminders.draftDue(settings.today());
+        log.info("Morning prep: {} follow-up drafts, {} payment reminders, {} deals marked cold", drafted, reminders, cold);
         return drafted;
     }
 

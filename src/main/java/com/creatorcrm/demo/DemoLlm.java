@@ -26,6 +26,15 @@ public class DemoLlm implements LlmClient {
     @Override
     public DraftText writeDraft(DraftInput input) {
         String who = input.contactName() == null || input.contactName().isBlank() ? "there" : input.contactName();
+        if ("PAYMENT_REMINDER".equals(input.draftType())) {
+            // extraInstructions: "Payment reminder N of M for invoice INV-... (USD ...), which was due ... and is N days late. ..."
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("invoice (\\S+) \\(([^)]+)\\), which was due ([^.]+?)(?: and is| \\.|\\.)").matcher(input.extraInstructions());
+            String what = m.find() ? "invoice " + m.group(1) + " for " + m.group(2) + ", which was due " + m.group(3) : "my invoice";
+            return new DraftText("Following up on " + (m.find(0) ? m.group(1) : "my invoice"),
+                    "Hi " + who + ",\n\nJust following up on " + what + ". Could you let me know when I can expect the payment? "
+                            + "I've attached the invoice again.\n\nThanks so much,\nAva");
+        }
         if ("INVOICE".equals(input.draftType())) {
             // extraInstructions starts "Send invoice INV-... for USD ..., due ....", written by InvoiceService.
             String what = input.extraInstructions();

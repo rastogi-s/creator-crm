@@ -194,7 +194,7 @@ class InvoiceIntegrationTest {
         assertThat(sent.isOverdue(today)).isTrue();
         assertThat(invoices.view(sent).daysOverdue()).isEqualTo(10);
         assertThat(digest.morning().urgent()).anyMatch(i -> i.kind().equals("INVOICE") && i.refId().equals(inv.id)
-                && i.overdueDays() == 10 && i.title().contains(inv.number));
+                && i.overdueDays() == 10 && i.title().endsWith("payment 10 days late") && i.detail().contains(inv.number));
         assertThat(invoices.money(null).overdue().get("USD")).isGreaterThanOrEqualTo(new BigDecimal("500"));
         assertThat(invoices.unpaid()).anyMatch(v -> v.id().equals(inv.id));
 

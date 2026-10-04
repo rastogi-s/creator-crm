@@ -54,12 +54,16 @@ public class SettingsService {
     /** Days from the invoice date to its due date. */
     public static final String INVOICE_TERMS_DAYS = "invoiceTermsDays";
 
+    /** Days after an invoice's due date to draft payment reminders, e.g. "3,7,14". Blank = no reminders. */
+    public static final String PAYMENT_REMINDER_DAYS = "paymentReminderDays";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
+    static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
     public static final Set<String> EDITABLE = Set.of(
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
-            INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS);
+            INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -164,6 +168,13 @@ public class SettingsService {
 
     public int invoiceTermsDays() { return Integer.parseInt(raw(INVOICE_TERMS_DAYS, "30")); }
 
+    /** Days after the due date for each payment reminder, ascending. Empty when she switched reminders off. */
+    public List<Integer> paymentReminderDays() {
+        String v = repo.findById(PAYMENT_REMINDER_DAYS).map(s -> s.value).orElse(DEFAULT_PAYMENT_REMINDER_DAYS);
+        return Arrays.stream(v.split(",")).map(String::trim).filter(s -> !s.isEmpty()).map(Integer::parseInt)
+                .sorted().toList();
+    }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -194,6 +205,7 @@ public class SettingsService {
         m.put(INVOICE_PAYMENT_DETAILS, invoicePaymentDetails());
         m.put(INVOICE_PREFIX, invoicePrefix());
         m.put(INVOICE_TERMS_DAYS, String.valueOf(invoiceTermsDays()));
+        m.put(PAYMENT_REMINDER_DAYS, String.join(",", paymentReminderDays().stream().map(String::valueOf).toList()));
         return m;
     }
 
@@ -226,6 +238,11 @@ public class SettingsService {
             }
             case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
+            }
+            case PAYMENT_REMINDER_DAYS -> {
+                if (!v.isBlank() && !v.matches("\\s*\\d{1,3}(\\s*,\\s*\\d{1,3}){0,5}\\s*")) {
+                    throw new IllegalArgumentException("Payment reminders: up to 6 comma-separated day counts, e.g. 3,7,14 (blank = off)");
+                }
             }
             case INVOICE_PREFIX -> {
                 if (!v.isBlank() && !v.trim().matches("[A-Za-z0-9]{1,10}")) {
