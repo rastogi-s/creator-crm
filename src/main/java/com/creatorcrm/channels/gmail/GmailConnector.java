@@ -46,16 +46,21 @@ import org.springframework.stereotype.Component;
 
 /**
  * Gmail via the official API. Scopes are read-only + compose: the app can read mail and create/send
- * drafts, but cannot delete, archive or modify existing mail.
+ * drafts, but cannot delete, archive or modify existing mail. The same Google sign-in also covers
+ * {@link #CALENDAR_SCOPE}, which only reaches calendars the app creates itself.
  */
 @Component
 public class GmailConnector implements ChannelConnector {
 
+    /** Create a calendar and manage the events on it, without access to any of her other calendars. */
+    public static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+
     public static final List<String> SCOPES = List.of(
             "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.compose");
+            "https://www.googleapis.com/auth/gmail.compose",
+            CALENDAR_SCOPE);
 
-    static final JsonFactory JSON = GsonFactory.getDefaultInstance();
+    public static final JsonFactory JSON = GsonFactory.getDefaultInstance();
 
     private final SecretStore secrets;
     private final CrmProperties.Gmail config;
@@ -81,23 +86,27 @@ public class GmailConnector implements ChannelConnector {
         return secrets.get(SecretName.GMAIL_ADDRESS).orElse("");
     }
 
-    static HttpTransport transport() throws Exception {
+    public static HttpTransport transport() throws Exception {
         return GoogleNetHttpTransport.newTrustedTransport();
     }
 
-    Gmail gmail() throws Exception {
-        UserCredentials creds = UserCredentials.newBuilder()
+    /** The connected Google account's credentials, shared with the calendar. */
+    public UserCredentials credentials() {
+        return UserCredentials.newBuilder()
                 .setClientId(secrets.require(SecretName.GOOGLE_CLIENT_ID))
                 .setClientSecret(secrets.require(SecretName.GOOGLE_CLIENT_SECRET))
                 .setRefreshToken(secrets.require(SecretName.GMAIL_REFRESH_TOKEN))
                 .build();
-        return new Gmail.Builder(transport(), JSON, withRetries(new HttpCredentialsAdapter(creds)))
+    }
+
+    Gmail gmail() throws Exception {
+        return new Gmail.Builder(transport(), JSON, withRetries(new HttpCredentialsAdapter(credentials())))
                 .setApplicationName("creator-crm")
                 .build();
     }
 
     /** Keeps the token-refresh handling and adds exponential backoff on 429 (rate limit), 5xx and network errors. */
-    static HttpRequestInitializer withRetries(HttpCredentialsAdapter auth) {
+    public static HttpRequestInitializer withRetries(HttpCredentialsAdapter auth) {
         return request -> {
             auth.initialize(request);
             HttpBackOffUnsuccessfulResponseHandler backoff = new HttpBackOffUnsuccessfulResponseHandler(backOff())

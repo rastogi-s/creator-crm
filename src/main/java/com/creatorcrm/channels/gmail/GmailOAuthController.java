@@ -1,5 +1,6 @@
 package com.creatorcrm.channels.gmail;
 
+import com.creatorcrm.calendar.CalendarGateway;
 import com.creatorcrm.channels.OAuthState;
 import com.creatorcrm.config.CrmProperties;
 import com.creatorcrm.security.SecretName;
@@ -8,6 +9,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeReque
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeTokenRequest;
 import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
 import jakarta.servlet.http.HttpSession;
+import java.util.Arrays;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,10 +27,13 @@ public class GmailOAuthController {
     private final SecretStore secrets;
     private final OAuthState oauthState;
     private final GmailConnector gmail;
+    private final CalendarGateway calendar;
     private final String redirectUri;
 
-    public GmailOAuthController(SecretStore secrets, OAuthState oauthState, GmailConnector gmail, CrmProperties props) {
+    public GmailOAuthController(SecretStore secrets, OAuthState oauthState, GmailConnector gmail, CalendarGateway calendar,
+                                CrmProperties props) {
         this.secrets = secrets;
+        this.calendar = calendar;
         this.oauthState = oauthState;
         this.gmail = gmail;
         this.redirectUri = props.publicBaseUrl().replaceAll("/+$", "") + "/oauth/google/callback";
@@ -71,11 +76,17 @@ public class GmailOAuthController {
             }
             secrets.put(SecretName.GMAIL_REFRESH_TOKEN, token.getRefreshToken());
             secrets.put(SecretName.GMAIL_ADDRESS, gmail.gmail().users().getProfile("me").execute().getEmailAddress());
+            calendar.recordGrant(calendarGranted(token.getScope()));
             return "redirect:/#settings?gmail=connected";
         } catch (Exception e) {
             log.warn("Gmail connection failed: {}", e.getMessage());
             return "redirect:/#settings?gmail=failed";
         }
+    }
+
+    /** Google lets her untick calendar access on its consent screen; the token says what she allowed. */
+    static boolean calendarGranted(String scopes) {
+        return scopes == null || Arrays.asList(scopes.split("\\s+")).contains(GmailConnector.CALENDAR_SCOPE);
     }
 
     @PostMapping("/oauth/google/disconnect")
