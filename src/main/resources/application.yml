@@ -79,7 +79,8 @@ crm:
     allow-send: false
   schedule:
     sync-cron: "0 */30 * * * *"
-    morning-digest-cron: "0 0 8 * * *"
+    # Checks each minute whether the daily follow-up run (time set on the Settings page) is due.
+    morning-check-cron: "0 * * * * *"
   # In-app updates: checks the latest GitHub release (no account or token needed) and, on Windows, installs it
   # when you click "Update now". Nothing is downloaded or installed without that click.
   updates:

@@ -1,12 +1,23 @@
 package com.creatorcrm.jobs;
 
+import com.creatorcrm.domain.AppState;
+import com.creatorcrm.domain.Draft;
+import com.creatorcrm.domain.Enums.DraftStatus;
+import com.creatorcrm.domain.Enums.DraftType;
+import com.creatorcrm.domain.Enums.FollowUpStatus;
+import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.llm.LlmClient;
+import com.creatorcrm.repo.AppStateRepo;
+import com.creatorcrm.repo.DraftRepo;
+import com.creatorcrm.repo.FollowUpRepo;
 import com.creatorcrm.security.SetupService;
 import com.creatorcrm.settings.SettingsService;
 import com.creatorcrm.workflow.FollowUpEngine;
+import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,19 +26,27 @@ import org.springframework.stereotype.Component;
 @Component
 public class ScheduledJobs {
     private static final Logger log = LoggerFactory.getLogger(ScheduledJobs.class);
+    static final String LAST_MORNING_RUN = "morning.lastRun";
 
     private final IngestionService ingestion;
     private final FollowUpEngine followUps;
+    private final FollowUpRepo followUpRepo;
     private final DraftService drafts;
+    private final DraftRepo draftRepo;
+    private final AppStateRepo state;
     private final LlmClient llm;
     private final SettingsService settings;
     private final SetupService setup;
 
-    public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, DraftService drafts, LlmClient llm,
+    public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
+                         DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup) {
         this.ingestion = ingestion;
         this.followUps = followUps;
+        this.followUpRepo = followUpRepo;
         this.drafts = drafts;
+        this.draftRepo = draftRepo;
+        this.state = state;
         this.llm = llm;
         this.settings = settings;
         this.setup = setup;
@@ -39,14 +58,36 @@ public class ScheduledJobs {
         log.info("Sync: {}", ingestion.syncAll());
     }
 
-    /** Morning prep: fresh sync, mark cold deals, and pre-draft today's follow-ups for one-click approval. */
-    @Scheduled(cron = "${crm.schedule.morning-digest-cron}")
-    public void morning() {
+    /**
+     * Checks every minute whether the daily follow-up run is due: once a day, at or after the follow-up time
+     * set on the Settings page (creator's time zone). If the computer was off at that time, it runs as soon as
+     * the app is back.
+     */
+    @Scheduled(cron = "${crm.schedule.morning-check-cron}")
+    public void morningCheck() {
         if (!setup.isSetupComplete()) return;
+        ZonedDateTime now = ZonedDateTime.now(settings.zone());
+        if (!morningDue(now)) return;
+        markMorningRun(now.toLocalDate());
         sync();
         prepareMorning();
+        if (settings.followupAutoSend()) autoSendFollowUps();
     }
 
+    boolean morningDue(ZonedDateTime now) {
+        if (now.toLocalTime().isBefore(settings.followupTime())) return false;
+        String last = state.findById(LAST_MORNING_RUN).map(s -> s.stateValue).orElse("");
+        return !now.toLocalDate().toString().equals(last);
+    }
+
+    private void markMorningRun(LocalDate date) {
+        AppState s = new AppState();
+        s.stateKey = LAST_MORNING_RUN;
+        s.stateValue = date.toString();
+        state.save(s);
+    }
+
+    /** Morning prep: mark cold deals and pre-draft today's follow-ups for one-click approval. */
     public int prepareMorning() {
         int cold = followUps.markColdDeals(settings.today());
         int drafted = 0;
@@ -61,5 +102,29 @@ public class ScheduledJobs {
         }
         log.info("Morning prep: {} follow-up drafts, {} deals marked cold", drafted, cold);
         return drafted;
+    }
+
+    /**
+     * Opt-in: send pending email follow-up drafts whose follow-up is still due today. Instagram follow-ups,
+     * follow-ups the brand already answered, and every other kind of draft stay in the approval queue.
+     */
+    public int autoSendFollowUps() {
+        LocalDate today = settings.today();
+        int sent = 0;
+        for (Draft d : draftRepo.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING)) {
+            if (d.type != DraftType.FOLLOW_UP || d.channel != Platform.EMAIL || d.followupId == null) continue;
+            boolean stillDue = followUpRepo.findById(d.followupId)
+                    .map(f -> f.status == FollowUpStatus.SCHEDULED && !f.scheduledDate.isAfter(today))
+                    .orElse(false);
+            if (!stillDue || drafts.sendBlockedReason(d).isPresent()) continue;
+            try {
+                drafts.sendFollowUpAutomatically(d.id);
+                sent++;
+            } catch (RuntimeException e) {
+                log.warn("Could not auto-send follow-up draft {}: {}", d.id, e.getMessage());
+            }
+        }
+        log.info("Auto-sent {} follow-up emails", sent);
+        return sent;
     }
 }

@@ -12,6 +12,7 @@ import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlockParam;
+import com.creatorcrm.links.LinkService;
 import com.creatorcrm.security.CryptoService;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
@@ -32,6 +33,7 @@ public class ClaudeLlmClient implements LlmClient {
 
     private final SecretStore secrets;
     private final SettingsService settings;
+    private final LinkService links;
     private final String classifierSystem;
     private final String writerSystem;
 
@@ -39,9 +41,10 @@ public class ClaudeLlmClient implements LlmClient {
     private String clientKeyHash;
     private String baseUrl; // null = the real API; tests point it at a local stub
 
-    public ClaudeLlmClient(SecretStore secrets, SettingsService settings) {
+    public ClaudeLlmClient(SecretStore secrets, SettingsService settings, LinkService links) {
         this.secrets = secrets;
         this.settings = settings;
+        this.links = links;
         this.classifierSystem = resource("prompts/classifier-system.md");
         this.writerSystem = resource("prompts/writer-system.md");
     }
@@ -96,10 +99,19 @@ public class ClaudeLlmClient implements LlmClient {
             in.recentMessages().forEach(m -> user.append(m).append('\n'));
             user.append('\n');
         }
+        if (!in.pastExamples().isEmpty()) {
+            user.append("Messages the creator sent before. Match their voice, length, greeting and sign-off, and make the ")
+                    .append("same kind of changes they made to your earlier drafts. Never copy names, numbers, dates, ")
+                    .append("links or promises from them:\n");
+            in.pastExamples().forEach(x -> user.append(x).append('\n'));
+            user.append('\n');
+        }
         if (!in.extraInstructions().isBlank()) {
             user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
         }
-        String profile = "Creator name: " + settings.creatorName() + "\n\n# Creator profile\n" + settings.creatorProfile();
+        String linkSection = links.profileSection();
+        String profile = "Creator name: " + settings.creatorName() + "\n\n# Creator profile\n" + settings.creatorProfile()
+                + (linkSection.isEmpty() ? "" : "\n\n" + linkSection);
         return call(settings.writerModel(), settings.writerEffort(), writerSystem, profile, user.toString(),
                 DraftText.class, 4000);
     }

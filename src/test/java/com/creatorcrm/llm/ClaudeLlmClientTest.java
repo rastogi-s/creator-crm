@@ -101,8 +101,16 @@ class ClaudeLlmClientTest {
     void writesDrafts() {
         replyText = "{\"subject\": \"Re: Collab\", \"body\": \"Hi Maya, my rate is $500.\"}";
         DraftText d = claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "Maya",
-                "", "", List.of(), ""));
+                "", "", List.of(), "", List.of()));
         assertThat(d.body()).contains("$500");
+    }
+
+    @Test
+    void pastExamplesAreSentToTheWriter() {
+        replyText = "{\"subject\": \"Re: Collab\", \"body\": \"Hi!\"}";
+        claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "Maya", "", "", List.of(), "",
+                List.of("<past_example kind=\"RATES\">My reel rate is in my media kit</past_example>")));
+        assertThat(lastRequest.get()).contains("Messages the creator sent before").contains("My reel rate is in my media kit");
     }
 
     @Test

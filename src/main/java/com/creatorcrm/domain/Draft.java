@@ -17,6 +17,9 @@ public class Draft {
     public String toAddress;
     public String subject;
     public String body;
+    /** What Claude wrote, before any edits; compared with the sent text to learn from the creator's changes. */
+    public String originalSubject;
+    public String originalBody;
     public String inReplyTo;
     public String gmailThreadId;
     public String gmailDraftId;

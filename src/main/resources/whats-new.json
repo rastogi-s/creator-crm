@@ -16,6 +16,24 @@
         "body": "After every update this page shows what changed, with a short video for each new feature. You can rewatch all of them any time under Help.",
         "video": "whats-new.webm",
         "tryIt": "#help"
+      },
+      {
+        "id": "links",
+        "title": "Your links in one place",
+        "body": "The new Links tab holds your Instagram, TikTok, YouTube, website and portfolio. Drafts use these exact links instead of placeholders.",
+        "tryIt": "#links"
+      },
+      {
+        "id": "followup-time",
+        "title": "Pick when follow-ups are drafted",
+        "body": "Under Settings, Follow-ups, choose the daily time follow-ups are prepared. You can also turn on sending email follow-ups automatically at that time; everything else still waits for your approval.",
+        "tryIt": "#settings"
+      },
+      {
+        "id": "learning",
+        "title": "Drafts learn how you write",
+        "body": "Every message you send is kept next to Claude's original draft. New drafts borrow from your closest past messages, especially ones you edited and ones brands answered. You can see the examples, leave any out, or switch this off in Settings.",
+        "tryIt": "#settings"
       }
     ]
   }

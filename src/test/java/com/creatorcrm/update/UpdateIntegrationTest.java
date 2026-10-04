@@ -26,6 +26,15 @@ class UpdateIntegrationTest {
                        {"name":"SHA256SUMS.txt","browser_download_url":"https://example.test/s.txt"}]}""";
     static final HttpServer github = start();
     static int videoRequests;
+    static final Path dataDir = tempDir();
+
+    static Path tempDir() {
+        try {
+            return Files.createTempDirectory("crm-update-test");
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     static HttpServer start() {
         try {
@@ -58,7 +67,7 @@ class UpdateIntegrationTest {
         r.add("crm.updates.repo", () -> "acme/crm");
         r.add("crm.updates.api-base-url", () -> base);
         r.add("crm.updates.download-base-url", () -> base);
-        r.add("crm.data-dir", () -> "./target/test-data-updates");
+        r.add("crm.data-dir", () -> dataDir.toString()); // fresh each run, so the video cache starts empty
     }
 
     @AfterAll

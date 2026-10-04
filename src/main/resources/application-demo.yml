@@ -5,7 +5,7 @@ crm:
   data-dir: ${CRM_DATA_DIR:${java.io.tmpdir}/creator-crm-demo}
   schedule:
     sync-cron: "-"
-    morning-digest-cron: "-"
+    morning-check-cron: "-"
   updates:
     check-cron: "-"
     local-video-dir: ${CRM_DEMO_VIDEOS:}   # the recorder points this at its output, so later videos can show earlier ones

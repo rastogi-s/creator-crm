@@ -8,7 +8,7 @@ crm:
   data-dir: ./target/test-data
   schedule:
     sync-cron: "-"
-    morning-digest-cron: "-"
+    morning-check-cron: "-"
   updates:
     enabled: false
     check-cron: "-"
