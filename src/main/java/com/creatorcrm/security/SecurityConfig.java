@@ -29,7 +29,7 @@ public class SecurityConfig {
 
     private static final String CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
             + "connect-src 'self'; frame-ancestors 'none'; form-action 'self' https://accounts.google.com "
-            + "https://www.instagram.com; base-uri 'none'; object-src 'none'";
+            + "https://www.instagram.com https://www.facebook.com; base-uri 'none'; object-src 'none'";
 
     @Bean
     public PasswordEncoder passwordEncoder() {

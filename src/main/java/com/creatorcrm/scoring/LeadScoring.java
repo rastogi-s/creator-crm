@@ -46,7 +46,7 @@ public class LeadScoring {
     static final Set<OpportunityStatus> LEAD = EnumSet.of(OpportunityStatus.NEW_LEAD, OpportunityStatus.AWAITING_MY_REPLY,
             OpportunityStatus.NEGOTIATING);
     /** She said yes and the work went ahead. */
-    static final Set<OpportunityStatus> BOOKED = EnumSet.of(OpportunityStatus.CONTRACT_PENDING, OpportunityStatus.CONTRACT_TO_SIGN,
+    public static final Set<OpportunityStatus> BOOKED = EnumSet.of(OpportunityStatus.CONTRACT_PENDING, OpportunityStatus.CONTRACT_TO_SIGN,
             OpportunityStatus.PRODUCT_PENDING, OpportunityStatus.PRODUCT_RECEIVED, OpportunityStatus.CONTENT_TO_CREATE,
             OpportunityStatus.AWAITING_APPROVAL, OpportunityStatus.SCHEDULED_TO_POST, OpportunityStatus.POSTED,
             OpportunityStatus.PAYMENT_PENDING);
@@ -129,7 +129,7 @@ public class LeadScoring {
         return new Score(level, points, reasons);
     }
 
-    private static boolean isClosedPaid(Opportunity o) {
+    public static boolean isClosedPaid(Opportunity o) {
         return o.status == OpportunityStatus.CLOSED && "Paid".equalsIgnoreCase(o.closedReason);
     }
 

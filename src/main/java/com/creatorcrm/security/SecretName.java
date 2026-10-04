@@ -17,6 +17,13 @@ public enum SecretName {
     INSTAGRAM_USER_ID,
     INSTAGRAM_USERNAME,
     INSTAGRAM_WEBHOOK_VERIFY_TOKEN,
+    /** Optional Facebook connection (Instagram API with Facebook Login), used to look up brands' accounts. */
+    FACEBOOK_APP_ID,
+    FACEBOOK_APP_SECRET,
+    FACEBOOK_PAGE_TOKEN,
+    FACEBOOK_PAGE_NAME,
+    /** Her Instagram account's id as the Facebook Graph API knows it (not the Instagram Login id). */
+    FACEBOOK_IG_USER_ID,
     /** GitHub token allowed to open issues on the app's repo; turns on error reports. */
     ERROR_REPORT_TOKEN,
     /** Encrypts the automatic nightly backups. */

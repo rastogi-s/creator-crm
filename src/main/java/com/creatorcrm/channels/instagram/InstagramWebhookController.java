@@ -4,6 +4,7 @@ import com.creatorcrm.channels.NormalizedMessage;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.outreach.InstagramEngagementService;
 import com.creatorcrm.security.CryptoService;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
@@ -30,7 +31,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Real-time Instagram DMs. Public endpoint, so every POST must carry a valid X-Hub-Signature-256
+ * Real-time Instagram DMs, plus comments and @mentions (possible brand leads). Public endpoint, so every POST must carry a valid X-Hub-Signature-256
  * (HMAC-SHA256 of the raw body with the app secret); anything else is rejected before parsing.
  */
 @RestController
@@ -43,8 +44,11 @@ public class InstagramWebhookController {
     private final SecretStore secrets;
     private final InstagramConnector connector;
     private final IngestionService ingestion;
+    private final InstagramEngagementService engagement;
 
-    public InstagramWebhookController(SecretStore secrets, InstagramConnector connector, IngestionService ingestion) {
+    public InstagramWebhookController(SecretStore secrets, InstagramConnector connector, IngestionService ingestion,
+                                      InstagramEngagementService engagement) {
+        this.engagement = engagement;
         this.secrets = secrets;
         this.connector = connector;
         this.ingestion = ingestion;
@@ -69,8 +73,16 @@ public class InstagramWebhookController {
             return ResponseEntity.status(401).build();
         }
         try {
-            List<NormalizedMessage> messages = parse(JSON.readTree(body));
+            JsonNode root = JSON.readTree(body);
+            List<NormalizedMessage> messages = parse(root);
             if (ingestion.store(messages) > 0) ingestion.processPendingAsync();
+            if ("instagram".equals(root.path("object").asText())) {
+                for (JsonNode entry : root.path("entry")) {
+                    for (JsonNode change : entry.path("changes")) {
+                        engagement.onWebhookChange(change.path("field").asText(), change.path("value"));
+                    }
+                }
+            }
         } catch (Exception e) {
             log.warn("Could not process Instagram webhook: {}", e.getMessage());
         }
