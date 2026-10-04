@@ -7,6 +7,8 @@ import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.invoices.PaymentReminders;
+import com.creatorcrm.rebook.WinBack;
+import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.security.AppUser;
@@ -46,10 +48,15 @@ public class DemoData implements ApplicationRunner {
     private final WorkflowEngine workflow;
     private final InvoiceRepo invoiceRepo;
     private final PaymentReminders paymentReminders;
+    private final ActivityRepo activity;
+    private final WinBack winBack;
 
     public DemoData(AppUserRepo users, PasswordEncoder encoder, SettingsService settings, IngestionService ingestion,
                     OutreachService outreach, InvoiceService invoices, OpportunityRepo opportunities,
-                    WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders) {
+                    WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
+                    ActivityRepo activity, WinBack winBack) {
+        this.activity = activity;
+        this.winBack = winBack;
         this.invoiceRepo = invoiceRepo;
         this.paymentReminders = paymentReminders;
         this.invoices = invoices;
@@ -102,6 +109,19 @@ public class DemoData implements ApplicationRunner {
                     invoiceRepo.save(inv);
                 });
         paymentReminders.draftDue(settings.today());
+        // Past collabs for "Win back past brands": Coastline Coffee paid three months ago, and Petal & Pine's gifted
+        // post went up three weeks ago. Status changes are dated today in a fresh demo, so date them back.
+        opportunities.findAll().stream()
+                .filter(o -> "Coastline Coffee".equals(workflow.brandName(o))).findFirst()
+                .ifPresent(o -> invoices.markPaid(invoices.markSent(
+                        invoices.createForDeal(o.id, settings.today().minusDays(130)).id).id, settings.today().minusDays(95)));
+        opportunities.findAll().stream()
+                .filter(o -> "Petal & Pine".equals(workflow.brandName(o))).findFirst()
+                .ifPresent(o -> activity.findByOpportunityIdOrderByAtDesc(o.id).forEach(a -> {
+                    a.at = now.minusDays(21);
+                    activity.save(a);
+                }));
+        winBack.draftDue(settings.today());
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
     }
 }

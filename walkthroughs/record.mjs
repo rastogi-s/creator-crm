@@ -116,6 +116,34 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "win-back"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    const rebook = page.locator("#rebook");
+    await rebook.waitFor();
+    await rebook.scrollIntoViewIfNeeded();
+    await say("Brands that paid you before are the easiest yes. Rebook past brands lists the ones worth pitching again.", 4600);
+    const coastline = rebook.locator(".item", { hasText: "Coastline Coffee" });
+    await point(coastline);
+    await say("Coastline Coffee paid you three months ago and has gone quiet, so a short re-pitch is already written.", 4600);
+    await point(rebook.locator(".item", { hasText: "Petal & Pine" }));
+    await say("Petal & Pine sent a gifted collab. Three weeks after your post, it suggests a paid one this time.", 4600);
+    await click(coastline.getByRole("button", { name: "Review re-pitch" }));
+    const draft = page.locator("#view-drafts .card", { hasText: "Coastline Coffee — Re-pitch" }).first();
+    await draft.waitFor();
+    await point(draft.locator("textarea"));
+    await say("It mentions your last collab and one new idea. Edit anything, then press Send.", 4200);
+    await point(draft.getByText("Sending it adds a new pitch"));
+    await say("Sending it adds a new pitch to your pipeline, with follow-ups like any other.", 4000);
+    await click(page.locator(".tab[data-tab=settings]"));
+    const step = page.locator("#settings-rebook");
+    await step.waitFor();
+    await step.scrollIntoViewIfNeeded();
+    await point(step.locator("input").first());
+    await say("Under Settings, choose how long a brand must be quiet, and how many re-pitches you'd like each week.", 4600);
+    await say("", 600);
+  },
+
   async "payment-reminders"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");

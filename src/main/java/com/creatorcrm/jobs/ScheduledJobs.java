@@ -11,6 +11,7 @@ import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.invoices.PaymentReminders;
+import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.DraftRepo;
@@ -41,12 +42,14 @@ public class ScheduledJobs {
     private final SetupService setup;
     private final InstagramStatsService instagramStats;
     private final PaymentReminders paymentReminders;
+    private final WinBack winBack;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
-                         PaymentReminders paymentReminders) {
+                         PaymentReminders paymentReminders, WinBack winBack) {
         this.paymentReminders = paymentReminders;
+        this.winBack = winBack;
         this.ingestion = ingestion;
         this.followUps = followUps;
         this.followUpRepo = followUpRepo;
@@ -103,8 +106,8 @@ public class ScheduledJobs {
     }
 
     /**
-     * Morning prep: mark cold deals, pre-draft today's follow-ups and payment reminders for one-click approval.
-     * Payment reminders never go out automatically (see {@link #autoSendFollowUps}).
+     * Morning prep: mark cold deals, pre-draft today's follow-ups, payment reminders and this week's win-back
+     * re-pitches for one-click approval. Payment reminders and re-pitches never go out automatically (see {@link #autoSendFollowUps}).
      */
     public int prepareMorning() {
         int cold = followUps.markColdDeals(settings.today());
@@ -119,7 +122,9 @@ public class ScheduledJobs {
             }
         }
         int reminders = paymentReminders.draftDue(settings.today());
-        log.info("Morning prep: {} follow-up drafts, {} payment reminders, {} deals marked cold", drafted, reminders, cold);
+        int repitches = winBack.draftDue(settings.today());
+        log.info("Morning prep: {} follow-up drafts, {} payment reminders, {} re-pitches, {} deals marked cold",
+                drafted, reminders, repitches, cold);
         return drafted;
     }
 

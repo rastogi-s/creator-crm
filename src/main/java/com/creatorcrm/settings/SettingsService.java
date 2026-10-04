@@ -57,13 +57,18 @@ public class SettingsService {
     /** Days after an invoice's due date to draft payment reminders, e.g. "3,7,14". Blank = no reminders. */
     public static final String PAYMENT_REMINDER_DAYS = "paymentReminderDays";
 
+    /** Win back past brands: days a brand must have been quiet before a re-pitch, and re-pitches drafted per week. */
+    public static final String WIN_BACK_QUIET_DAYS = "winBackQuietDays";
+    public static final String WIN_BACK_WEEKLY_LIMIT = "winBackWeeklyLimit";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
     public static final Set<String> EDITABLE = Set.of(
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
-            INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS);
+            INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
+            WIN_BACK_WEEKLY_LIMIT);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -175,6 +180,11 @@ public class SettingsService {
                 .sorted().toList();
     }
 
+    public int winBackQuietDays() { return Integer.parseInt(raw(WIN_BACK_QUIET_DAYS, "60")); }
+
+    /** 0 = win-back drafts are off. */
+    public int winBackWeeklyLimit() { return Integer.parseInt(raw(WIN_BACK_WEEKLY_LIMIT, "5")); }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -206,6 +216,8 @@ public class SettingsService {
         m.put(INVOICE_PREFIX, invoicePrefix());
         m.put(INVOICE_TERMS_DAYS, String.valueOf(invoiceTermsDays()));
         m.put(PAYMENT_REMINDER_DAYS, String.join(",", paymentReminderDays().stream().map(String::valueOf).toList()));
+        m.put(WIN_BACK_QUIET_DAYS, String.valueOf(winBackQuietDays()));
+        m.put(WIN_BACK_WEEKLY_LIMIT, String.valueOf(winBackWeeklyLimit()));
         return m;
     }
 
@@ -242,6 +254,16 @@ public class SettingsService {
             case PAYMENT_REMINDER_DAYS -> {
                 if (!v.isBlank() && !v.matches("\\s*\\d{1,3}(\\s*,\\s*\\d{1,3}){0,5}\\s*")) {
                     throw new IllegalArgumentException("Payment reminders: up to 6 comma-separated day counts, e.g. 3,7,14 (blank = off)");
+                }
+            }
+            case WIN_BACK_QUIET_DAYS -> {
+                if (!v.isBlank() && (!v.trim().matches("\\d{1,3}") || Integer.parseInt(v.trim()) < 14)) {
+                    throw new IllegalArgumentException("Win-back quiet period: a number of days, at least 14, e.g. 60");
+                }
+            }
+            case WIN_BACK_WEEKLY_LIMIT -> {
+                if (!v.isBlank() && !v.trim().matches("\\d|1\\d|20")) {
+                    throw new IllegalArgumentException("Re-pitches per week: 0 to 20 (0 = off)");
                 }
             }
             case INVOICE_PREFIX -> {

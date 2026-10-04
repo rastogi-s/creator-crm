@@ -72,6 +72,7 @@
 
   function pretty(s) {
     if (!s) return "";
+    if (s === "REPITCH") return "Re-pitch";
     s = String(s).toLowerCase().replace(/_/g, " ");
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
@@ -159,6 +160,7 @@
 
     root.appendChild(card("🔥 Today — high priority", itemList(t.urgent, "Nothing urgent. Nice.", true)));
     root.appendChild(card("📌 Follow-ups", followUpList(t.followUps)));
+    if (t.rebook && t.rebook.length) root.appendChild(rebookCard(t.rebook));
 
     if (t.approvals.length) {
       root.appendChild(card("✉️ Drafts awaiting your approval",
@@ -174,6 +176,23 @@
       o.items.length ? el("ul", {}, o.items.map((s) => el("li", {}, s))) : null));
 
     root.appendChild(card("📅 Upcoming", itemList(t.upcoming, "Nothing scheduled in the next two weeks.", false)));
+  }
+
+  // Win back past brands: re-pitches drafted for brands she worked with before, a few each week.
+  function rebookCard(items) {
+    const c = card("🔁 Rebook past brands",
+      el("p", { class: "small muted" }, "Brands that paid you and have gone quiet, or gave you a gifted collab a few weeks ago. "
+        + "A short re-pitch is ready for each; nothing is sent until you approve it."),
+      el("ul", { class: "list" }, items.map((it) => el("li", { class: "item" },
+        el("div", { class: "body" }, el("div", { class: "title" }, it.title), el("div", { class: "detail" }, it.detail)),
+        el("div", { class: "actions" },
+          el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review re-pitch"),
+          el("button", { class: "small", title: "Skip this brand for now", onclick: action(async () => {
+            await api("POST", "/api/drafts/" + it.refId + "/discard"); route();
+          }, "Skipped") }, "Not now"),
+          el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open"))))));
+    c.id = "rebook";
+    return c;
   }
 
   function stat(v, l) { return el("div", { class: "stat" }, el("div", { class: "v" }, String(v)), el("div", { class: "l" }, l)); }
@@ -472,6 +491,17 @@
         }) }, "Create invoice"))));
     }
 
+    // Rebooking: a finished collab can be pitched again
+    const finished = ["POSTED", "PAYMENT_PENDING", "CLOSED"].includes(o.status) && (o.closedReason || "").indexOf("Declined") !== 0;
+    if (finished && (o.status !== "CLOSED" || o.compensation === "GIFTED" || invoices.some((i) => i.status === "PAID") || o.closedReason === "Paid")) {
+      drawer.appendChild(card("Work together again",
+        el("p", { class: "small muted" }, "Draft a short re-pitch that mentions this collab. Sending it starts a new pitch with " + d.summary.brand + "."),
+        el("p", {}, el("button", { class: "small", onclick: action(async () => {
+          await api("POST", "/api/opportunities/" + id + "/repitch");
+          closeDrawer(); location.hash = "#drafts"; route();
+        }, "Re-pitch drafted — review it before sending") }, "Pitch them again"))));
+    }
+
     // Drafting
     const typeSel = el("select", {}, ["REPLY", "RATES", "MEDIA_KIT", "NEGOTIATION", "FOLLOW_UP", "ASK_BUDGET", "ASK_USAGE_RIGHTS",
       "ASK_DETAILS", "CONTRACT_CONFIRMATION", "CONTENT_SUBMISSION", "PRODUCT_ARRIVAL", "DECLINE", "OTHER"].map((t) => el("option", { value: t }, pretty(t))));
@@ -727,6 +757,7 @@
         el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
         d.invoiceId ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
         d.type === "PAYMENT_REMINDER" ? el("div", { class: "small muted" }, "Payment reminders always wait for you here, even when follow-ups are sent automatically.") : null,
+        d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
         el("label", {}, "Message"), body,
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
@@ -936,7 +967,25 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 7. MCP
+    // 7. Rebooking past brands
+    const wb = {
+      winBackQuietDays: el("input", { type: "number", min: "14", max: "999", value: p.winBackQuietDays }),
+      winBackWeeklyLimit: el("input", { type: "number", min: "0", max: "20", value: p.winBackWeeklyLimit }),
+    };
+    steps.appendChild(el("li", { class: "done", id: "settings-rebook" },
+      el("h3", {}, "Rebooking past brands"),
+      el("p", { class: "small muted" }, "Each week the app drafts a few re-pitches to brands that paid you and have gone quiet, and to brands "
+        + "whose gifted collab went up at least two weeks ago. Brands with an open deal or a recent pitch are skipped. "
+        + "Re-pitches wait in Drafts and show on Today; nothing is sent until you approve it."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Quiet for at least (days)"), wb.winBackQuietDays),
+        el("div", {}, el("label", {}, "Re-pitches per week (0 = off)"), wb.winBackWeeklyLimit)),
+      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        await api("PUT", "/api/settings/preferences", { winBackQuietDays: wb.winBackQuietDays.value, winBackWeeklyLimit: wb.winBackWeeklyLimit.value });
+        renderSettings(root);
+      }, "Saved") }, "Save"))));
+
+    // 8. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),

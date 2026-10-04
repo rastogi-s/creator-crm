@@ -6,10 +6,14 @@ import com.creatorcrm.domain.Attachment;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Draft;
+import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.DraftStatus;
 import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.InvoiceStatus;
+import com.creatorcrm.domain.Enums.OpportunityStatus;
+import com.creatorcrm.domain.Enums.OpportunityType;
+import com.creatorcrm.domain.Enums.Origin;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.domain.Invoice;
@@ -150,6 +154,8 @@ public class DraftService {
         if (invoice != null) {
             d.invoiceId = invoice.id;
             routeInvoice(d, invoice, b, conv, thread);
+        } else if (type == DraftType.REPITCH) {
+            routeRepitch(d, b, conv, thread);
         } else {
             route(d, b, conv, thread);
         }
@@ -221,6 +227,20 @@ public class DraftService {
             d.toAddress = b.instagram;
         } else {
             throw new IllegalStateException("No email or Instagram contact for " + b.name + ". Add one first.");
+        }
+    }
+
+    /**
+     * A win-back re-pitch starts a fresh conversation with the brand's contact, since the old deal's thread is
+     * finished. Without a saved contact it falls back to replying in that old thread.
+     */
+    private static void routeRepitch(Draft d, Brand b, Conversation conv, List<Message> thread) {
+        boolean hasContact = (b.contactEmail != null && !b.contactEmail.isBlank()) || (b.instagram != null && !b.instagram.isBlank());
+        if (hasContact || conv == null) {
+            route(d, b, null, thread);
+            d.conversationId = null;
+        } else {
+            route(d, b, conv, thread);
         }
     }
 
@@ -331,7 +351,7 @@ public class DraftService {
     }
 
     private void recordOutbound(Draft d, ChannelConnector.SentMessage sent, boolean automatic) {
-        Opportunity o = opportunities.findById(d.opportunityId).orElseThrow();
+        Opportunity o = d.type == DraftType.REPITCH ? rebook(d) : opportunities.findById(d.opportunityId).orElseThrow();
         if (sent != null) {
             Conversation conv = d.conversationId == null ? null : conversations.findById(d.conversationId).orElse(null);
             if (conv == null) {
@@ -360,7 +380,7 @@ public class DraftService {
             m.messageType = intentOf(d.type).name();
             messages.save(m);
         }
-        if (d.type == DraftType.PITCH && o.pitchedAt == null) o.pitchedAt = settings.today();
+        if ((d.type == DraftType.PITCH || d.type == DraftType.REPITCH) && o.pitchedAt == null) o.pitchedAt = settings.today();
         if (d.invoiceId != null) {
             invoices.findById(d.invoiceId).ifPresent(inv -> {
                 if (d.type == DraftType.PAYMENT_REMINDER) recordReminder(inv);
@@ -372,6 +392,32 @@ public class DraftService {
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
                 d.type.name().toLowerCase().replace('_', ' ') + (automatic ? " sent automatically to " : " sent to ")
                         + workflow.brandName(o)));
+    }
+
+    /**
+     * A re-pitch was sent: it starts a new deal with the brand (the old collab stays as it was), so replies,
+     * follow-ups and the pipeline track it like any other pitch. The draft moves to the new deal.
+     */
+    private Opportunity rebook(Draft d) {
+        Opportunity last = opportunities.findById(d.opportunityId).orElseThrow();
+        Opportunity o = new Opportunity();
+        o.brandId = last.brandId;
+        o.conversationId = d.conversationId;
+        o.origin = Origin.PITCH;
+        o.type = OpportunityType.OTHER;
+        o.compensation = Compensation.UNKNOWN;
+        o.status = OpportunityStatus.NEW_LEAD;
+        String before = last.campaign != null && !last.campaign.isBlank() ? last.campaign
+                : last.deliverables != null && !last.deliverables.isBlank() ? last.deliverables : null;
+        o.campaign = "Working together again" + (before == null ? "" : " after " + before);
+        if (o.campaign.length() > 200) o.campaign = o.campaign.substring(0, 200);
+        o.pitchPlatform = d.channel.name();
+        o.createdAt = OffsetDateTime.now();
+        o.updatedAt = o.createdAt;
+        o = opportunities.save(o);
+        activity.save(Activity.of(o.id, Activity.NEW_OPPORTUNITY, "Re-pitched " + workflow.brandName(o)));
+        d.opportunityId = o.id;
+        return o;
     }
 
     private void markInvoiceSent(Invoice inv) {
@@ -391,7 +437,7 @@ public class DraftService {
         return switch (type) {
             case INVOICE, PAYMENT_REMINDER -> Intent.INVOICE_SENT;
             case FOLLOW_UP -> Intent.CREATOR_FOLLOW_UP;
-            case PITCH -> Intent.PITCH;
+            case PITCH, REPITCH -> Intent.PITCH;
             case DECLINE -> Intent.CREATOR_DECLINED;
             case RATES, MEDIA_KIT -> Intent.SENT_RATES_OR_MEDIA_KIT;
             case CONTENT_SUBMISSION -> Intent.CONTENT_SUBMITTED;
