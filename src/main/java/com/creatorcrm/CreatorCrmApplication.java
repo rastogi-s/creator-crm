@@ -14,6 +14,7 @@ public class CreatorCrmApplication {
     public static void main(String[] args) {
         SpringApplication app = new SpringApplication(CreatorCrmApplication.class);
         if (DesktopMode.enabled()) {
+            args = DesktopMode.stripArgs(args);
             DesktopMode.prepare();
             app.setHeadless(false); // needed for the tray icon and dialogs
         }

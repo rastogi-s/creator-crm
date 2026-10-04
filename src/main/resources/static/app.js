@@ -945,6 +945,8 @@
     root.appendChild(await claudeSpendCard(root));
     root.appendChild(await learningCard(root));
     root.appendChild(updatesCard(root));
+    const startup = await startWithWindowsCard();
+    if (startup) root.appendChild(startup);
     root.appendChild(await errorReportsCard(root, c));
     root.appendChild(await autoBackupCard(root));
     root.appendChild(backupCard(root));
@@ -1342,6 +1344,25 @@
       el("label", { class: "row check" }, auto, "Check for updates automatically (every few hours)"),
       el("p", { class: "small muted" }, "Nothing is installed without your click. Before installing, a copy of your data is saved in the "
         + "backups folder next to your data."));
+  }
+
+  // Only shown in the installed Windows app, the one place the setting can work.
+  async function startWithWindowsCard() {
+    const st = await api("GET", "/api/desktop/start-with-windows").catch(() => null);
+    if (!st || !st.supported) return null;
+    const box = el("input", { type: "checkbox", checked: st.enabled, onchange: action(async (e) => {
+      try {
+        const r = await api("PUT", "/api/desktop/start-with-windows", { enabled: e.target.checked });
+        e.target.checked = r.enabled;
+      } catch (err) {
+        e.target.checked = !e.target.checked;
+        throw err;
+      }
+    }, "Saved") });
+    return card("Start with Windows",
+      el("label", { class: "row check" }, box, "Start Creator CRM when Windows starts"),
+      el("p", { class: "small muted" }, "Creator CRM opens quietly in the tray when you sign in to this laptop, so follow-ups, email checks "
+        + "and your phone keep working after a restart. Click the tray icon or the desktop shortcut to open it."));
   }
 
   // "Something isn't working": her note plus recent (redacted) log lines go to the developer as a GitHub issue.
