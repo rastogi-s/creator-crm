@@ -22,6 +22,7 @@ import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.outreach.BrandDiscoveryService;
+import com.creatorcrm.rates.RateAdvisor;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.scoring.LeadScoring;
 import com.creatorcrm.llm.Intent;
@@ -66,6 +67,7 @@ public class CrmMcpTools {
     private final InvoiceService invoices;
     private final WinBack winBack;
     private final LeadScoring scoring;
+    private final RateAdvisor rates;
     private final BrandDiscoveryService discovery;
     private final InstagramStatsService instagram;
 
@@ -73,8 +75,9 @@ public class CrmMcpTools {
                        DraftRepo drafts, WorkflowEngine workflow, FollowUpEngine followUps, DraftService draftService,
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
                        CrmProperties props, InvoiceService invoices, WinBack winBack, LeadScoring scoring,
-                       BrandDiscoveryService discovery, InstagramStatsService instagram) {
+                       BrandDiscoveryService discovery, InstagramStatsService instagram, RateAdvisor rates) {
         this.scoring = scoring;
+        this.rates = rates;
         this.invoices = invoices;
         this.winBack = winBack;
         this.discovery = discovery;
@@ -160,6 +163,18 @@ public class CrmMcpTools {
                 .map(o -> "[opp " + o.id + "] " + workflow.brandName(o) + " — " + scores.get(o.id).level() + " ("
                         + scores.get(o.id).summary() + ")" + (o.budgetText == null || o.budgetText.isBlank() ? "" : ", " + o.budgetText))
                 .collect(Collectors.joining("\n"));
+    }
+
+    @McpTool(name = "suggest_rate", description = "What the creator could ask for on a deal: her price per deliverable (from her booked paid deals, or the rates in her profile) plus paid-usage and exclusivity uplifts, compared with the brand's offer. Advisory only; nothing is sent.")
+    public String suggestRate(@McpToolParam(description = "Opportunity id") Long id) {
+        RateAdvisor.Advice a = rates.advise(id);
+        if (!a.available()) return a.why();
+        StringBuilder sb = new StringBuilder("Suggested: ").append(a.suggestedText()).append(" for ").append(a.asks()).append('\n');
+        a.lines().forEach(l -> sb.append("- ").append(l.text()).append(": ").append(l.amount()).append('\n'));
+        sb.append(a.basis()).append('.');
+        if (a.offer() != null) sb.append("\nTheir offer: ").append(RateAdvisor.money(a.offer())).append(" (")
+                .append(a.offerGapPercent() >= 0 ? "+" : "").append(a.offerGapPercent()).append("% vs the suggestion).");
+        return sb.toString();
     }
 
     @McpTool(name = "list_rebook_candidates", description = "Past brands worth pitching again: paid collabs gone quiet and gifted collabs posted a while ago, best first, skipping brands with an open deal or a recent pitch. The app drafts a few re-pitches a week for the creator to approve.")

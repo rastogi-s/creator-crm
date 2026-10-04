@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.17.0",
+    "title": "Rate advisor",
+    "features": [
+      {
+        "id": "rate-advisor",
+        "title": "Know what to ask for",
+        "body": "Open a deal you're still deciding on and a What to ask for box shows a price for what the brand wants, line by line: each Reel, Story, TikTok or post, plus extra for paid usage and exclusivity. Your prices come from your last paid deals, or from the rates in About you until you have five. It also says how far under your rate their offer is. Change the number if you like and press Draft counter, and a friendly counter-offer quoting exactly that amount waits in Drafts for you.",
+        "video": "rate-advisor.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.16.0",
     "title": "Brands from Instagram",
     "features": [

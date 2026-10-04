@@ -126,6 +126,33 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "rate-advisor"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Fern & Field" });
+    await row.waitFor();
+    await say("Fern & Field offered $600 for a Reel and two Stories, and wants to run the Reel as an ad for three months.", 4600);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#rate-advisor");
+    await box.waitFor();
+    await box.scrollIntoViewIfNeeded();
+    await point(box.locator(".big-number"));
+    await say("What to ask for shows a fair price for exactly what they want.", 3600);
+    await point(box.locator("table.lines"));
+    await say("Line by line: your usual price for each Reel and Story, plus extra for three months of ads.", 4400);
+    await point(box.locator("p", { hasText: "Their offer" }));
+    await say("Their offer is well under that. Your prices come from your last paid deals, or the rates in About you.", 4600);
+    await point(box.locator("input.amount"));
+    await say("Change the number if you like, then press Draft counter.", 3200);
+    await click(box.getByRole("button", { name: "Draft counter" }));
+    const draft = page.locator("#view-drafts .card", { hasText: "Fern & Field" }).first();
+    await draft.waitFor();
+    await point(draft.locator("textarea"));
+    await say("A friendly counter-offer quoting exactly your amount waits here. Nothing is sent until you approve it.", 4600);
+    await say("", 600);
+  },
+
   async "lead-scoring"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#pipeline");

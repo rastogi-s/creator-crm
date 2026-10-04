@@ -657,6 +657,33 @@
              ["Still unknown", o.missingInfo], ["Next step", o.nextStep], ["Origin", pretty(o.origin)],
              ["Contact", d.brand && [d.brand.contactName, d.brand.contactEmail, d.brand.instagram && "@" + d.brand.instagram].filter(Boolean).join(" · ")]])));
 
+    // Rate advisor: what to ask for while the deal is still being decided
+    if (["NEW_LEAD", "AWAITING_MY_REPLY", "NEGOTIATING"].includes(o.status) && !["GIFTED", "AFFILIATE"].includes(o.compensation)) {
+      const advice = await api("GET", "/api/opportunities/" + id + "/rate");
+      if (!advice.available) {
+        drawer.appendChild(card("What to ask for", el("p", { class: "small muted" }, advice.why)));
+      } else {
+        const amount = el("input", { type: "number", min: "1", step: "10", value: String(advice.suggested), "aria-label": "Amount to ask for", class: "amount" });
+        const gap = advice.offer == null ? null
+          : el("p", { class: "small" + (advice.offerGapPercent < -10 ? " warn" : "") }, "Their offer: $" + Math.round(advice.offer).toLocaleString("en-US")
+            + (advice.offerGapPercent === 0 ? ", right on your rate." : advice.offerGapPercent < 0
+              ? ", " + -advice.offerGapPercent + "% under this." : ", " + advice.offerGapPercent + "% above this. Nice!"));
+        drawer.appendChild(el("div", { class: "card", id: "rate-advisor" }, el("h2", {}, "What to ask for"),
+          el("div", { class: "row" }, el("div", { class: "big-number" }, advice.suggestedText), el("div", { class: "small muted" }, "for " + advice.asks)),
+          gap,
+          el("table", { class: "lines" }, el("tbody", {}, advice.lines.map((l) => el("tr", {}, el("td", {}, l.text), el("td", { class: "num" }, l.amount))))),
+          el("p", { class: "small muted" }, advice.basis + ". Change the uplifts in Settings, Rate advisor."),
+          el("div", { class: "row" }, el("label", {}, "Ask for $"), amount,
+            el("button", { class: "primary small", onclick: action(async () => {
+              const n = Number(amount.value);
+              if (!(n > 0)) { toast("Enter the amount to ask for", true); return; }
+              await api("POST", "/api/opportunities/" + id + "/counter", { amount: n });
+              closeDrawer(); location.hash = "#drafts"; route();
+            }, "Counter-offer drafted — review it before sending") }, "Draft counter")),
+          el("p", { class: "small muted" }, "The draft quotes only the amount above, and waits in Drafts until you send it.")));
+      }
+    }
+
     // Invoices
     const invoiceAsked = d.tasks.some((t) => t.status === "OPEN" && t.type === "SEND_INVOICE");
     if (o.compensation !== "GIFTED" || invoices.length) {
@@ -1511,7 +1538,26 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 8. MCP
+    // 8. Rate advisor
+    const ra = {
+      rateUsagePercentPerMonth: el("input", { type: "number", min: "0", max: "999", value: p.rateUsagePercentPerMonth }),
+      rateExclusivityPercent: el("input", { type: "number", min: "0", max: "999", value: p.rateExclusivityPercent }),
+    };
+    steps.appendChild(el("li", { class: "done", id: "settings-rates" },
+      el("h3", {}, "Rate advisor"),
+      el("p", { class: "small muted" }, "On a deal you're still deciding, the app suggests what to ask for. Your price per Reel, Story, "
+        + "TikTok, post or UGC video comes from your last paid deals once you have five, and until then from the rates in About you. "
+        + "Paid usage and exclusivity add these percentages. The number only goes to a brand if you put it in a counter-offer and send it."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Paid usage: add % per month"), ra.rateUsagePercentPerMonth),
+        el("div", {}, el("label", {}, "Exclusivity: add %"), ra.rateExclusivityPercent)),
+      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        await api("PUT", "/api/settings/preferences", { rateUsagePercentPerMonth: ra.rateUsagePercentPerMonth.value,
+          rateExclusivityPercent: ra.rateExclusivityPercent.value });
+        renderSettings(root);
+      }, "Saved") }, "Save"))));
+
+    // 9. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),
