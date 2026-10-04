@@ -218,4 +218,23 @@ class ClaudeLlmClientTest {
         assertThat(spend.outOfCredits()).isFalse();
         errorStatus = 0;
     }
+
+    @Test
+    void searchDepthCapsWebSearchesAndLearnsWhatARunCosts() throws Exception {
+        replyText = "{\"leads\": []}";
+        usage = Map.of("input_tokens", 50_000, "output_tokens", 2_000); // Opus 5.5: $0.20 + $0.04
+        long runsBefore = spend.researchCosts().getFirst().runs();
+
+        claude.findBrands(new BrandSearchInput("vegan snacks", 3, List.of(), SearchDepth.QUICK));
+
+        Map<?, ?> req = JsonMapper.shared().readValue(lastRequest.get(), Map.class);
+        Map<?, ?> tool = (Map<?, ?>) ((List<?>) req.get("tools")).getFirst();
+        assertThat(((Number) tool.get("max_uses")).intValue()).isEqualTo(3);
+        assertThat(lastRequest.get()).contains("at most 3 web searches");
+        ClaudeSpend.DepthCost quick = spend.researchCosts().getFirst();
+        assertThat(quick.depth()).isEqualTo("QUICK");
+        assertThat(quick.runs()).isEqualTo(runsBefore + 1);
+        assertThat(quick.measured()).isTrue();
+        if (runsBefore == 0) assertThat(quick.usd()).isCloseTo(0.24, offset(0.011));
+    }
 }

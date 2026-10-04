@@ -87,7 +87,7 @@ public class ClaudeLlmClient implements LlmClient {
         user.append("NEW MESSAGE TO ANALYZE:\n").append(in.newMessage());
 
         MessageAnalysis a = call(ClaudeSpend.Feature.CLASSIFY, settings.classifierModel(), settings.classifierEffort(), classifierSystem, null,
-                user.toString(), MessageAnalysis.class, 4000, false);
+                user.toString(), MessageAnalysis.class, 4000, null);
         return AnalysisValidator.sanitize(a);
     }
 
@@ -121,7 +121,7 @@ public class ClaudeLlmClient implements LlmClient {
             user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
         }
         return call(ClaudeSpend.Feature.DRAFT, settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
-                DraftText.class, 4000, false);
+                DraftText.class, 4000, null);
     }
 
     @Override
@@ -129,12 +129,14 @@ public class ClaudeLlmClient implements LlmClient {
         StringBuilder user = new StringBuilder()
                 .append("Find up to ").append(in.count()).append(" brands for this request: ")
                 .append(Untrusted.escape(in.query())).append('\n');
+        user.append("You can run at most ").append(in.depth().maxSearches)
+                .append(" web searches, so choose them carefully.\n");
         if (!in.excludeBrands().isEmpty()) {
             user.append("\nAlready in the creator's CRM, don't return these: ")
                     .append(String.join(", ", in.excludeBrands())).append('\n');
         }
         return call(ClaudeSpend.Feature.RESEARCH, settings.writerModel(), settings.writerEffort(), researchSystem, creatorProfile(), user.toString(),
-                BrandLeads.class, 16000, true);
+                BrandLeads.class, 16000, in.depth());
     }
 
     private String creatorProfile() {
@@ -150,7 +152,7 @@ public class ClaudeLlmClient implements LlmClient {
     private static final int MAX_CONTINUATIONS = 4;
 
     private <T> T call(ClaudeSpend.Feature feature, String model, String effort, String system, String system2, String user,
-                       Class<T> type, long maxTokens, boolean webSearch) {
+                       Class<T> type, long maxTokens, SearchDepth webSearch) {
         JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
         OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
         OutputConfig.Builder out = OutputConfig.builder()
@@ -170,19 +172,22 @@ public class ClaudeLlmClient implements LlmClient {
                 .outputConfig(out.build())
                 .systemOfTextBlockParams(systemBlocks)
                 .addUserMessage(user);
-        if (webSearch) params.addTool(WebSearchTool20260209.builder().maxUses(15L).build());
+        if (webSearch != null) params.addTool(WebSearchTool20260209.builder().maxUses((long) webSearch.maxSearches).build());
         if (supportsDefaultFallback(model)) {
             // On a safety-classifier decline, let the API retry on its recommended fallback model.
             params.putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
                     .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
         }
 
-        Message response = create(feature, params);
+        Message response = create(params);
+        double runUsd = spend.record(feature, response);
         for (int i = 0; i < MAX_CONTINUATIONS && StopReason.PAUSE_TURN.equals(response.stopReason().orElse(null)); i++) {
             // Send the paused turn back as-is; the API resumes the search where it left off.
             params.addMessage(response);
-            response = create(feature, params);
+            response = create(params);
+            runUsd += spend.record(feature, response);
         }
+        if (webSearch != null) spend.recordResearchRun(webSearch, runUsd);
         StopReason stop = response.stopReason().orElse(null);
         if (StopReason.PAUSE_TURN.equals(stop)) throw new LlmException("Claude's web research didn't finish; try a narrower search");
         if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined this request");
@@ -200,7 +205,7 @@ public class ClaudeLlmClient implements LlmClient {
         }
     }
 
-    private Message create(ClaudeSpend.Feature feature, MessageCreateParams.Builder params) {
+    private Message create(MessageCreateParams.Builder params) {
         Message response;
         try {
             response = client().messages().create(params.build());
@@ -214,7 +219,6 @@ public class ClaudeLlmClient implements LlmClient {
             // Network trouble, timeouts, a response we couldn't read: not an HTTP error, but just as fatal.
             throw new LlmException("Claude request failed: " + e.getClass().getSimpleName() + ": " + firstLine(e), e);
         }
-        spend.record(feature, response);
         return response;
     }
 

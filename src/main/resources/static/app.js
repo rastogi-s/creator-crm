@@ -380,12 +380,29 @@
     const query = el("input", { placeholder: "e.g. clean skincare brands like Glossier that work with UGC creators", maxlength: "300" });
     const count = el("select", { class: "inline" }, [3, 5, 10].map((n) => el("option", { value: n }, n + " brands")));
     count.value = "5";
+    // How hard to search: fewer web searches cost less. Labels show the real average once there are past runs.
+    const depthNames = { QUICK: "Quick", STANDARD: "Standard", THOROUGH: "Thorough" };
+    const depthNotes = { QUICK: "cheapest, may find fewer", STANDARD: "good balance", THOROUGH: "most brands, costs most" };
+    const depth = el("select", { class: "inline", "aria-label": "How hard to search" });
+    const fillDepth = (opts) => {
+      clear(depth);
+      opts.forEach((o) => depth.appendChild(el("option", { value: o.depth },
+        depthNames[o.depth] + ": up to " + o.maxSearches + " searches, " + (o.measured ? "" : "about ") + usd(o.usd)
+        + (o.measured ? " on average" : "") + " (" + depthNotes[o.depth] + ")")));
+      let saved = null;
+      try { saved = localStorage.getItem("crm.searchDepth"); } catch (e) { /* private window */ }
+      depth.value = opts.some((o) => o.depth === saved) ? saved : "STANDARD";
+    };
+    fillDepth([{ depth: "QUICK", maxSearches: 3, usd: 0.25 }, { depth: "STANDARD", maxSearches: 6, usd: 0.45 },
+      { depth: "THOROUGH", maxSearches: 15, usd: 1.0 }]);
+    api("GET", "/api/leads/search-options").then(fillDepth).catch(() => {});
+    depth.addEventListener("change", () => { try { localStorage.setItem("crm.searchDepth", depth.value); } catch (e) { /* ignore */ } });
     const status = el("span", { class: "small muted" });
     const search = action(async () => {
       if (query.value.trim().length < 3) throw new Error("Describe the kind of brands to look for");
       status.textContent = "Researching brands on the web… this can take a minute or two.";
       try {
-        const found = await api("POST", "/api/leads/search", { query: query.value, count: Number(count.value) });
+        const found = await api("POST", "/api/leads/search", { query: query.value, count: Number(count.value), depth: depth.value });
         toast(found.length ? found.length + " new brand" + (found.length === 1 ? "" : "s") + " found" : "No new brands found; try a different search");
         renderOutreach(root);
       } finally { status.textContent = ""; }
@@ -394,6 +411,7 @@
     return card("Find brands to pitch",
       el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
       el("div", { class: "row" }, el("div", { class: "spacer" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
+      el("div", { class: "row" }, el("span", { class: "small muted" }, "Search depth:"), depth),
       status,
       leads.length ? el("div", {}, leads.map((l) => leadItem(root, l))) : null);
   }
@@ -629,8 +647,12 @@
       creatorProfile: el("textarea", { class: "tall", maxlength: "20000" }),
       timezone: el("input", { value: p.timezone }),
       brandKeywords: el("textarea", { maxlength: "2000" }),
-      classifierModel: el("input", { value: p.classifierModel }),
-      writerModel: el("input", { value: p.writerModel }),
+      classifierModel: modelSelect(p.classifierModel, [
+        ["claude-sonnet-5-5", "Sonnet 5.5: cheaper, under 1¢ per message (recommended)"],
+        ["claude-opus-5-5", "Opus 5.5: most careful, about 2× the cost"]]),
+      writerModel: modelSelect(p.writerModel, [
+        ["claude-opus-5-5", "Opus 5.5: best writing, about 2–4¢ per draft (recommended)"],
+        ["claude-sonnet-5-5", "Sonnet 5.5: about half the cost, plainer drafts"]]),
     };
     pf.creatorProfile.value = p.creatorProfile;
     pf.brandKeywords.value = p.brandKeywords;
@@ -641,8 +663,9 @@
       el("label", {}, "Time zone"), pf.timezone,
       el("label", {}, "Brand keywords (emails without these in bulk/automated mail are skipped before AI)"), pf.brandKeywords,
       el("div", { class: "grid" },
-        el("div", {}, el("label", {}, "Classifier model"), pf.classifierModel),
-        el("div", {}, el("label", {}, "Writer model"), pf.writerModel)),
+        el("div", {}, el("label", {}, "Claude for reading messages"), pf.classifierModel),
+        el("div", {}, el("label", {}, "Claude for writing drafts and finding brands"), pf.writerModel)),
+      el("p", { class: "small muted" }, "Costs are rough. Settings → Claude spending shows what you actually spend."),
       el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
         const body = {};
         for (const [k, v] of Object.entries(pf)) body[k] = v.value;
@@ -721,6 +744,14 @@
     return el("div", { class: "row" }, el("span", { class: "small" }, "📊 " + text), el("button", { class: "small", onclick: action(async () => {
       await api("POST", "/api/settings/instagram-stats/refresh"); renderSettings(root);
     }, "Instagram stats updated") }, "Refresh stats"));
+  }
+
+  // A model picker with rough costs; keeps a model typed in by hand on an older version.
+  function modelSelect(current, options) {
+    const s = el("select", {}, options.map(([v, label]) => el("option", { value: v }, label)));
+    if (current && !options.some(([v]) => v === current)) s.appendChild(el("option", { value: current }, current));
+    s.value = current || options[0][0];
+    return s;
   }
 
   async function learningCard(root) {

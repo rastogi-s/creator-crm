@@ -49,6 +49,7 @@ public class ClaudeSpend {
     static final String BALANCE_SPENT = "claude.balance.spentAtEntry";
     static final String BALANCE_AT = "claude.balance.at";
     static final String OUT = "claude.credits.outSince";
+    static final String RESEARCH = "claude.research.";
 
     public record Month(String month, double usd) {}
 
@@ -90,8 +91,8 @@ public class ClaudeSpend {
         return tokens / 1_000_000 + searches * WEB_SEARCH;
     }
 
-    /** Adds one reply's cost to the totals. A reply means the credits work again. */
-    public synchronized void record(Feature feature, Message response) {
+    /** Adds one reply's cost to the totals and returns it (USD). A reply means the credits work again. */
+    public synchronized double record(Feature feature, Message response) {
         long micros = Math.round(cost(response.model().asString(), response.usage()) * 1_000_000);
         if (get(SINCE).isEmpty()) put(SINCE, settings.today().toString());
         add(TOTAL, micros);
@@ -102,6 +103,26 @@ public class ClaudeSpend {
             put(OUT, "");
             log.info("Claude credits work again");
         }
+        return micros / 1_000_000.0;
+    }
+
+    /** One whole "Find brands" run, so the Outreach page can show what each depth really costs. */
+    public synchronized void recordResearchRun(SearchDepth depth, double usd) {
+        add(RESEARCH + depth.name() + ".runs", 1);
+        add(RESEARCH + depth.name() + ".micros", Math.round(usd * 1_000_000));
+    }
+
+    /** {@code measured}: the average of past runs; otherwise the rough starting guess. */
+    public record DepthCost(String depth, int maxSearches, double usd, boolean measured, long runs) {}
+
+    public synchronized List<DepthCost> researchCosts() {
+        List<DepthCost> out = new ArrayList<>();
+        for (SearchDepth d : SearchDepth.values()) {
+            long runs = micros(RESEARCH + d.name() + ".runs");
+            double avg = runs == 0 ? d.roughUsd : usd(micros(RESEARCH + d.name() + ".micros") / runs);
+            out.add(new DepthCost(d.name(), d.maxSearches, avg, runs > 0, runs));
+        }
+        return out;
     }
 
     /** The API said the credits are used up. Logged as an error once per outage, which files an error report. */
