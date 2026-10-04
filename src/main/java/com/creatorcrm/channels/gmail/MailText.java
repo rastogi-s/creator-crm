@@ -1,9 +1,12 @@
 package com.creatorcrm.channels.gmail;
 
+import com.creatorcrm.domain.Attachment;
 import com.creatorcrm.domain.Draft;
 import com.google.api.services.gmail.model.MessagePart;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
 
 /** Body extraction and RFC 822 message building for Gmail. */
 final class MailText {
@@ -68,6 +71,7 @@ final class MailText {
         return sb.toString();
     }
 
+    /** The draft as a base64url RFC 822 message: plain text, or multipart/mixed when it has attachments. */
     static String rawMessage(Draft d) {
         StringBuilder sb = new StringBuilder();
         sb.append("To: ").append(headerSafe(d.toAddress)).append("\r\n");
@@ -77,10 +81,37 @@ final class MailText {
             sb.append("References: ").append(headerSafe(d.inReplyTo)).append("\r\n");
         }
         sb.append("MIME-Version: 1.0\r\n");
+        List<Attachment> attachments = d.attachments == null ? List.of() : d.attachments;
+        if (attachments.isEmpty()) {
+            appendTextPart(sb, d.body);
+        } else {
+            String boundary = "crm-" + UUID.randomUUID();
+            sb.append("Content-Type: multipart/mixed; boundary=\"").append(boundary).append("\"\r\n\r\n");
+            sb.append("--").append(boundary).append("\r\n");
+            appendTextPart(sb, d.body);
+            for (Attachment a : attachments) {
+                String name = fileNameSafe(a.filename());
+                sb.append("\r\n--").append(boundary).append("\r\n");
+                sb.append("Content-Type: ").append(headerSafe(a.mimeType())).append("; name=\"").append(name).append("\"\r\n");
+                sb.append("Content-Disposition: attachment; filename=\"").append(name).append("\"\r\n");
+                sb.append("Content-Transfer-Encoding: base64\r\n\r\n");
+                sb.append(Base64.getMimeEncoder().encodeToString(a.content()));
+            }
+            sb.append("\r\n--").append(boundary).append("--\r\n");
+        }
+        return Base64.getUrlEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void appendTextPart(StringBuilder sb, String body) {
         sb.append("Content-Type: text/plain; charset=UTF-8\r\n");
         sb.append("Content-Transfer-Encoding: base64\r\n\r\n");
-        sb.append(Base64.getMimeEncoder().encodeToString(d.body.getBytes(StandardCharsets.UTF_8)));
-        return Base64.getUrlEncoder().encodeToString(sb.toString().getBytes(StandardCharsets.UTF_8));
+        sb.append(Base64.getMimeEncoder().encodeToString((body == null ? "" : body).getBytes(StandardCharsets.UTF_8)));
+    }
+
+    /** ASCII letters, digits, dot, dash and underscore only, so the name can't break out of its quotes. */
+    static String fileNameSafe(String name) {
+        String n = name == null ? "" : name.replaceAll("[^A-Za-z0-9._-]", "_");
+        return n.isBlank() ? "attachment" : n;
     }
 
     /** Prevent header injection via CR/LF in values that came from third-party mail. */

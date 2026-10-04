@@ -94,7 +94,7 @@
 
   // ---------- routing ----------
 
-  const views = { today: renderToday, pipeline: renderPipeline, outreach: renderOutreach, links: renderLinks,
+  const views = { today: renderToday, pipeline: renderPipeline, money: renderMoney, outreach: renderOutreach, links: renderLinks,
                   drafts: renderDrafts, summary: renderSummary, settings: renderSettings,
                   help: renderHelp, whatsnew: renderWhatsNew };
   let statuses = {};
@@ -188,7 +188,12 @@
       el("div", { class: "actions" },
         it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
         it.kind === "DEADLINE" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/deadlines/" + it.refId + "/done"); route(); }, "Deadline cleared") }, "Done") : null,
-        it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null))));
+        it.kind === "INVOICE" ? el("button", { class: "small", title: "The money arrived", onclick: action(async () => {
+          if (!confirm("Mark this invoice as paid today?")) return;
+          await api("POST", "/api/invoices/" + it.refId + "/paid"); route();
+        }, "Marked paid 🎉") }, "Mark paid") : null,
+        it.kind === "INVOICE" ? el("button", { class: "small", onclick: () => openInvoice(it.refId) }, "Open")
+          : it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null))));
   }
 
   function followUpList(items) {
@@ -240,6 +245,182 @@
         el("td", { class: "muted" }, fmtDate(r.updatedAt))))))));
   }
 
+  // ---------- Money ----------
+
+  let moneyYear = null;
+
+  function fmtMoney(currency, amount) {
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(Number(amount));
+    } catch (e) {
+      return currency + " " + Number(amount).toFixed(2);
+    }
+  }
+
+  /** {"USD": 1200, "EUR": 300} -> "$1,200.00 · €300.00" */
+  function moneyTotal(byCurrency) {
+    const parts = Object.entries(byCurrency || {}).filter(([, v]) => Number(v) !== 0).map(([c, v]) => fmtMoney(c, v));
+    return parts.length ? parts.join(" · ") : fmtMoney("USD", 0);
+  }
+
+  function invoiceBadge(inv) {
+    if (inv.status === "SENT" && inv.daysOverdue > 0) return el("span", { class: "badge overdue" }, "Overdue " + inv.daysOverdue + "d");
+    const cls = { DRAFT: "medium", SENT: "accent", PAID: "ok", VOID: "" }[inv.status];
+    return el("span", { class: "badge " + cls }, { DRAFT: "Not sent yet", SENT: "Sent, unpaid", PAID: "Paid " + fmtDate(inv.paidDate), VOID: "Void" }[inv.status]);
+  }
+
+  async function renderMoney(root) {
+    const m = await api("GET", "/api/money" + (moneyYear ? "?year=" + moneyYear : ""));
+    clear(root);
+    const yearSel = el("select", { class: "inline", onchange: (e) => { moneyYear = Number(e.target.value); renderMoney(root); } },
+      m.years.map((y) => el("option", { value: String(y), selected: y === m.year }, String(y))));
+    root.appendChild(el("div", { class: "row" }, el("h1", {}, "Money"), el("div", { class: "spacer" }), yearSel,
+      el("a", { class: "btn small", href: "/api/money/invoices.csv?year=" + m.year, download: "invoices-" + m.year + ".csv",
+        title: "Every invoice issued this year, for your taxes" }, "Export CSV")));
+    if (m.businessDetailsMissing) {
+      root.appendChild(el("div", { class: "alert info" }, "Your invoices still show placeholders for your address or payment details. ",
+        el("a", { href: "#settings" }, "Add them in Settings, Invoices.")));
+    }
+    root.appendChild(el("div", { class: "stats card" },
+      stat(moneyTotal(m.booked), "Booked, not invoiced yet"),
+      stat(moneyTotal(m.outstanding), "Invoiced, waiting for payment"),
+      stat(moneyTotal(m.paidThisMonth), "Paid this month"),
+      stat(moneyTotal(m.overdue), "Overdue")));
+
+    root.appendChild(card("Ready to invoice", m.readyToInvoice.length ? el("ul", { class: "list" }, m.readyToInvoice.map((r) => el("li", { class: "item" },
+      el("div", { class: "body" }, el("div", { class: "title" }, r.brand + (r.campaign ? " — " + r.campaign : "")),
+        el("div", { class: "detail" }, r.amountText + " · " + r.status)),
+      el("div", { class: "actions" },
+        el("button", { class: "small primary", onclick: action(async () => {
+          const inv = await api("POST", "/api/opportunities/" + r.opportunityId + "/invoices");
+          openInvoice(inv.id);
+        }) }, "Create invoice"),
+        el("button", { class: "small", onclick: () => openDeal(r.opportunityId) }, "Open deal")))))
+      : emptyLine("Every agreed paid deal has an invoice.")));
+
+    if (!m.months.length) { root.appendChild(card(null, emptyLine("No invoices in " + m.year + " yet."))); return; }
+    root.appendChild(el("p", { class: "muted small" }, "Paid in " + m.year + ": " + moneyTotal(m.paidThisYear)));
+    for (const g of m.months) {
+      const label = new Date(g.month + "-01T00:00:00").toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      root.appendChild(el("div", { class: "card table-wrap" }, el("h3", {}, label), el("table", {},
+        el("thead", {}, el("tr", {}, ["Invoice", "Brand", "Amount", "Issued", "Due", "Status"].map((h) => el("th", {}, h)))),
+        el("tbody", {}, g.invoices.map((inv) => el("tr", { class: "clickable", onclick: () => openInvoice(inv.id) },
+          el("td", {}, el("strong", {}, inv.number)),
+          el("td", {}, inv.brand),
+          el("td", {}, inv.amountText),
+          el("td", { class: "muted" }, fmtDate(inv.issuedDate)),
+          el("td", { class: "muted" }, fmtDate(inv.dueDate)),
+          el("td", {}, invoiceBadge(inv))))))));
+    }
+  }
+
+  async function openInvoice(id) {
+    const inv = await api("GET", "/api/invoices/" + id);
+    const drawer = clear(document.getElementById("drawer"));
+    document.getElementById("drawer-backdrop").classList.remove("hidden");
+    drawer.classList.remove("hidden");
+    const refresh = () => { openInvoice(id); route(); };
+    const pdfUrl = "/api/invoices/" + id + "/pdf";
+
+    drawer.appendChild(el("div", { class: "row" }, el("h1", {}, "Invoice " + inv.number), invoiceBadge(inv), el("div", { class: "spacer" }),
+      el("button", { class: "small", onclick: () => openDeal(inv.opportunityId) }, "Open deal"),
+      el("button", { class: "small", onclick: closeDrawer }, "Close")));
+
+    if (inv.status !== "DRAFT") {
+      const paidOn = el("input", { type: "date", class: "inline", value: new Date().toLocaleDateString("en-CA") });
+      drawer.appendChild(card(null,
+        facts([["Brand", inv.brand], ["Bill to", inv.billTo && el("span", { style: "white-space: pre-line" }, inv.billTo)], ["Email", inv.billToEmail], ["Total", inv.amountText],
+               ["Issued", fmtDate(inv.issuedDate)], ["Due", fmtDate(inv.dueDate)], ["Sent", fmtDate(inv.sentAt)],
+               ["Paid", fmtDate(inv.paidDate)], ["Notes", inv.notes]]),
+        el("ul", { class: "list" }, inv.lineItems.map((li) => el("li", { class: "item" },
+          el("div", { class: "body" }, li.description), el("div", {}, fmtMoney(inv.currency, li.amount))))),
+        el("div", { class: "row" },
+          el("a", { class: "btn small", href: pdfUrl, target: "_blank", rel: "noopener" }, "View PDF"),
+          el("a", { class: "btn small", href: pdfUrl + "?download=true" }, "Download PDF")),
+        inv.status === "SENT" ? el("div", { class: "row" },
+          el("label", { class: "row" }, "Paid on ", paidOn),
+          el("button", { class: "primary small", onclick: action(async () => {
+            await api("POST", "/api/invoices/" + id + "/paid", { paidDate: paidOn.value || null }); refresh();
+          }, "Marked paid 🎉") }, "Mark paid"),
+          el("button", { class: "small", title: "Put the invoice email in Drafts again", onclick: action(async () => {
+            await api("POST", "/api/invoices/" + id + "/email"); closeDrawer(); location.hash = "#drafts"; route();
+          }, "Invoice email is in Drafts") }, "Email again"),
+          el("div", { class: "spacer" }),
+          el("button", { class: "small danger", onclick: action(async () => {
+            if (!confirm("Void " + inv.number + "? Its number won't be reused.")) return;
+            await api("POST", "/api/invoices/" + id + "/void"); refresh();
+          }, "Invoice voided") }, "Void")) : null,
+        inv.status === "SENT" ? el("p", { class: "small muted" }, "The app never marks an invoice paid by itself. Check your bank, then press Mark paid.") : null));
+      return;
+    }
+
+    // Draft: editable
+    const f = {
+      billTo: el("textarea", { maxlength: "1000" }),
+      billToEmail: el("input", { type: "email", value: inv.billToEmail || "", maxlength: "320", placeholder: "billing@brand.com" }),
+      currency: el("input", { class: "short", value: inv.currency, maxlength: "3" }),
+      issuedDate: el("input", { type: "date", value: inv.issuedDate }),
+      dueDate: el("input", { type: "date", value: inv.dueDate }),
+      notes: el("textarea", { maxlength: "2000", placeholder: "Optional, e.g. a PO number" }),
+    };
+    f.billTo.value = inv.billTo || "";
+    f.notes.value = inv.notes || "";
+    const lines = el("div", { class: "stack" });
+    const totalOut = el("strong", {});
+    const recalc = () => {
+      const sum = [...lines.querySelectorAll("input[data-amount]")].reduce((a, i) => a + (Number(i.value) || 0), 0);
+      totalOut.textContent = fmtMoney((f.currency.value || "USD").toUpperCase(), sum);
+    };
+    const addLine = (li) => {
+      const desc = el("input", { class: "grow", value: li.description || "", maxlength: "300", placeholder: "e.g. 1 Instagram Reel, 30 days usage" });
+      const amt = el("input", { class: "amount", type: "number", min: "0", step: "0.01", value: li.amount == null ? "" : String(li.amount), oninput: recalc });
+      amt.dataset.amount = "1";
+      desc.dataset.desc = "1";
+      const row = el("div", { class: "row" }, desc, amt,
+        el("button", { class: "small", title: "Remove line", onclick: () => { row.remove(); recalc(); } }, "✕"));
+      lines.appendChild(row);
+    };
+    inv.lineItems.forEach(addLine);
+    f.currency.addEventListener("input", recalc);
+    recalc();
+    const edits = () => ({
+      billTo: f.billTo.value, billToEmail: f.billToEmail.value, currency: f.currency.value, notes: f.notes.value,
+      issuedDate: f.issuedDate.value || null, dueDate: f.dueDate.value || null,
+      lineItems: [...lines.children].map((r) => ({ description: r.querySelector("[data-desc]").value,
+        amount: Number(r.querySelector("[data-amount]").value) || 0 })),
+    });
+    const save = () => api("PUT", "/api/invoices/" + id, edits());
+
+    drawer.appendChild(card(null,
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Bill to"), f.billTo),
+        el("div", {}, el("label", {}, "Send to email"), f.billToEmail,
+          el("div", { class: "grid" },
+            el("div", {}, el("label", {}, "Invoice date"), f.issuedDate),
+            el("div", {}, el("label", {}, "Due date"), f.dueDate)))),
+      el("label", {}, "What you're billing for"), lines,
+      el("div", { class: "row" }, el("button", { class: "small", onclick: () => { addLine({}); recalc(); } }, "Add line"),
+        el("div", { class: "spacer" }), el("label", { class: "row" }, "Currency ", f.currency), el("span", {}, "Total "), totalOut),
+      el("label", {}, "Notes"), f.notes,
+      el("div", { class: "row" },
+        el("button", { class: "primary", onclick: action(async () => {
+          await save();
+          await api("POST", "/api/invoices/" + id + "/email");
+          closeDrawer(); location.hash = "#drafts"; route();
+        }, "Invoice email is in Drafts. Check it, then press Send.") }, "Email invoice"),
+        el("button", { onclick: action(async () => { await save(); window.open(pdfUrl, "_blank", "noopener"); }) }, "Preview PDF"),
+        el("button", { onclick: action(async () => { await save(); refresh(); }, "Saved") }, "Save"),
+        el("div", { class: "spacer" }),
+        el("button", { title: "You sent the PDF some other way", onclick: action(async () => {
+          await save(); await api("POST", "/api/invoices/" + id + "/sent"); refresh();
+        }, "Marked as sent") }, "I sent it myself"),
+        el("button", { class: "danger", onclick: action(async () => {
+          if (!confirm("Void " + inv.number + "? Its number won't be reused.")) return;
+          await api("POST", "/api/invoices/" + id + "/void"); refresh();
+        }, "Invoice voided") }, "Void")),
+      el("p", { class: "small muted" }, "Email invoice puts a short note with the PDF attached in Drafts. Nothing is sent until you press Send there.")));
+  }
+
   // ---------- Deal drawer ----------
 
   function closeDrawer() {
@@ -248,7 +429,7 @@
   }
 
   async function openDeal(id) {
-    const d = await api("GET", "/api/opportunities/" + id);
+    const [d, invoices] = await Promise.all([api("GET", "/api/opportunities/" + id), api("GET", "/api/opportunities/" + id + "/invoices")]);
     const drawer = clear(document.getElementById("drawer"));
     document.getElementById("drawer-backdrop").classList.remove("hidden");
     drawer.classList.remove("hidden");
@@ -266,6 +447,21 @@
              ["Deliverables", o.deliverables], ["Usage rights", o.usageRights], ["Campaign", o.campaign],
              ["Still unknown", o.missingInfo], ["Next step", o.nextStep], ["Origin", pretty(o.origin)],
              ["Contact", d.brand && [d.brand.contactName, d.brand.contactEmail, d.brand.instagram && "@" + d.brand.instagram].filter(Boolean).join(" · ")]])));
+
+    // Invoices
+    const invoiceAsked = d.tasks.some((t) => t.status === "OPEN" && t.type === "SEND_INVOICE");
+    if (o.compensation !== "GIFTED" || invoices.length) {
+      drawer.appendChild(card("Invoices",
+        invoices.length ? el("ul", { class: "list" }, invoices.map((inv) => el("li", { class: "item" },
+          el("div", { class: "body" }, el("div", { class: "title" }, inv.number + " · " + inv.amountText),
+            el("div", { class: "detail" }, invoiceBadge(inv), " issued " + fmtDate(inv.issuedDate) + " · due " + fmtDate(inv.dueDate))),
+          el("div", { class: "actions" }, el("button", { class: "small", onclick: () => openInvoice(inv.id) }, "Open")))))
+          : emptyLine(invoiceAsked ? "The brand asked for an invoice." : "No invoices yet."),
+        el("p", {}, el("button", { class: "small" + (invoiceAsked || o.status === "PAYMENT_PENDING" ? " primary" : ""), onclick: action(async () => {
+          const inv = await api("POST", "/api/opportunities/" + id + "/invoices");
+          openInvoice(inv.id);
+        }) }, "Create invoice"))));
+    }
 
     // Drafting
     const typeSel = el("select", {}, ["REPLY", "RATES", "MEDIA_KIT", "NEGOTIATION", "FOLLOW_UP", "ASK_BUDGET", "ASK_USAGE_RIGHTS",
@@ -502,6 +698,7 @@
         el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
         el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
+        d.invoiceId ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
         el("label", {}, "Message"), body,
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
@@ -672,7 +869,36 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 6. MCP
+    // 6. Invoices
+    const iv = {
+      invoiceBusinessName: el("input", { value: p.invoiceBusinessName, maxlength: "200", placeholder: p.creatorName }),
+      invoiceAddress: el("textarea", { maxlength: "2000", placeholder: "Street\nCity, postcode\nCountry" }),
+      invoiceTaxId: el("input", { value: p.invoiceTaxId, maxlength: "100" }),
+      invoicePaymentDetails: el("textarea", { maxlength: "2000", placeholder: "Bank name, account holder, account number / IBAN, or PayPal email" }),
+      invoicePrefix: el("input", { value: p.invoicePrefix, maxlength: "10" }),
+      invoiceTermsDays: el("input", { type: "number", min: "0", max: "365", value: p.invoiceTermsDays }),
+    };
+    iv.invoiceAddress.value = p.invoiceAddress;
+    iv.invoicePaymentDetails.value = p.invoicePaymentDetails;
+    steps.appendChild(el("li", { class: p.invoiceAddress && p.invoicePaymentDetails ? "done" : "" },
+      el("h3", {}, "Invoices"),
+      el("p", { class: "small muted" }, "Printed on every invoice. Payment details only appear in the PDF; they're never shown to Claude."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Business name"), iv.invoiceBusinessName),
+        el("div", {}, el("label", {}, "Tax ID (optional)"), iv.invoiceTaxId)),
+      el("label", {}, "Address"), iv.invoiceAddress,
+      el("label", {}, "How brands pay you"), iv.invoicePaymentDetails,
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Invoice number prefix (" + (p.invoicePrefix || "INV") + "-" + new Date().getFullYear() + "-001)"), iv.invoicePrefix),
+        el("div", {}, el("label", {}, "Payment due after (days)"), iv.invoiceTermsDays)),
+      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        const body = {};
+        for (const [k, v] of Object.entries(iv)) body[k] = v.value;
+        await api("PUT", "/api/settings/preferences", body);
+        renderSettings(root);
+      }, "Saved") }, "Save"))));
+
+    // 7. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),

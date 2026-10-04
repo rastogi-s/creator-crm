@@ -6,18 +6,22 @@ import com.creatorcrm.domain.Deadline;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.DraftStatus;
+import com.creatorcrm.domain.Enums.InvoiceStatus;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
 import com.creatorcrm.domain.Enums.Origin;
 import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.domain.Enums.TaskStatus;
 import com.creatorcrm.domain.FollowUp;
+import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
+import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.DeadlineRepo;
 import com.creatorcrm.repo.DraftRepo;
+import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.repo.TaskRepo;
 import com.creatorcrm.settings.SettingsService;
@@ -65,10 +69,12 @@ public class DigestService {
     private final FollowUpEngine followUps;
     private final DraftService draftService;
     private final SettingsService settings;
+    private final InvoiceRepo invoices;
 
     public DigestService(TaskRepo tasks, OpportunityRepo opportunities, BrandRepo brands, DeadlineRepo deadlines,
                          DraftRepo drafts, ActivityRepo activity, FollowUpEngine followUps, DraftService draftService,
-                         SettingsService settings) {
+                         SettingsService settings, InvoiceRepo invoices) {
+        this.invoices = invoices;
         this.tasks = tasks;
         this.opportunities = opportunities;
         this.brands = brands;
@@ -105,6 +111,14 @@ public class DigestService {
             Item item = new Item("DEADLINE", brand + " — " + pretty(d.type.name()) + (d.description == null || d.description.isBlank() ? "" : ": " + d.description),
                     when(d.dueDate, today), d.dueDate, overdue, "HIGH", o.id, d.id, brand, 60 + (int) Math.min(overdue * 5, 30));
             if (!d.dueDate.isAfter(today)) urgent.add(item); else upcoming.add(item);
+        }
+        for (Invoice inv : invoices.findByStatusOrderByDueDateAsc(InvoiceStatus.SENT)) {
+            if (!inv.isOverdue(today)) continue;
+            String brand = brandNames.getOrDefault(inv.brandId, "");
+            long overdue = ChronoUnit.DAYS.between(inv.dueDate, today);
+            urgent.add(new Item("INVOICE", brand + " — invoice " + inv.number + " is unpaid",
+                    InvoicePdf.money(inv.currency, inv.amount) + " was due " + InvoicePdf.date(inv.dueDate),
+                    inv.dueDate, overdue, "HIGH", inv.opportunityId, inv.id, brand, 65 + (int) Math.min(overdue, 30)));
         }
         urgent.sort(Comparator.comparingInt(Item::score).reversed());
         upcoming.sort(Comparator.comparing(Item::due, Comparator.nullsLast(Comparator.naturalOrder())));

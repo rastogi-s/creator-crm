@@ -33,6 +33,10 @@ message before anything is sent.
   send it, the follow-up schedule starts like any other pitch.
 - **Drafts in your voice**: replies, rates, negotiation, follow-ups, declines, "ask for budget / usage
   rights", and so on. Email drafts are also saved in your Gmail Drafts folder.
+- **Invoices and the Money tab**: create an invoice from a deal (amount and deliverables filled in, numbered
+  `INV-2026-001` upward per year), email it with the PDF attached after you approve the draft, and mark it paid
+  when the money lands. The Money tab shows booked, invoiced, paid-this-month and overdue totals, and exports
+  the year's invoices as CSV. Overdue invoices also show on Today.
 - **End-of-day summary**: what was completed, what's pending, new opportunities, tomorrow's priorities.
 - **MCP server**: use the CRM from Claude Desktop, Claude Code or Cowork ("what's on my plate today?").
 

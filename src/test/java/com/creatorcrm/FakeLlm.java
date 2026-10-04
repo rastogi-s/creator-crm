@@ -24,6 +24,8 @@ public class FakeLlm implements LlmClient {
     public DraftInput lastDraftInput;
     /** When set, every classify call throws this (simulates Claude being down). */
     public RuntimeException failWith;
+    /** When set, every writeDraft call throws this. */
+    public RuntimeException failDraftsWith;
 
     public static MessageAnalysis analysis(Intent intent, String brand, boolean requiresReply,
                                            List<MessageAnalysis.ExtractedDeadline> deadlines) {
@@ -48,6 +50,7 @@ public class FakeLlm implements LlmClient {
     public DraftText writeDraft(DraftInput input) {
         draftCalls++;
         lastDraftInput = input;
+        if (failDraftsWith != null) throw failDraftsWith;
         return new DraftText("Re: collab", "Hi Maya, thanks! [" + input.draftType() + "]");
     }
 
