@@ -2,6 +2,7 @@ package com.creatorcrm.web;
 
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.invoices.InvoiceService;
+import com.creatorcrm.invoices.PaymentReminders;
 import com.creatorcrm.invoices.InvoiceService.InvoiceEdit;
 import com.creatorcrm.invoices.InvoiceService.InvoiceView;
 import com.creatorcrm.settings.SettingsService;
@@ -30,8 +31,10 @@ public class InvoiceController {
 
     private final InvoiceService invoices;
     private final SettingsService settings;
+    private final PaymentReminders reminders;
 
-    public InvoiceController(InvoiceService invoices, SettingsService settings) {
+    public InvoiceController(InvoiceService invoices, SettingsService settings, PaymentReminders reminders) {
+        this.reminders = reminders;
         this.invoices = invoices;
         this.settings = settings;
     }
@@ -82,6 +85,12 @@ public class InvoiceController {
     @PostMapping("/invoices/{id}/email")
     public Draft email(@PathVariable Long id) {
         return invoices.emailDraft(id);
+    }
+
+    /** The next payment reminder, now. Like every reminder, it waits in Drafts for approval. */
+    @PostMapping("/invoices/{id}/reminder")
+    public Draft reminder(@PathVariable Long id) {
+        return reminders.draftNow(id);
     }
 
     @PostMapping("/invoices/{id}/sent")

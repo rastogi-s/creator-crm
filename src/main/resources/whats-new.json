@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.6.0",
+    "title": "Payment reminders",
+    "features": [
+      {
+        "id": "payment-reminders",
+        "title": "Late payments get a polite nudge",
+        "body": "When an invoice is 3, 7 and 14 days past its due date, a short reminder with the invoice attached is written for you, a little firmer each time. Today shows which brands are late, and every reminder waits in Drafts for you to check and send, even if follow-ups go out automatically. Reminders stop the moment you mark the invoice paid. Change the days, or turn reminders off, under Settings, Invoices.",
+        "video": "payment-reminders.webm",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.4.0",
     "title": "Invoices and the Money tab",
     "features": [

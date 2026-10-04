@@ -26,6 +26,9 @@ public class Invoice {
     public LocalDate dueDate;
     public OffsetDateTime sentAt;
     public LocalDate paidDate;
+    /** Payment reminder emails sent so far, and the day the last one went out. */
+    public int remindersSent;
+    public LocalDate lastReminderOn;
     @Enumerated(EnumType.STRING) public InvoiceStatus status;
     public OffsetDateTime createdAt;
 

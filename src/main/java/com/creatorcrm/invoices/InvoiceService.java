@@ -5,6 +5,7 @@ import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
+import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.InvoiceStatus;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
 import com.creatorcrm.domain.Enums.Platform;
@@ -58,7 +59,8 @@ public class InvoiceService {
     public record InvoiceView(Long id, String number, Long opportunityId, String brand, String billTo,
                               String billToEmail, String currency, BigDecimal amount, String amountText,
                               List<LineItem> lineItems, String notes, LocalDate issuedDate, LocalDate dueDate,
-                              OffsetDateTime sentAt, LocalDate paidDate, String status, long daysOverdue) {}
+                              OffsetDateTime sentAt, LocalDate paidDate, String status, long daysOverdue,
+                              int remindersSent, LocalDate lastReminderOn) {}
 
     /** A deal the brand agreed to pay for that has no invoice yet. */
     public record ReadyToInvoice(Long opportunityId, String brand, String campaign, String currency, BigDecimal amount,
@@ -183,7 +185,7 @@ public class InvoiceService {
                 "Hi " + who + ",\n\nPlease find attached invoice " + inv.number + " for " + amount + ", due "
                         + InvoicePdf.date(inv.dueDate) + ".\n\nThank you, it was a pleasure working with you!\n\n"
                         + settings.creatorName());
-        return drafts.generateInvoiceEmail(inv, instructions, fallback);
+        return drafts.generateInvoiceEmail(inv, DraftType.INVOICE, instructions, fallback);
     }
 
     /** She sent the invoice outside the app (e.g. downloaded the PDF and emailed it herself). */
@@ -251,7 +253,7 @@ public class InvoiceService {
         return new InvoiceView(i.id, i.number, i.opportunityId, brand, i.billTo, i.billToEmail, i.currency, i.amount,
                 InvoicePdf.money(i.currency, i.amount), LineItem.parse(i.lineItems), i.notes, i.issuedDate, i.dueDate,
                 i.sentAt, i.paidDate, i.status.name(),
-                i.isOverdue(today) ? ChronoUnit.DAYS.between(i.dueDate, today) : 0);
+                i.isOverdue(today) ? ChronoUnit.DAYS.between(i.dueDate, today) : 0, i.remindersSent, i.lastReminderOn);
     }
 
     public List<InvoiceView> forDeal(Long opportunityId) {

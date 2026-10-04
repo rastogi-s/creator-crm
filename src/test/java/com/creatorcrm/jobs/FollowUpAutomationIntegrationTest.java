@@ -12,6 +12,9 @@ import com.creatorcrm.channels.gmail.GmailConnector;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftStatus;
+import com.creatorcrm.domain.Enums.DraftType;
+import com.creatorcrm.domain.Invoice;
+import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.domain.Enums.FollowUpStatus;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
@@ -60,6 +63,7 @@ class FollowUpAutomationIntegrationTest {
     @Autowired FollowUpRepo followUps;
     @Autowired ActivityRepo activity;
     @Autowired AppStateRepo state;
+    @Autowired InvoiceService invoices;
 
     @BeforeEach
     void connectFakeGmail() throws Exception {
@@ -109,6 +113,21 @@ class FollowUpAutomationIntegrationTest {
         jobs.autoSendFollowUps();
 
         assertThat(pendingDraft(o).status).isEqualTo(DraftStatus.PENDING);
+    }
+
+    @Test
+    void paymentRemindersAreDraftedInTheMorningButNeverSentAutomatically() {
+        Opportunity o = pitch("sam@" + UUID.randomUUID() + ".test", null);
+        Invoice inv = invoices.markSent(invoices.createForDeal(o.id, settings.today().minusDays(40)).id);
+        jobs.prepareMorning();
+        Draft reminder = drafts.findByOpportunityIdAndStatus(o.id, DraftStatus.PENDING).stream()
+                .filter(d -> d.type == DraftType.PAYMENT_REMINDER).findFirst().orElseThrow();
+        assertThat(reminder.invoiceId).isEqualTo(inv.id);
+        assertThat(reminder.channel).isEqualTo(Platform.EMAIL);
+
+        jobs.autoSendFollowUps();
+
+        assertThat(drafts.findById(reminder.id).orElseThrow().status).isEqualTo(DraftStatus.PENDING);
     }
 
     @Test

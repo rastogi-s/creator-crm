@@ -116,6 +116,27 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "payment-reminders"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    const late = page.locator("#view-today .item", { hasText: "Maple & Moss: payment" });
+    await late.waitFor();
+    await say("When a brand pays late, Today tells you how late, and how many reminders you've already sent.", 4400);
+    await point(late);
+    await say("A polite reminder with the invoice attached is already written. It gets a little firmer each time.", 4400);
+    await click(late.getByRole("button", { name: "Review reminder" }));
+    const draft = page.locator("#view-drafts .card", { hasText: "Payment reminder" }).first();
+    await draft.waitFor();
+    await point(draft.locator("textarea"));
+    await say("Check it, change anything you like, then press Send. Reminders never go out without you.", 4400);
+    await click(page.locator(".tab[data-tab=settings]"));
+    const days = page.getByText("Payment reminders: days after the due date");
+    await point(days);
+    await say("Under Settings, Invoices, pick the days: 3, 7 and 14 after the due date to start with.", 4200);
+    await say("Reminders stop as soon as you mark the invoice paid.", 3200);
+    await say("", 600);
+  },
+
   async "whats-new"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#whatsnew");

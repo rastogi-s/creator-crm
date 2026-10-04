@@ -112,23 +112,26 @@ public class DraftService {
 
     @Transactional
     public Draft generate(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId) {
-        if (type == DraftType.INVOICE) throw new IllegalArgumentException("Create invoices from the deal's Invoices section");
+        if (type == DraftType.INVOICE || type == DraftType.PAYMENT_REMINDER) {
+            throw new IllegalArgumentException("Invoices and payment reminders are written from the invoice itself");
+        }
         return create(opportunityId, type, instructions, taskId, followupId, null, null);
     }
 
     /**
-     * The email that sends an invoice: the PDF goes out attached, to {@code invoice.billToEmail} when set.
-     * If Claude can't write the note (no API key, outage), {@code fallback} is used so invoicing never depends on AI.
+     * An email about an invoice ({@link DraftType#INVOICE} or {@link DraftType#PAYMENT_REMINDER}): the PDF goes out
+     * attached, to {@code invoice.billToEmail} when set. If Claude can't write the note (no API key, outage),
+     * {@code fallback} is used so invoicing never depends on AI. Replaces a pending draft of the same kind.
      */
     @Transactional
-    public Draft generateInvoiceEmail(Invoice invoice, String instructions, DraftText fallback) {
+    public Draft generateInvoiceEmail(Invoice invoice, DraftType type, String instructions, DraftText fallback) {
         for (Draft old : drafts.findByOpportunityIdAndStatus(invoice.opportunityId, DraftStatus.PENDING)) {
-            if (invoice.id.equals(old.invoiceId)) {
+            if (invoice.id.equals(old.invoiceId) && old.type == type) {
                 old.status = DraftStatus.SUPERSEDED;
                 drafts.save(old);
             }
         }
-        return create(invoice.opportunityId, DraftType.INVOICE, instructions, null, null, invoice, fallback);
+        return create(invoice.opportunityId, type, instructions, null, null, invoice, fallback);
     }
 
     private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
@@ -358,7 +361,12 @@ public class DraftService {
             messages.save(m);
         }
         if (d.type == DraftType.PITCH && o.pitchedAt == null) o.pitchedAt = settings.today();
-        if (d.invoiceId != null) invoices.findById(d.invoiceId).ifPresent(this::markInvoiceSent);
+        if (d.invoiceId != null) {
+            invoices.findById(d.invoiceId).ifPresent(inv -> {
+                if (d.type == DraftType.PAYMENT_REMINDER) recordReminder(inv);
+                else markInvoiceSent(inv);
+            });
+        }
         workflow.onCreatorMessage(o, intentOf(d.type), settings.today());
         learning.recordDraftSent(d, workflow.brandName(o));
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
@@ -373,9 +381,15 @@ public class DraftService {
         invoices.save(inv);
     }
 
+    private void recordReminder(Invoice inv) {
+        inv.remindersSent++;
+        inv.lastReminderOn = settings.today();
+        invoices.save(inv);
+    }
+
     private static Intent intentOf(DraftType type) {
         return switch (type) {
-            case INVOICE -> Intent.INVOICE_SENT;
+            case INVOICE, PAYMENT_REMINDER -> Intent.INVOICE_SENT;
             case FOLLOW_UP -> Intent.CREATOR_FOLLOW_UP;
             case PITCH -> Intent.PITCH;
             case DECLINE -> Intent.CREATOR_DECLINED;

@@ -30,7 +30,9 @@ final class DemoInbox {
             new Mail("Lumen Labs", "Ria", "ria@lumenlabs.example", 6, "Invoice for the September Reel",
                     "Hi Ava, Lumen Labs here. The September Reel performed great! Please send your invoice for the $1,200 fee."),
             new Mail("Juniper Juice", "Dana", "dana@juniperjuice.example", 1, "Payment for the summer Reel",
-                    "Hi Ava, Dana from Juniper Juice. Our finance team sent the $500 payment for the summer Reel yesterday. Let us know when it lands!"));
+                    "Hi Ava, Dana from Juniper Juice. Our finance team sent the $500 payment for the summer Reel yesterday. Let us know when it lands!"),
+            new Mail("Maple & Moss", "Sky", "sky@maplemoss.example", 50, "Your August Reel is approved",
+                    "Hi Ava, Sky from Maple & Moss. The August Reel looks great, approved! Go ahead and post it."));
 
     static MessageAnalysis analysisFor(String text, LocalDate today) {
         String t = text == null ? "" : text;
@@ -57,6 +59,9 @@ final class DemoInbox {
         if (t.contains("Juniper Juice")) return a("Juniper Juice", "Dana", Intent.PAYMENT_UPDATE, OpportunityType.PAID, Compensation.PAID, 500,
                 "1 Reel", "Summer Reel", List.of(), List.of(), false, Priority.MEDIUM,
                 "Check that Juniper Juice's $500 payment arrived, then mark the invoice paid", "Juniper Juice says the $500 payment for the summer Reel was sent.");
+        if (t.contains("Maple & Moss")) return a("Maple & Moss", "Sky", Intent.CONTENT_APPROVED, OpportunityType.PAID, Compensation.PAID, 750,
+                "1 Reel", "August Reel", List.of(), List.of(), false, Priority.MEDIUM,
+                "Post the Maple & Moss Reel", "Maple & Moss approved the August Reel.");
         return new MessageAnalysis(false, "", "", Intent.NOT_BRAND_RELATED, OpportunityType.OTHER, Compensation.UNKNOWN, 0, "",
                 "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "");
     }

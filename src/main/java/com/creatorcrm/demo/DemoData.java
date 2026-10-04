@@ -4,7 +4,10 @@ import com.creatorcrm.channels.NormalizedMessage;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.invoices.InvoiceService;
+import com.creatorcrm.invoices.PaymentReminders;
+import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.security.AppUser;
 import com.creatorcrm.security.AppUserRepo;
@@ -41,10 +44,14 @@ public class DemoData implements ApplicationRunner {
     private final InvoiceService invoices;
     private final OpportunityRepo opportunities;
     private final WorkflowEngine workflow;
+    private final InvoiceRepo invoiceRepo;
+    private final PaymentReminders paymentReminders;
 
     public DemoData(AppUserRepo users, PasswordEncoder encoder, SettingsService settings, IngestionService ingestion,
                     OutreachService outreach, InvoiceService invoices, OpportunityRepo opportunities,
-                    WorkflowEngine workflow) {
+                    WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders) {
+        this.invoiceRepo = invoiceRepo;
+        this.paymentReminders = paymentReminders;
         this.invoices = invoices;
         this.opportunities = opportunities;
         this.workflow = workflow;
@@ -85,6 +92,16 @@ public class DemoData implements ApplicationRunner {
         opportunities.findAll().stream()
                 .filter(o -> "Juniper Juice".equals(workflow.brandName(o))).findFirst()
                 .ifPresent(o -> invoices.markSent(invoices.createForDeal(o.id, settings.today().minusDays(35)).id));
+        // Fifteen days late with one reminder already sent: the second reminder is drafted for approval.
+        opportunities.findAll().stream()
+                .filter(o -> "Maple & Moss".equals(workflow.brandName(o))).findFirst()
+                .ifPresent(o -> {
+                    Invoice inv = invoices.markSent(invoices.createForDeal(o.id, settings.today().minusDays(45)).id);
+                    inv.remindersSent = 1;
+                    inv.lastReminderOn = settings.today().minusDays(8);
+                    invoiceRepo.save(inv);
+                });
+        paymentReminders.draftDue(settings.today());
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
     }
 }

@@ -6,6 +6,7 @@ import com.creatorcrm.domain.Deadline;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.DraftStatus;
+import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.InvoiceStatus;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
 import com.creatorcrm.domain.Enums.Origin;
@@ -112,12 +113,19 @@ public class DigestService {
                     when(d.dueDate, today), d.dueDate, overdue, "HIGH", o.id, d.id, brand, 60 + (int) Math.min(overdue * 5, 30));
             if (!d.dueDate.isAfter(today)) urgent.add(item); else upcoming.add(item);
         }
+        Set<Long> reminderReady = new java.util.HashSet<>();
+        drafts.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING).stream()
+                .filter(d -> d.type == DraftType.PAYMENT_REMINDER && d.invoiceId != null)
+                .forEach(d -> reminderReady.add(d.invoiceId));
         for (Invoice inv : invoices.findByStatusOrderByDueDateAsc(InvoiceStatus.SENT)) {
             if (!inv.isOverdue(today)) continue;
             String brand = brandNames.getOrDefault(inv.brandId, "");
             long overdue = ChronoUnit.DAYS.between(inv.dueDate, today);
-            urgent.add(new Item("INVOICE", brand + " — invoice " + inv.number + " is unpaid",
-                    InvoicePdf.money(inv.currency, inv.amount) + " was due " + InvoicePdf.date(inv.dueDate),
+            urgent.add(new Item("INVOICE", brand + ": payment " + overdue + (overdue == 1 ? " day" : " days") + " late",
+                    "Invoice " + inv.number + ", " + InvoicePdf.money(inv.currency, inv.amount) + ", was due "
+                            + InvoicePdf.date(inv.dueDate)
+                            + (inv.remindersSent > 0 ? " · " + inv.remindersSent + (inv.remindersSent == 1 ? " reminder" : " reminders") + " sent" : "")
+                            + (reminderReady.contains(inv.id) ? " · reminder ready in Drafts" : ""),
                     inv.dueDate, overdue, "HIGH", inv.opportunityId, inv.id, brand, 65 + (int) Math.min(overdue, 30)));
         }
         urgent.sort(Comparator.comparingInt(Item::score).reversed());
