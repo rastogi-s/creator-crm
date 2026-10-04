@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.19.0",
+    "version": "1.21.0",
     "title": "Contract check",
     "features": [
       {
@@ -9,6 +9,19 @@
         "body": "When a brand emails a contract as a PDF, Claude reads it and the deal shows a checklist: when you get paid, the fee, how long they can use your content in ads, exclusivity, revision rounds and a kill fee. Anything outside your limits is marked red or amber, and a Review contract task appears on Today. For contracts on DocuSign and similar sites, paste the text on the deal to check it. Set your limits in Settings, Contract check.",
         "video": "contract-check.webm",
         "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
+    "version": "1.20.0",
+    "title": "A friendlier Day summary",
+    "features": [
+      {
+        "id": "day-summary",
+        "title": "Your day at a glance",
+        "body": "Day summary has a fresh look. At the top you see how many things you got done, what's still to do, new deals and what's lined up for tomorrow; press any of them to jump there. Each thing you did today shows the brand and the time. Things still waiting have Done and Open buttons right there, and if drafts are ready to send there's a button to review them.",
+        "video": "day-summary.webm",
+        "tryIt": "#summary"
       }
     ]
   },

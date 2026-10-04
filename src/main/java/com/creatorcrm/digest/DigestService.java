@@ -63,8 +63,16 @@ public class DigestService {
                           OpportunityCounts newOpportunities, List<Item> upcoming, List<Approval> approvals,
                           Map<String, Long> pipeline, BigDecimal openPipelineValue, List<Item> rebook) {}
 
+    /** The string lists are kept for the plain-text summary; the Day summary page uses the structured fields. */
     public record EndOfDay(LocalDate date, List<String> completed, List<String> stillPending,
-                           OpportunityCounts newOpportunities, List<String> tomorrow) {}
+                           OpportunityCounts newOpportunities, List<String> tomorrow,
+                           String headline, List<Done> done, List<Item> pending, List<Item> followUps,
+                           List<NewDeal> newDeals, List<Item> tomorrowItems, int draftsWaiting) {}
+
+    /** Something she did (or that happened for her) today. {@code kind}: TASK, SENT, REPLY, MONEY or PITCH. */
+    public record Done(String kind, String text, String brand, OffsetDateTime at, Long opportunityId) {}
+
+    public record NewDeal(Long opportunityId, String brand, String type, String compensation, String budget) {}
 
     private static final Set<OpportunityStatus> COUNTED = EnumSet.complementOf(EnumSet.of(OpportunityStatus.CLOSED, OpportunityStatus.COLD));
 
@@ -191,28 +199,70 @@ public class DigestService {
     public EndOfDay endOfDay() {
         LocalDate today = settings.today();
         OffsetDateTime start = today.atStartOfDay(settings.zone()).toOffsetDateTime();
-        List<String> completed = activity.findByAtAfterOrderByAtAsc(start).stream()
-                .filter(a -> Set.of(Activity.TASK_DONE, Activity.DRAFT_SENT, Activity.FOLLOWUP_SENT, Activity.BRAND_REPLIED).contains(a.type))
-                .map(a -> a.text).distinct().toList();
+        Map<Long, String> brandNames = new LinkedHashMap<>();
+        brands.findAll().forEach(b -> brandNames.put(b.id, b.name));
+        Map<Long, Long> brandOf = new LinkedHashMap<>();
+        opportunities.findAll().forEach(o -> brandOf.put(o.id, o.brandId));
+
+        List<Done> done = new ArrayList<>();
+        Set<String> seen = new java.util.HashSet<>();
+        for (Activity a : activity.findByAtAfterOrderByAtAsc(start)) {
+            String kind = doneKind(a);
+            if (kind == null || !seen.add(a.opportunityId + "|" + a.text)) continue;
+            String brand = a.opportunityId == null ? "" : brandNames.getOrDefault(brandOf.get(a.opportunityId), "");
+            done.add(new Done(kind, capitalize(a.text), brand, a.at, a.opportunityId));
+        }
+        List<String> completed = done.stream().map(Done::text).toList();
 
         Morning m = morning();
         List<String> pending = new ArrayList<>();
         m.urgent().forEach(i -> pending.add(i.title()));
         m.followUps().forEach(i -> pending.add(i.title()));
 
-        Map<Long, String> brandNames = new LinkedHashMap<>();
-        brands.findAll().forEach(b -> brandNames.put(b.id, b.name));
-        OpportunityCounts fresh = counts(opportunities.findByCreatedAtAfter(start).stream()
-                .filter(o -> o.origin == Origin.INBOUND).toList(), brandNames);
+        List<Opportunity> freshDeals = opportunities.findByCreatedAtAfter(start).stream()
+                .filter(o -> o.origin == Origin.INBOUND).toList();
+        OpportunityCounts fresh = counts(freshDeals, brandNames);
+        List<NewDeal> newDeals = freshDeals.stream().map(o -> new NewDeal(o.id, brandNames.getOrDefault(o.brandId, "?"),
+                pretty(o.type.name()), o.compensation.name(), o.budgetText == null || o.budgetText.isBlank() ? null : o.budgetText)).toList();
 
         LocalDate tomorrow = today.plusDays(1);
+        // Anything due tomorrow goes under tomorrow, even when it is high priority; the rest of the urgent list is
+        // what is still waiting on her.
+        List<Item> tomorrowItems = new ArrayList<>();
+        m.urgent().stream().filter(i -> tomorrow.equals(i.due())).forEach(tomorrowItems::add);
+        m.upcoming().stream().filter(i -> tomorrow.equals(i.due())).forEach(tomorrowItems::add);
+        List<Item> waiting = m.urgent().stream().filter(i -> !tomorrow.equals(i.due())).toList();
+        followUps.dueOnOrBefore(tomorrow).stream().filter(f -> f.scheduledDate.equals(tomorrow)).forEach(f -> {
+            String brand = brandNames.getOrDefault(brandOf.get(f.opportunityId), "");
+            tomorrowItems.add(new Item("FOLLOW_UP", brand + " — Follow-up #" + f.number, "due tomorrow",
+                    f.scheduledDate, 0, "MEDIUM", f.opportunityId, f.id, brand, 40 + f.number));
+        });
         List<String> next = new ArrayList<>();
-        m.upcoming().stream().filter(i -> tomorrow.equals(i.due())).forEach(i -> next.add(i.title()));
-        followUps.dueOnOrBefore(tomorrow).stream().filter(f -> f.scheduledDate.equals(tomorrow))
-                .forEach(f -> next.add(opportunities.findById(f.opportunityId).map(o -> brandNames.get(o.brandId)).orElse("")
-                        + " — Follow-up #" + f.number));
+        tomorrowItems.forEach(i -> next.add(i.title()));
         m.urgent().stream().limit(3).map(Item::title).filter(t -> !next.contains(t)).forEach(next::add);
-        return new EndOfDay(today, completed, pending, fresh, next);
+
+        String name = settings.creatorName();
+        String headline = done.isEmpty() ? "Here's your day, " + name + "."
+                : "Nice work, " + name + "! You got " + done.size() + (done.size() == 1 ? " thing" : " things") + " done today.";
+        return new EndOfDay(today, completed, pending, fresh, next,
+                headline, done, waiting, m.followUps(), newDeals, tomorrowItems, m.approvals().size());
+    }
+
+    private static String doneKind(Activity a) {
+        if (a.type == null || a.text == null) return null;
+        return switch (a.type) {
+            case Activity.TASK_DONE -> "TASK";
+            case Activity.DRAFT_SENT, Activity.FOLLOWUP_SENT -> "SENT";
+            case Activity.BRAND_REPLIED -> "REPLY";
+            // "Created" is followed by "marked as sent" once it goes out; one line per invoice is enough.
+            case Activity.INVOICE -> a.text.endsWith(" voided") || a.text.contains(" created for ") ? null : "MONEY";
+            case Activity.NEW_OPPORTUNITY -> a.text.startsWith("Pitched ") || a.text.startsWith("Re-pitched ") ? "PITCH" : null;
+            default -> null;
+        };
+    }
+
+    private static String capitalize(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     private Item taskItem(Task t, Opportunity o, String brand, LocalDate today, LeadScoring.Score lead) {
