@@ -36,6 +36,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -140,7 +141,8 @@ public class WorkflowEngine {
     @Transactional
     public void onCreatorMessage(Opportunity o, Intent intent, LocalDate day) {
         for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
-            if (TaskType.ANSWERED_BY_OUTBOUND.contains(t.type)) completeTask(t);
+            if (TaskType.ANSWERED_BY_OUTBOUND.contains(t.type)
+                    || (intent == Intent.INVOICE_SENT && t.type == TaskType.SEND_INVOICE)) completeTask(t);
         }
         IntentRules.Rule rule = IntentRules.of(intent);
         if (rule.status() != null && (o.status.isOpen() || intent == Intent.PITCH)) {
@@ -151,11 +153,20 @@ public class WorkflowEngine {
         if (intent == Intent.CREATOR_DECLINED) {
             o.closedReason = "Declined by creator";
             closeOpenWork(o);
-        } else if (intent != Intent.CONTENT_POSTED) {
+        } else if (intent != Intent.CONTENT_POSTED && intent != Intent.INVOICE_SENT) {
+            // An invoice has its own due date; chasing it before then would be rude.
             followUps.onCreatorMessage(o, day, intent == Intent.CREATOR_FOLLOW_UP);
         }
         o.updatedAt = OffsetDateTime.now();
         opportunities.save(o);
+    }
+
+    /** Marks the deal's open tasks of these types done (e.g. "confirm payment" once the invoice is paid). */
+    @Transactional
+    public void completeOpenTasks(Long opportunityId, Set<TaskType> types) {
+        for (Task t : tasks.findByOpportunityIdAndStatus(opportunityId, TaskStatus.OPEN)) {
+            if (types.contains(t.type)) completeTask(t);
+        }
     }
 
     @Transactional
@@ -274,6 +285,7 @@ public class WorkflowEngine {
             case REVISE_CONTENT -> "Revise content for " + b;
             case POST_CONTENT -> "Post " + b + " content";
             case SEND_INVOICE -> "Send invoice to " + b;
+            case CONFIRM_PAYMENT -> "Check that " + b + "'s payment arrived, then mark the invoice paid";
             default -> "Reply to " + b;
         };
     }
@@ -293,7 +305,7 @@ public class WorkflowEngine {
         }
         return switch (type) {
             case SIGN_CONTRACT -> messageDay.plusDays(2);
-            case COMPLETE_APPLICATION, SEND_INVOICE -> messageDay.plusDays(3);
+            case COMPLETE_APPLICATION, SEND_INVOICE, CONFIRM_PAYMENT -> messageDay.plusDays(3);
             case CREATE_CONTENT, REVISE_CONTENT, POST_CONTENT -> null;
             default -> messageDay.plusDays(1); // reply within a day
         };

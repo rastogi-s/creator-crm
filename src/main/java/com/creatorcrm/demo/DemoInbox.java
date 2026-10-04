@@ -28,7 +28,9 @@ final class DemoInbox {
             new Mail("Thread & Thimble", "Lee", "lee@threadthimble.example", 1, "Gifted collab: new knit line",
                     "Hello Ava! Thread & Thimble would love to send you our new knit line as a gifted collab."),
             new Mail("Lumen Labs", "Ria", "ria@lumenlabs.example", 6, "Invoice for the September Reel",
-                    "Hi Ava, the September Reel performed great! Please send your invoice for the $1,200 fee."));
+                    "Hi Ava, Lumen Labs here. The September Reel performed great! Please send your invoice for the $1,200 fee."),
+            new Mail("Juniper Juice", "Dana", "dana@juniperjuice.example", 1, "Payment for the summer Reel",
+                    "Hi Ava, Dana from Juniper Juice. Our finance team sent the $500 payment for the summer Reel yesterday. Let us know when it lands!"));
 
     static MessageAnalysis analysisFor(String text, LocalDate today) {
         String t = text == null ? "" : text;
@@ -52,6 +54,9 @@ final class DemoInbox {
         if (t.contains("Lumen Labs")) return a("Lumen Labs", "Ria", Intent.INVOICE_REQUEST, OpportunityType.PAID, Compensation.PAID, 1200,
                 "1 Reel", "September Reel", List.of(), List.of(), true, Priority.HIGH,
                 "Send Lumen Labs the invoice", "Lumen Labs asks for the invoice for the $1,200 September Reel.");
+        if (t.contains("Juniper Juice")) return a("Juniper Juice", "Dana", Intent.PAYMENT_UPDATE, OpportunityType.PAID, Compensation.PAID, 500,
+                "1 Reel", "Summer Reel", List.of(), List.of(), false, Priority.MEDIUM,
+                "Check that Juniper Juice's $500 payment arrived, then mark the invoice paid", "Juniper Juice says the $500 payment for the summer Reel was sent.");
         return new MessageAnalysis(false, "", "", Intent.NOT_BRAND_RELATED, OpportunityType.OTHER, Compensation.UNKNOWN, 0, "",
                 "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "");
     }

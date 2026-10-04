@@ -4,7 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.creatorcrm.backup.BackupService;
+import com.creatorcrm.domain.Enums.InvoiceStatus;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
+import com.creatorcrm.domain.Invoice;
+import com.creatorcrm.invoices.InvoiceService;
+import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.repo.FollowUpRepo;
 import com.creatorcrm.repo.OpportunityRepo;
@@ -29,6 +33,8 @@ class BackupRoundTripTest {
     @Autowired OpportunityRepo opportunities;
     @Autowired FollowUpRepo followUps;
     @Autowired SecretStore secrets;
+    @Autowired InvoiceService invoices;
+    @Autowired InvoiceRepo invoiceRepo;
 
     private static final char[] PASS = "correct horse battery staple".toCharArray();
 
@@ -37,6 +43,9 @@ class BackupRoundTripTest {
         Opportunity kept = outreach.logPitch(new OutreachService.PitchRequest("Aurora Labs", "Ana", "ana@aurora.test", null,
                 "EMAIL", "UGC", LocalDate.now().minusDays(2), null, false));
         secrets.put(SecretName.ANTHROPIC_API_KEY, "sk-ant-before-backup");
+        Opportunity billed = outreach.logPitch(new OutreachService.PitchRequest("Billed Brand", "Bo", "bo@billed.test", null,
+                "EMAIL", "Reel", LocalDate.now().minusDays(9), null, false));
+        Invoice invoice = invoices.markSent(invoices.createForDeal(billed.id, LocalDate.of(2026, 3, 2)).id);
         long countAtBackup = opportunities.count();
 
         byte[] file = backups.export(PASS);
@@ -47,6 +56,7 @@ class BackupRoundTripTest {
         kept.status = OpportunityStatus.CLOSED;
         opportunities.save(kept);
         secrets.put(SecretName.ANTHROPIC_API_KEY, "sk-ant-after-backup");
+        invoices.markPaid(invoice.id, LocalDate.of(2026, 3, 20));
 
         BackupService.Summary s = backups.restore(file, PASS);
         assertThat(s.rows().get("opportunities")).isEqualTo((int) countAtBackup);
@@ -57,6 +67,12 @@ class BackupRoundTripTest {
         assertThat(opportunities.findById(kept.id).orElseThrow().status).isEqualTo(OpportunityStatus.PITCHED);
         assertThat(followUps.findByOpportunityIdOrderByNumberAsc(kept.id)).hasSize(1);
         assertThat(secrets.get(SecretName.ANTHROPIC_API_KEY)).contains("sk-ant-before-backup");
+        Invoice restored = invoiceRepo.findById(invoice.id).orElseThrow();
+        assertThat(restored.number).isEqualTo(invoice.number);
+        assertThat(restored.status).isEqualTo(InvoiceStatus.SENT);
+        assertThat(restored.amount).isEqualByComparingTo(invoice.amount);
+        assertThat(restored.lineItems).isEqualTo(invoice.lineItems);
+        assertThat(s.rows().get("invoices")).isEqualTo(1);
 
         // Ids continue after the restored rows (identity sequences reset)
         Opportunity next = outreach.logPitch(new OutreachService.PitchRequest("Next Brand", null, null, null, "EMAIL", "", null, null, false));

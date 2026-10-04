@@ -83,6 +83,39 @@ const scenarios = {
     await say("", 600);
   },
 
+  async invoices(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#money");
+    await page.locator("#view-money h1").waitFor();
+    await say("The Money tab shows what's booked, what's invoiced and waiting, what's been paid and what's late.", 4200);
+    const ready = page.locator("#view-money .item", { hasText: "Lumen Labs" });
+    await point(ready);
+    await say("Lumen Labs asked for an invoice. Press Create invoice.", 3200);
+    await click(ready.getByRole("button", { name: "Create invoice" }));
+    await drawer.getByRole("button", { name: "Email invoice" }).waitFor();
+    await say("The amount and what you made come from the deal. Change anything you need.", 4000);
+    await point(drawer.getByRole("button", { name: "Preview PDF" }));
+    await say("Preview PDF shows exactly what the brand gets.", 3000);
+    await click(drawer.getByRole("button", { name: "Email invoice" }));
+    await page.locator("#view-drafts").getByText("is attached").first().waitFor();
+    await point(page.locator("#view-drafts").getByText("Invoice PDF").first());
+    await say("A short note with the PDF attached waits in Drafts. Nothing is sent until you press Send.", 4400);
+    await click(page.locator(".tab[data-tab=money]"));
+    const late = page.locator("#view-money tr", { hasText: "Juniper Juice" });
+    await point(late);
+    await say("Juniper Juice's invoice is overdue, and they say they've paid.", 3600);
+    await click(late);
+    await point(drawer.getByRole("button", { name: "Mark paid" }));
+    await say("Once the money is in your bank, press Mark paid. The app never decides that for you.", 4200);
+    await click(drawer.getByRole("button", { name: "Mark paid" }));
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    await point(page.locator("#view-money .stat").nth(2));
+    await say("It now counts in Paid this month. Export CSV gives you the year's invoices for taxes.", 4200);
+    await say("", 600);
+  },
+
   async "whats-new"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#whatsnew");

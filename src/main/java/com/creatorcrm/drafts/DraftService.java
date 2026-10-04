@@ -2,14 +2,18 @@ package com.creatorcrm.drafts;
 
 import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.domain.Activity;
+import com.creatorcrm.domain.Attachment;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.DraftStatus;
 import com.creatorcrm.domain.Enums.DraftType;
+import com.creatorcrm.domain.Enums.InvoiceStatus;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
+import com.creatorcrm.domain.Invoice;
+import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
@@ -23,6 +27,7 @@ import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.DraftRepo;
+import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.settings.SettingsService;
@@ -59,11 +64,15 @@ public class DraftService {
     private final WorkflowEngine workflow;
     private final SettingsService settings;
     private final LearningService learning;
+    private final InvoiceRepo invoices;
+    private final InvoicePdf invoicePdf;
 
     public DraftService(LlmClient llm, List<ChannelConnector> connectors, DraftRepo drafts,
                         OpportunityRepo opportunities, ConversationRepo conversations, MessageRepo messages,
                         BrandRepo brands, ActivityRepo activity, WorkflowEngine workflow, SettingsService settings,
-                        LearningService learning) {
+                        LearningService learning, InvoiceRepo invoices, InvoicePdf invoicePdf) {
+        this.invoices = invoices;
+        this.invoicePdf = invoicePdf;
         this.llm = llm;
         this.channels = connectors.stream().collect(Collectors.toMap(ChannelConnector::platform, Function.identity()));
         this.drafts = drafts;
@@ -103,6 +112,27 @@ public class DraftService {
 
     @Transactional
     public Draft generate(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId) {
+        if (type == DraftType.INVOICE) throw new IllegalArgumentException("Create invoices from the deal's Invoices section");
+        return create(opportunityId, type, instructions, taskId, followupId, null, null);
+    }
+
+    /**
+     * The email that sends an invoice: the PDF goes out attached, to {@code invoice.billToEmail} when set.
+     * If Claude can't write the note (no API key, outage), {@code fallback} is used so invoicing never depends on AI.
+     */
+    @Transactional
+    public Draft generateInvoiceEmail(Invoice invoice, String instructions, DraftText fallback) {
+        for (Draft old : drafts.findByOpportunityIdAndStatus(invoice.opportunityId, DraftStatus.PENDING)) {
+            if (invoice.id.equals(old.invoiceId)) {
+                old.status = DraftStatus.SUPERSEDED;
+                drafts.save(old);
+            }
+        }
+        return create(invoice.opportunityId, DraftType.INVOICE, instructions, null, null, invoice, fallback);
+    }
+
+    private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
+                         Invoice invoice, DraftText fallback) {
         Opportunity o = opportunities.findById(opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
         Brand b = brands.findById(o.brandId).orElseThrow();
         Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
@@ -114,16 +144,29 @@ public class DraftService {
         d.taskId = taskId;
         d.followupId = followupId;
         d.type = type;
-        route(d, b, conv, thread);
+        if (invoice != null) {
+            d.invoiceId = invoice.id;
+            routeInvoice(d, invoice, b, conv, thread);
+        } else {
+            route(d, b, conv, thread);
+        }
 
         String extra = (instructions == null ? "" : instructions)
                 + (o.missingInfo == null || o.missingInfo.isBlank() ? "" : " Still unknown in this deal: " + o.missingInfo + ".");
         List<Message> recent = thread.subList(Math.max(0, thread.size() - CONTEXT_MESSAGES), thread.size());
-        DraftText text = llm.writeDraft(new DraftInput(settings.today(), type.name(), d.channel.name(), b.name,
+        DraftInput input = new DraftInput(settings.today(), type.name(), d.channel.name(), b.name,
                 b.contactName == null ? "" : b.contactName, dealRecord(o),
                 conv == null || conv.summary == null ? "" : conv.summary,
                 recent.stream().map(Untrusted::wrap).toList(), extra.strip(),
-                learning.examplesFor(type.name(), d.channel, o.id)));
+                learning.examplesFor(type.name(), d.channel, o.id));
+        DraftText text;
+        try {
+            text = llm.writeDraft(input);
+        } catch (RuntimeException e) {
+            if (fallback == null) throw e;
+            log.info("Using the standard invoice email for deal {}: {}", o.id, e.getMessage());
+            text = fallback;
+        }
 
         d.subject = d.channel == Platform.EMAIL
                 ? (text.subject().isBlank() ? d.subject : text.subject()) : "";
@@ -137,8 +180,8 @@ public class DraftService {
         ChannelConnector channel = channels.get(d.channel);
         if (channel != null && channel.isConnected()) {
             try {
-                Draft saved = d;
-                channel.pushDraft(d).ifPresent(id -> saved.gmailDraftId = id);
+                Draft saved = attach(d);
+                channel.pushDraft(saved).ifPresent(id -> saved.gmailDraftId = id);
                 d = drafts.save(saved);
             } catch (Exception e) {
                 log.warn("Could not mirror draft {} to {}: {}", d.id, d.channel, e.getMessage());
@@ -178,6 +221,32 @@ public class DraftService {
         }
     }
 
+    /** An invoice goes by email: in the deal's email thread when there is one, else as a new email. */
+    private static void routeInvoice(Draft d, Invoice inv, Brand b, Conversation conv, List<Message> thread) {
+        String email = inv.billToEmail != null && !inv.billToEmail.isBlank() ? inv.billToEmail.strip()
+                : b.contactEmail != null && !b.contactEmail.isBlank() ? b.contactEmail.strip() : null;
+        if (conv != null && conv.platform == Platform.EMAIL) {
+            route(d, b, conv, thread);
+            if (email != null) d.toAddress = email;
+            return;
+        }
+        if (email == null) {
+            throw new IllegalStateException("Add an email address for " + b.name + " on the invoice first.");
+        }
+        d.channel = Platform.EMAIL;
+        d.toAddress = email;
+        d.subject = "Invoice " + inv.number;
+    }
+
+    /** Loads the files this draft carries (the invoice PDF) so the channel can attach them. */
+    private Draft attach(Draft d) {
+        if (d.invoiceId != null && d.channel == Platform.EMAIL) {
+            Invoice inv = invoices.findById(d.invoiceId).orElseThrow(() -> new IllegalStateException("The invoice was deleted"));
+            d.attachments = List.of(new Attachment(inv.number + ".pdf", "application/pdf", invoicePdf.render(inv)));
+        }
+        return d;
+    }
+
     /** Why this draft can't be sent via API right now (e.g. outside Instagram's 24h window), if anything. */
     public Optional<String> sendBlockedReason(Draft d) {
         ChannelConnector c = channels.get(d.channel);
@@ -214,7 +283,7 @@ public class DraftService {
     private Draft deliver(Draft d, boolean automatic) {
         sendBlockedReason(d).ifPresent(reason -> { throw new IllegalStateException(reason); });
         try {
-            ChannelConnector.SentMessage sent = channels.get(d.channel).send(d);
+            ChannelConnector.SentMessage sent = channels.get(d.channel).send(attach(d));
             recordOutbound(d, sent, automatic);
             d.status = DraftStatus.SENT;
             d.sentAt = OffsetDateTime.now();
@@ -289,6 +358,7 @@ public class DraftService {
             messages.save(m);
         }
         if (d.type == DraftType.PITCH && o.pitchedAt == null) o.pitchedAt = settings.today();
+        if (d.invoiceId != null) invoices.findById(d.invoiceId).ifPresent(this::markInvoiceSent);
         workflow.onCreatorMessage(o, intentOf(d.type), settings.today());
         learning.recordDraftSent(d, workflow.brandName(o));
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
@@ -296,8 +366,16 @@ public class DraftService {
                         + workflow.brandName(o)));
     }
 
+    private void markInvoiceSent(Invoice inv) {
+        if (inv.status != InvoiceStatus.DRAFT) return;
+        inv.status = InvoiceStatus.SENT;
+        inv.sentAt = OffsetDateTime.now();
+        invoices.save(inv);
+    }
+
     private static Intent intentOf(DraftType type) {
         return switch (type) {
+            case INVOICE -> Intent.INVOICE_SENT;
             case FOLLOW_UP -> Intent.CREATOR_FOLLOW_UP;
             case PITCH -> Intent.PITCH;
             case DECLINE -> Intent.CREATOR_DECLINED;

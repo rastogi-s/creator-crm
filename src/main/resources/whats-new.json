@@ -1,5 +1,24 @@
 [
   {
+    "version": "1.4.0",
+    "title": "Invoices and the Money tab",
+    "features": [
+      {
+        "id": "invoices",
+        "title": "Send an invoice in two clicks",
+        "body": "When a brand asks for your invoice, open the deal and press Create invoice. The amount and what you made are filled in from the deal, and numbers run INV-2026-001, 002 and so on. Email invoice puts a short note with the PDF attached in Drafts, so you check it before it goes. Add your address and how brands pay you once, under Settings, Invoices.",
+        "video": "invoices.webm",
+        "tryIt": "#money"
+      },
+      {
+        "id": "money-tab",
+        "title": "See what you've earned and what's late",
+        "body": "The new Money tab shows what's booked, what's invoiced and waiting, what came in this month and what's overdue. Overdue invoices also show on Today. When the money lands, press Mark paid; the app never decides that for you. Export CSV gives you the year's invoices for taxes.",
+        "tryIt": "#money"
+      }
+    ]
+  },
+  {
     "version": "1.3.0",
     "title": "Report a problem",
     "features": [

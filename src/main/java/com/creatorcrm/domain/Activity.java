@@ -13,6 +13,7 @@ public class Activity {
     public static final String NEW_OPPORTUNITY = "NEW_OPPORTUNITY";
     public static final String FOLLOWUP_SENT = "FOLLOWUP_SENT";
     public static final String DRAFT_SENT = "DRAFT_SENT";
+    public static final String INVOICE = "INVOICE";
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
     public Long opportunityId;

@@ -26,6 +26,15 @@ public class DemoLlm implements LlmClient {
     @Override
     public DraftText writeDraft(DraftInput input) {
         String who = input.contactName() == null || input.contactName().isBlank() ? "there" : input.contactName();
+        if ("INVOICE".equals(input.draftType())) {
+            // extraInstructions starts "Send invoice INV-... for USD ..., due ....", written by InvoiceService.
+            String what = input.extraInstructions();
+            int end = what.indexOf(". ");
+            what = (end > 0 ? what.substring(0, end + 1) : what).replace("Send invoice", "Here's invoice");
+            return new DraftText("Invoice for the " + input.brandName() + " collab",
+                    "Hi " + who + ",\n\nThanks again, I loved working on this one! " + what
+                            + " The PDF is attached.\n\nBest,\nAva");
+        }
         return new DraftText("Re: " + input.brandName() + " collab",
                 "Hi " + who + ",\n\nThanks so much for thinking of me! I'd love to work with " + input.brandName()
                         + ". For one Reel with 30 days of organic usage my rate is [RATE FOR 1 REEL].\n\nBest,\nAva");

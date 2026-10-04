@@ -15,6 +15,7 @@ import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.Untrusted;
 import com.creatorcrm.repo.DraftRepo;
@@ -52,11 +53,13 @@ public class CrmMcpTools {
     private final IngestionService ingestion;
     private final SettingsService settings;
     private final CrmProperties props;
+    private final InvoiceService invoices;
 
     public CrmMcpTools(DigestService digest, OpportunityRepo opportunities, TaskRepo tasks, MessageRepo messages,
                        DraftRepo drafts, WorkflowEngine workflow, FollowUpEngine followUps, DraftService draftService,
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
-                       CrmProperties props) {
+                       CrmProperties props, InvoiceService invoices) {
+        this.invoices = invoices;
         this.digest = digest;
         this.opportunities = opportunities;
         this.tasks = tasks;
@@ -116,6 +119,15 @@ public class CrmMcpTools {
             return "[opp " + o.id + "] " + workflow.brandName(o) + " — Follow-up #" + f.number
                     + (f.number >= settings.maxFollowups() ? " (final)" : "") + " due " + f.scheduledDate;
         }).collect(Collectors.joining("\n"));
+    }
+
+    @McpTool(name = "list_unpaid_invoices", description = "Invoices sent to brands and not paid yet, soonest due first, with overdue days. Marking one paid is done by the creator in the app.")
+    public String unpaidInvoices() {
+        List<InvoiceService.InvoiceView> unpaid = invoices.unpaid();
+        if (unpaid.isEmpty()) return "No unpaid invoices.";
+        return unpaid.stream().map(i -> "[opp " + i.opportunityId() + "] " + i.brand() + " — " + i.number() + " " + i.amountText()
+                + ", due " + i.dueDate() + (i.daysOverdue() > 0 ? " (overdue by " + i.daysOverdue() + " days)" : ""))
+                .collect(Collectors.joining("\n"));
     }
 
     @McpTool(name = "find_brand", description = "Check whether a brand is already in the pipeline before pitching it (prevents duplicate pitches).")

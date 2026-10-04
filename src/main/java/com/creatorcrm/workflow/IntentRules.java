@@ -36,7 +36,7 @@ public final class IntentRules {
         RULES.put(Intent.CONTENT_REVISION_REQUEST, new Rule(CONTENT_TO_CREATE, TaskType.REVISE_CONTENT));
         RULES.put(Intent.CONTENT_APPROVED, new Rule(SCHEDULED_TO_POST, TaskType.POST_CONTENT));
         RULES.put(Intent.POSTING_REMINDER, new Rule(null, TaskType.POST_CONTENT));
-        RULES.put(Intent.PAYMENT_UPDATE, new Rule(PAYMENT_PENDING, null));
+        RULES.put(Intent.PAYMENT_UPDATE, new Rule(PAYMENT_PENDING, TaskType.CONFIRM_PAYMENT));
         RULES.put(Intent.INVOICE_REQUEST, new Rule(PAYMENT_PENDING, TaskType.SEND_INVOICE));
         RULES.put(Intent.BRAND_FOLLOW_UP, new Rule(null, TaskType.REPLY));
         RULES.put(Intent.DECLINE, new Rule(CLOSED, null));
