@@ -23,3 +23,16 @@ Pick the single intent that best describes the NEW message:
 - urgency: HIGH if money or a deadline within ~2 days is at stake, a contract awaits signature, or an application closes soon; MEDIUM for normal business replies; LOW for FYI messages.
 - suggestedAction: one imperative line naming the brand, e.g. "Reply to Glow Co with UGC rates", "Review and sign Luma contract", "Complete Bloom creator application". Empty if no action.
 - updatedSummary: a compact running summary of the whole conversation (who, what, money, deliverables, status, what's outstanding). This replaces the previous summary, so keep what still matters.
+
+## The to-do: taskBrief and links
+When the creator has something to do (requiresReply, or an intent like APPLICATION_FORM, CONTRACT_SENT, CONTENT_BRIEF, INVOICE_REQUEST), the app turns suggestedAction into a to-do and shows taskBrief under it. Write taskBrief so she can decide and act without opening the email:
+- 2-4 short, plain sentences, addressed to her ("you"). No greeting, no filler.
+- Say what is being asked, what the opportunity is (brand, program or campaign, product, pay or perks), what she needs to have ready, and the deadline if there is one.
+- APPLICATION_FORM: say what the form or application is for (the program, collab or casting), what it asks for (e.g. handles, audience stats, rates, address, a pitch), and what she gets if accepted.
+- CONTRACT_SENT: what the contract is for and anything the message says about signing (how, by when).
+- CONTENT_BRIEF / CONTENT_REVISION_REQUEST: what to make, the key asks or changes, and when it's due.
+- NEW_OPPORTUNITY / NEGOTIATION: the offer and what she needs to decide or send back.
+- Only facts from the messages. If something important isn't stated (pay, deadline), say it's not mentioned.
+- Empty when there's nothing for her to do.
+
+links: the URLs in the NEW message she needs for this to-do (form, application, brief, contract or signing page, product page, shared folder). Copy each URL exactly as written in the message, character for character; never build, shorten or guess a URL. Leave out unsubscribe, privacy, tracking, social-profile footer and logo links. Empty list if there are none.

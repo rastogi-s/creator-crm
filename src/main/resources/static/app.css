@@ -149,6 +149,11 @@ button:disabled { opacity: .55; cursor: default; }
 .msg.out { background: var(--accent-soft); border-color: transparent; }
 .msg .meta { color: var(--muted); font-size: .8rem; margin-bottom: .25rem; }
 .msg .text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; }
+.msg .open-gmail { float: right; }
+.msg.focus { outline: 2px solid var(--accent); outline-offset: 2px; transition: outline-color .3s; }
+.task-about .brief { margin: .3rem 0 .2rem; font-size: .88rem; line-height: 1.4; overflow-wrap: anywhere; }
+.task-about .links { margin-top: .25rem; }
+.task-about .links .chip { text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20; }
 .drawer {

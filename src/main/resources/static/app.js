@@ -283,6 +283,26 @@
     return el("button", { class: "stat clickable", title, onclick }, el("div", { class: "v" }, String(v)), el("div", { class: "l" }, l));
   }
 
+  // What a to-do is about: Claude's brief of the email and the links from it (forms, briefs, contracts).
+  function taskAbout(brief, links) {
+    const ok = (links || []).filter((l) => /^https?:\/\//i.test(l.url));
+    if (!brief && !ok.length) return null;
+    return el("div", { class: "task-about" },
+      brief ? el("p", { class: "brief" }, brief) : null,
+      ok.length ? el("div", { class: "chips links" }, ok.map((l) =>
+        el("a", { class: "chip", href: l.url, target: "_blank", rel: "noopener noreferrer", title: l.url }, "🔗 " + (l.label || "Link")))) : null);
+  }
+
+  // One click to the email a to-do came from: in the app (works offline, for DMs too) and in Gmail.
+  function emailButtons(opportunityId, info) {
+    if (!info || !info.messageId) return [];
+    return [
+      opportunityId ? el("button", { class: "small", title: "Read the message this to-do came from",
+        onclick: () => openDeal(opportunityId, info.messageId) }, "Read email") : null,
+      info.gmailUrl ? el("a", { class: "btn small", href: info.gmailUrl, target: "_blank", rel: "noopener noreferrer",
+        title: "Open this email in Gmail" }, "Open in Gmail") : null];
+  }
+
   function itemList(items, emptyText, numbered) {
     if (!items.length) return emptyLine(emptyText);
     return el("ul", { class: "list" }, items.map((it, i) => el("li", { class: "item" },
@@ -293,8 +313,10 @@
           it.overdueDays > 0 ? el("span", { class: "badge overdue" }, "Overdue " + it.overdueDays + "d") : null, " ",
           it.priority === "HIGH" && !it.overdueDays ? el("span", { class: "badge high" }, "High") : null, " ",
           it.lead ? leadBadge(it.lead, it.leadWhy) : null, it.lead ? " " : null,
-          it.detail)),
+          it.detail),
+        it.task ? taskAbout(it.task.brief, it.task.links) : null),
       el("div", { class: "actions" },
+        it.kind === "TASK" ? emailButtons(it.opportunityId, it.task) : null,
         it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
         it.kind === "DEADLINE" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/deadlines/" + it.refId + "/done"); route(); }, "Deadline cleared") }, "Done") : null,
         it.kind === "INVOICE" && /reminder ready/.test(it.detail) ? el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review reminder") : null,
@@ -637,7 +659,17 @@
     document.getElementById("drawer-backdrop").classList.add("hidden");
   }
 
-  async function openDeal(id) {
+  // Scrolls the open deal to one message and highlights it for a moment.
+  function showMessage(messageId) {
+    const node = document.getElementById("msg-" + messageId);
+    if (!node) return;
+    node.classList.remove("hidden");
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    node.classList.add("focus");
+    setTimeout(() => node.classList.remove("focus"), 2500);
+  }
+
+  async function openDeal(id, focusMessageId) {
     const [d, invoices] = await Promise.all([api("GET", "/api/opportunities/" + id), api("GET", "/api/opportunities/" + id + "/invoices")]);
     const drawer = clear(document.getElementById("drawer"));
     document.getElementById("drawer-backdrop").classList.remove("hidden");
@@ -778,8 +810,11 @@
     drawer.appendChild(card("Tasks",
       d.tasks.length ? el("ul", { class: "list" }, d.tasks.map((t) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, t.description),
-          el("div", { class: "detail" }, pretty(t.status) + (t.dueDate ? " · due " + fmtDate(t.dueDate) : ""))),
+          el("div", { class: "detail" }, pretty(t.status) + (t.dueDate ? " · due " + fmtDate(t.dueDate) : "")),
+          t.status === "OPEN" ? taskAbout(t.brief, t.links) : null),
         t.status === "OPEN" ? el("div", { class: "actions" },
+          t.sourceMessageId && d.messages.some((m) => m.id === t.sourceMessageId)
+            ? el("button", { class: "small", title: "Read the message this to-do came from", onclick: () => showMessage(t.sourceMessageId) }, "Read email") : null,
           el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + t.id + "/done"); refresh(); }, "Done") }, "Done"),
           el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + t.id + "/dismiss"); refresh(); }) }, "Dismiss")) : null))) : emptyLine("No tasks."),
       el("div", { class: "row" }, taskInput, taskDue, el("button", { class: "small", onclick: action(async () => {
@@ -794,9 +829,10 @@
           el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.description || ""))))))));
     }
 
-    const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : "") },
+    const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : ""), id: "msg-" + m.id },
       el("div", { class: "meta" }, (m.direction === "OUTBOUND" ? "You" : (m.from || "Brand")) + " · " + fmtDateTime(m.sentAt)
-        + (m.type ? " · " + pretty(m.type) : "")),
+        + (m.type ? " · " + pretty(m.type) : ""),
+        m.gmailUrl ? el("a", { class: "small open-gmail", href: m.gmailUrl, target: "_blank", rel: "noopener noreferrer" }, "Open in Gmail") : null),
       m.subject ? el("div", { class: "title small" }, m.subject) : null,
       el("div", { class: "text" }, m.content || "")) }));
     const msgCount = el("span", { class: "small muted", role: "status" });
@@ -812,6 +848,7 @@
     drawer.appendChild(card("Conversation",
       msgSearch ? el("div", { class: "row filters" }, el("div", { class: "spacer" }, msgSearch), msgCount) : null,
       msgs.length ? msgs.map((x) => x.node) : emptyLine("No messages linked (e.g. a pitch logged manually).")));
+    if (focusMessageId) showMessage(focusMessageId);
 
     const activityItem = (a) => el("li", { class: "item" }, el("div", { class: "body" }, el("div", {}, a.text), el("div", { class: "detail" }, fmtDateTime(a.at))));
     const activityList = el("ul", { class: "list" }, d.activity.slice(0, 30).map(activityItem));
@@ -1611,6 +1648,8 @@
       creatorProfile: el("textarea", { class: "tall", maxlength: "20000" }),
       timezone: el("input", { value: p.timezone }),
       brandKeywords: el("textarea", { maxlength: "2000" }),
+      taskRules: el("textarea", { maxlength: "2000", id: "task-rules",
+        placeholder: "e.g. For application forms, list what the form asks for.\nGifted-only offers are low priority.\nAlways say if usage rights aren't mentioned." }),
       classifierModel: modelSelect(p.classifierModel, [
         ["claude-sonnet-5-5", "Sonnet 5.5: cheaper, under 1¢ per message (recommended)"],
         ["claude-opus-5-5", "Opus 5.5: most careful, about 2× the cost"]]),
@@ -1620,12 +1659,14 @@
     };
     pf.creatorProfile.value = p.creatorProfile;
     pf.brandKeywords.value = p.brandKeywords;
+    pf.taskRules.value = p.taskRules || "";
     steps.appendChild(el("li", { class: p.creatorName !== "Creator" ? "done" : "" },
       el("h3", {}, "About you"),
       el("label", {}, "Your name (used in sign-offs)"), pf.creatorName,
       el("label", {}, "Voice, rates & rules — drafts only quote rates written here"), pf.creatorProfile,
       el("label", {}, "Time zone"), pf.timezone,
       el("label", {}, "Brand keywords (emails without these in bulk/automated mail are skipped before AI)"), pf.brandKeywords,
+      el("label", { for: "task-rules" }, "Your rules for to-dos (Claude follows these when it reads a new email and writes the to-do and its summary)"), pf.taskRules,
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Claude for reading messages"), pf.classifierModel),
         el("div", {}, el("label", {}, "Claude for writing drafts and finding brands"), pf.writerModel)),

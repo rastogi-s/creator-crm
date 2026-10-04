@@ -39,13 +39,34 @@ final class MailText {
 
     static String htmlToText(String html) {
         if (html == null) return null;
-        return html.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", " ")
+        return keepLinks(html.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", " "))
                 .replaceAll("(?i)<br\\s*/?>|</p>|</div>|</li>", "\n")
                 .replaceAll("<[^>]+>", " ")
                 .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
                 .replace("&quot;", "\"").replace("&#39;", "'")
                 .replaceAll("[ \\t]+", " ")
                 .replaceAll("\\n\\s*\\n+", "\n\n");
+    }
+
+    private static final java.util.regex.Pattern LINK = java.util.regex.Pattern.compile(
+            "(?is)<a\\s[^>]*?href\\s*=\\s*[\"']?(https?://[^\"'\\s>]+)[\"']?[^>]*>(.*?)</a>");
+
+    /**
+     * {@code <a href="url">Apply here</a>} becomes "Apply here (url)", so form and brief links in HTML-only
+     * emails survive the tag stripping. Links whose text already is the URL are written once.
+     */
+    static String keepLinks(String html) {
+        java.util.regex.Matcher m = LINK.matcher(html);
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) {
+            String url = m.group(1).replace("&amp;", "&");
+            String text = m.group(2).replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").strip();
+            String out = text.isEmpty() || text.equals(url) || url.equals(text.replace("&amp;", "&"))
+                    ? " " + url + " " : text + " (" + url + ")";
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(out));
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     /** Cut the quoted history ("On Mon, X wrote:" / "> ...") so we only keep the new part of each message. */

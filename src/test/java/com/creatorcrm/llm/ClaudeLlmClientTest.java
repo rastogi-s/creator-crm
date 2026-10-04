@@ -32,6 +32,7 @@ class ClaudeLlmClientTest {
     @Autowired ClaudeLlmClient claude;
     @Autowired SecretStore secrets;
     @Autowired ClaudeSpend spend;
+    @Autowired com.creatorcrm.settings.SettingsService settings;
 
     private HttpServer api;
     private final AtomicReference<String> lastRequest = new AtomicReference<>();
@@ -94,16 +95,45 @@ class ClaudeLlmClientTest {
     }
 
     @Test
+    void herTaskRulesGoIntoTheClassifierInstructions() throws Exception {
+        replyText = """
+                {"brandRelated": false, "brandName": "", "contactName": "", "intent": "NOT_BRAND_RELATED",
+                 "opportunityType": "OTHER", "compensation": "UNKNOWN", "budgetAmount": 0, "currency": "",
+                 "budgetText": "", "deliverables": "", "usageRights": "", "campaign": "", "deadlines": [],
+                 "missingInfo": [], "requiresReply": false, "urgency": "LOW", "suggestedAction": "",
+                 "updatedSummary": "", "taskBrief": "", "links": []}
+                """;
+        claude.classify(sample());
+        assertThat(lastRequest.get()).doesNotContain("own rules for to-dos");
+
+        settings.update(Map.of(com.creatorcrm.settings.SettingsService.TASK_RULES, "Gifted-only offers are low priority."));
+        try {
+            claude.classify(sample());
+            Map<?, ?> req = JsonMapper.shared().readValue(lastRequest.get(), Map.class);
+            List<?> system = (List<?>) req.get("system");
+            assertThat(system).hasSize(2);
+            assertThat(String.valueOf(((Map<?, ?>) system.get(1)).get("text")))
+                    .contains("own rules for to-dos").contains("Gifted-only offers are low priority.");
+        } finally {
+            settings.update(Map.of(com.creatorcrm.settings.SettingsService.TASK_RULES, ""));
+        }
+    }
+
+    @Test
     void classifiesWithAStrictSchemaAndParsesTheReply() throws Exception {
         replyText = """
                 {"brandRelated": true, "brandName": "Glow Co", "contactName": "Maya", "intent": "RATES_REQUEST",
                  "opportunityType": "UGC", "compensation": "PAID", "budgetAmount": 0, "currency": "",
                  "budgetText": "", "deliverables": "1 UGC video", "usageRights": "", "campaign": "",
                  "deadlines": [], "missingInfo": ["budget"], "requiresReply": true, "urgency": "MEDIUM",
-                 "suggestedAction": "Reply to Glow Co with UGC rates", "updatedSummary": "Glow Co asked for rates."}
+                 "suggestedAction": "Reply to Glow Co with UGC rates", "updatedSummary": "Glow Co asked for rates.",
+                 "taskBrief": "Glow Co wants your rates for one UGC video.",
+                 "links": [{"label": "Brief", "url": "https://glow.example/brief"}, {"label": "Bad", "url": "javascript:alert(1)"}]}
                 """;
 
         MessageAnalysis a = claude.classify(sample());
+        assertThat(a.taskBrief()).isEqualTo("Glow Co wants your rates for one UGC video.");
+        assertThat(a.links()).containsExactly(new MessageAnalysis.TaskLink("Brief", "https://glow.example/brief"));
         assertThat(a.brandName()).isEqualTo("Glow Co");
         assertThat(a.intent()).isEqualTo(Intent.RATES_REQUEST);
         assertThat(a.requiresReply()).isTrue();
@@ -113,7 +143,7 @@ class ClaudeLlmClientTest {
         Map<?, ?> schema = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) req.get("output_config")).get("format")).get("schema");
         assertThat(schema.get("type")).isEqualTo("object");
         assertThat(schema.get("additionalProperties")).isEqualTo(false);
-        assertThat(strings(schema.get("required"))).contains("brandRelated", "intent", "updatedSummary", "deadlines");
+        assertThat(strings(schema.get("required"))).contains("brandRelated", "intent", "updatedSummary", "deadlines", "taskBrief", "links");
         Map<?, ?> props = (Map<?, ?>) schema.get("properties");
         assertThat(((Map<?, ?>) props.get("brandName")).get("description")).asString().contains("brand's name");
         assertThat(strings(((Map<?, ?>) props.get("intent")).get("enum"))).contains("RATES_REQUEST", "CONTRACT_SENT");

@@ -126,6 +126,33 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "task-briefs"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#today");
+    const task = page.locator("#view-today .item", { hasText: "Sparkle Socks" }).filter({ has: page.locator(".task-about") }).first();
+    await task.waitFor();
+    await task.scrollIntoViewIfNeeded();
+    await say("To-dos that come from an email now tell you what it's about.", 3400);
+    await point(task.locator(".brief"));
+    await say("Claude sums up what's asked, what the opportunity is and what you need ready.", 4200);
+    await point(task.locator(".links .chip").first());
+    await say("Links from the email, like this sign-up form, are right on the to-do.", 3800);
+    await point(task.getByRole("button", { name: "Read email" }));
+    await say("Read email opens the deal at that email, in one click.", 3200);
+    await click(task.getByRole("button", { name: "Read email" }));
+    await drawer.locator(".msg.focus").first().waitFor();
+    await say("Here it is, highlighted. For Gmail emails, Open in Gmail jumps to the original.", 4200);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await click(page.locator(".tab[data-tab=settings]"));
+    const rules = page.locator("#task-rules");
+    await rules.waitFor();
+    await rules.scrollIntoViewIfNeeded();
+    await point(rules);
+    await say("Want to-dos written your way? Add your own rules here, and Claude follows them for new emails.", 4600);
+    await say("", 600);
+  },
+
   async "contract-check"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

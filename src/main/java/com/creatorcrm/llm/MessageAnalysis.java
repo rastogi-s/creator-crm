@@ -42,7 +42,16 @@ public record MessageAnalysis(
         @JsonPropertyDescription("One imperative action for the creator, max 12 words, naming the brand. E.g. 'Reply to Glow Co with UGC rates'. Empty if none.")
         String suggestedAction,
         @JsonPropertyDescription("Updated 2-5 sentence summary of the whole conversation so far: who, what, money, deliverables, where it stands, what is outstanding.")
-        String updatedSummary) {
+        String updatedSummary,
+        @JsonPropertyDescription("Only when the creator has something to do: 2-4 plain sentences telling her what the to-do is about, so she can act without reopening the email. Say what is asked, what the opportunity is (program, product, pay or perks), what she needs ready, and any deadline. For a form or application, say what the form asks for and what it is for. Empty if no action.")
+        String taskBrief,
+        @JsonPropertyDescription("Links in the new message she needs for the to-do: forms, applications, briefs, contracts, product pages, shared folders. Copy each URL exactly as it appears in the message. Skip unsubscribe, tracking-pixel, social-footer and logo links. Empty list if none.")
+        List<TaskLink> links) {
+
+    public record TaskLink(
+            @JsonPropertyDescription("Short label, e.g. 'Application form' or 'Campaign brief'.")
+            String label,
+            String url) {}
 
     public record ExtractedDeadline(
             DeadlineType type,

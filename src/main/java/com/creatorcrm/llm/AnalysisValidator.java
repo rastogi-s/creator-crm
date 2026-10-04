@@ -39,7 +39,20 @@ final class AnalysisValidator {
                 a.requiresReply(),
                 a.urgency() == null ? Priority.MEDIUM : a.urgency(),
                 clip(a.suggestedAction(), 200),
-                clip(a.updatedSummary(), 2000));
+                clip(a.updatedSummary(), 2000),
+                clip(a.taskBrief(), 1200),
+                links(a.links()));
+    }
+
+    /** Web links only, at most 6; whether each one really is in the message is checked by the workflow. */
+    static List<MessageAnalysis.TaskLink> links(List<MessageAnalysis.TaskLink> links) {
+        if (links == null) return List.of();
+        return links.stream()
+                .filter(l -> l != null && l.url() != null && l.url().strip().matches("(?i)https?://[^\\s<>\"]{1,2000}"))
+                .map(l -> new MessageAnalysis.TaskLink(clip(l.label(), 80), l.url().strip()))
+                .distinct()
+                .limit(6)
+                .toList();
     }
 
     private static boolean isPlausibleDate(String s) {

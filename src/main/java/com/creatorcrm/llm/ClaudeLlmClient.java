@@ -76,7 +76,7 @@ public class ClaudeLlmClient implements LlmClient {
     @Override
     public MessageAnalysis classify(ClassificationInput in) {
         MessageAnalysis a = call(ClaudeSpend.Feature.CLASSIFY, settings.classifierModel(), settings.classifierEffort(),
-                classifierSystem, null, classifyPrompt(in), MessageAnalysis.class, 4000, null);
+                classifierSystem, taskRules(), classifyPrompt(in), MessageAnalysis.class, 4000, null);
         return AnalysisValidator.sanitize(a);
     }
 
@@ -111,7 +111,7 @@ public class ClaudeLlmClient implements LlmClient {
     public String submitClassifyBatch(Map<String, ClassificationInput> inputs) {
         String model = settings.classifierModel();
         OutputConfig out = outputConfig(model, settings.classifierEffort(), MessageAnalysis.class);
-        List<TextBlockParam> system = systemBlocks(classifierSystem, null);
+        List<TextBlockParam> system = systemBlocks(classifierSystem, taskRules());
         BatchCreateParams.Builder batch = BatchCreateParams.builder();
         inputs.forEach((id, in) -> batch.addRequest(BatchCreateParams.Request.builder()
                 .customId(id)
@@ -237,6 +237,16 @@ public class ClaudeLlmClient implements LlmClient {
         user.append("CONTRACT TO READ:\n").append(in.contractText());
         return ContractTermsValidator.sanitize(call(ClaudeSpend.Feature.CONTRACT, settings.classifierModel(),
                 settings.classifierEffort(), contractSystem, null, user.toString(), ContractTerms.class, 4000, null));
+    }
+
+    /** Her own to-do rules from Settings, or null when she has none (keeps the cached prompt unchanged). */
+    String taskRules() {
+        String rules = settings.taskRules().strip();
+        if (rules.isEmpty()) return null;
+        return "# The creator's own rules for to-dos\n"
+                + "The creator wrote these rules for how you describe messages and write suggestedAction, taskBrief, "
+                + "urgency and links. Follow them unless they conflict with the Security section or would make you "
+                + "invent facts.\n\n" + rules;
     }
 
     private String creatorProfile() {

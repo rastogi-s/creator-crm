@@ -10,6 +10,7 @@ import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Enums.Priority;
+import com.creatorcrm.channels.gmail.GmailLinks;
 import com.creatorcrm.domain.Enums.TaskStatus;
 import com.creatorcrm.domain.Enums.TaskType;
 import com.creatorcrm.domain.FollowUp;
@@ -76,7 +77,7 @@ public class CrmController {
 
     /** Message content is third-party text: the UI renders it as plain text only. */
     public record MessageView(Long id, String direction, String from, String subject, String content,
-                              OffsetDateTime sentAt, String type) {}
+                              OffsetDateTime sentAt, String type, String gmailUrl) {}
 
     public record DraftView(Draft draft, String brand, String blockedReason) {}
 
@@ -112,14 +113,17 @@ public class CrmController {
     private final SettingsService settings;
     private final TaskExecutor executor;
     private final LeadScoring scoring;
+    private final GmailLinks gmailLinks;
 
     public CrmController(DigestService digest, OpportunityRepo opportunities, BrandRepo brands, TaskRepo tasks,
                          FollowUpRepo followUpRepo, DeadlineRepo deadlines, MessageRepo messages, DraftRepo drafts,
                          ActivityRepo activity, WorkflowEngine workflow, FollowUpEngine followUps,
                          DraftService draftService, OutreachService outreach, IngestionService ingestion,
                          ScheduledJobs jobs, SettingsService settings,
-                         @Qualifier("applicationTaskExecutor") TaskExecutor executor, LeadScoring scoring) {
+                         @Qualifier("applicationTaskExecutor") TaskExecutor executor, LeadScoring scoring,
+                         GmailLinks gmailLinks) {
         this.scoring = scoring;
+        this.gmailLinks = gmailLinks;
         this.digest = digest;
         this.opportunities = opportunities;
         this.brands = brands;
@@ -174,7 +178,7 @@ public class CrmController {
     public OpportunityDetail opportunity(@PathVariable Long id) {
         Opportunity o = opportunities.findById(id).orElseThrow();
         List<MessageView> msgs = o.conversationId == null ? List.of()
-                : messages.findByConversationIdOrderBySentAtAsc(o.conversationId).stream().map(CrmController::messageView).toList();
+                : messages.findByConversationIdOrderBySentAtAsc(o.conversationId).stream().map(this::messageView).toList();
         return new OpportunityDetail(view(o), o, brands.findById(o.brandId).orElse(null),
                 tasks.findByOpportunityIdOrderByCreatedAtDesc(id), followUpRepo.findByOpportunityIdOrderByNumberAsc(id),
                 deadlines.findByOpportunityIdOrderByDueDateAsc(id), msgs,
@@ -360,9 +364,9 @@ public class CrmController {
         return String.join(" · ", Arrays.stream(parts).filter(p -> p != null && !p.isBlank()).toList());
     }
 
-    private static MessageView messageView(Message m) {
+    private MessageView messageView(Message m) {
         return new MessageView(m.id, m.direction.name(),
                 m.senderName == null || m.senderName.isBlank() ? m.sender : m.senderName,
-                m.subject, m.content, m.sentAt, m.messageType);
+                m.subject, m.content, m.sentAt, m.messageType, gmailLinks.urlFor(m));
     }
 }

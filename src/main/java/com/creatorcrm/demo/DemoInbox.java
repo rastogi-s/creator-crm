@@ -7,6 +7,7 @@ import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.MessageAnalysis;
 import com.creatorcrm.llm.MessageAnalysis.ExtractedDeadline;
+import com.creatorcrm.llm.MessageAnalysis.TaskLink;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -24,7 +25,7 @@ final class DemoInbox {
             new Mail("Bloomleaf Tea", "Jenna", "jenna@bloomleaf.example", 3, "Contract for the October campaign",
                     "Hi Ava, attached is the contract for the Bloomleaf Tea October campaign ($650). Please sign by the date in the agreement."),
             new Mail("Nova Nest Home", "Sam", "sam@novanest.example", 4, "Creative brief: cozy corner",
-                    "Hi Ava, here's the Nova Nest Home brief for the cozy-corner Reel. Draft content is due soon."),
+                    "Hi Ava, here's the Nova Nest Home brief for the cozy-corner Reel: https://drive.novanest.example/cozy-corner-brief. Draft content is due soon."),
             new Mail("Thread & Thimble", "Lee", "lee@threadthimble.example", 1, "Gifted collab: new knit line",
                     "Hello Ava! Thread & Thimble would love to send you our new knit line as a gifted collab."),
             new Mail("Lumen Labs", "Ria", "ria@lumenlabs.example", 6, "Invoice for the September Reel",
@@ -36,7 +37,7 @@ final class DemoInbox {
             new Mail("Coastline Coffee", "Noor", "noor@coastlinecoffee.example", 100, "Spring Reel payment",
                     "Hi Ava, Noor from Coastline Coffee. The $900 payment for the Spring Reel is on its way. Thanks again, it did so well for us!"),
             new Mail("Sparkle Socks", "Jay", "jay@sparklesocks.example", 0, "Affiliate partnership",
-                    "Hi Ava! Jay from Sparkle Socks. We'd love you to join our affiliate program: 15% commission on every sale through your link."),
+                    "Hi Ava! Jay from Sparkle Socks. We'd love you to join our affiliate program: 15% commission on every sale through your link. Sign up with the creator form here: https://sparklesocks.example/creators/apply"),
             new Mail("Tiny Treats", "Bea", "bea@tinytreats.example", 0, "Quick Reel for Tiny Treats?",
                     "Hi Ava, Bea at Tiny Treats here. We have $100 for one Reel and three Stories about our new snack box. Interested?"),
             new Mail("Fern & Field", "Theo", "theo@fernfield.example", 1, "Re: Spring planter campaign",
@@ -56,10 +57,13 @@ final class DemoInbox {
                 "1 Reel + 2 Stories", "October campaign",
                 List.of(new ExtractedDeadline(DeadlineType.CONTRACT, today.plusDays(2).toString(), "Sign the contract")),
                 List.of(), true, Priority.HIGH, "Sign the Bloomleaf Tea contract", "Bloomleaf Tea sent the $650 October campaign contract.");
-        if (t.contains("Nova Nest")) return a("Nova Nest Home", "Sam", Intent.CONTENT_BRIEF, OpportunityType.PAID, Compensation.PAID, 900,
+        if (t.contains("Nova Nest")) return withTask(a("Nova Nest Home", "Sam", Intent.CONTENT_BRIEF, OpportunityType.PAID, Compensation.PAID, 900,
                 "1 Reel", "Cozy corner",
                 List.of(new ExtractedDeadline(DeadlineType.CONTENT_DUE, today.plusDays(5).toString(), "Draft Reel due")),
-                List.of(), false, Priority.MEDIUM, "Film the Nova Nest Home cozy-corner Reel", "Nova Nest Home sent the cozy-corner brief.");
+                List.of(), false, Priority.MEDIUM, "Film the Nova Nest Home cozy-corner Reel", "Nova Nest Home sent the cozy-corner brief."),
+                "Nova Nest Home wants one paid Reel ($900) showing a cozy reading corner styled with their throws and lamps. "
+                        + "The brief has the shot list and talking points. The draft Reel is due in 5 days.",
+                new TaskLink("Cozy-corner brief", "https://drive.novanest.example/cozy-corner-brief"));
         if (t.contains("Thread & Thimble")) return a("Thread & Thimble", "Lee", Intent.NEW_OPPORTUNITY, OpportunityType.GIFTED, Compensation.GIFTED, 0,
                 "", "Knit line", List.of(), List.of("deliverables"), true, Priority.LOW,
                 "Decide on the Thread & Thimble gifted offer", "Thread & Thimble offers their knit line as a gifted collab.");
@@ -72,9 +76,13 @@ final class DemoInbox {
         if (t.contains("Maple & Moss")) return a("Maple & Moss", "Sky", Intent.CONTENT_APPROVED, OpportunityType.PAID, Compensation.PAID, 750,
                 "1 Reel", "August Reel", List.of(), List.of(), false, Priority.MEDIUM,
                 "Post the Maple & Moss Reel", "Maple & Moss approved the August Reel.");
-        if (t.contains("Sparkle Socks")) return a("Sparkle Socks", "Jay", Intent.NEW_OPPORTUNITY, OpportunityType.AFFILIATE, Compensation.AFFILIATE, 0,
+        if (t.contains("Sparkle Socks")) return withTask(a("Sparkle Socks", "Jay", Intent.NEW_OPPORTUNITY, OpportunityType.AFFILIATE, Compensation.AFFILIATE, 0,
                 "", "Affiliate program", List.of(), List.of("budget"), true, Priority.LOW,
-                "Reply to Sparkle Socks about their affiliate program", "Sparkle Socks offers 15% commission as an affiliate.");
+                "Reply to Sparkle Socks about their affiliate program", "Sparkle Socks offers 15% commission as an affiliate."),
+                "Sparkle Socks invites you to their affiliate program: 15% commission on every sale through your own link, "
+                        + "no fee and no set posts. Joining means filling in their creator form (your handles and audience). "
+                        + "Decide whether commission-only is worth it before you sign up.",
+                new TaskLink("Creator sign-up form", "https://sparklesocks.example/creators/apply"));
         if (t.contains("Tiny Treats")) return a("Tiny Treats", "Bea", Intent.NEW_OPPORTUNITY, OpportunityType.PAID, Compensation.PAID, 100,
                 "1 Reel + 3 Stories", "Snack box", List.of(), List.of(), true, Priority.LOW,
                 "Reply to Tiny Treats about their $100 offer", "Tiny Treats offers $100 for a Reel and three Stories.");
@@ -88,7 +96,7 @@ final class DemoInbox {
                 "1 post", "Candle gift set", List.of(), List.of(), false, Priority.LOW,
                 "", "Petal & Pine thanked Ava for posting their candle gift set.");
         return new MessageAnalysis(false, "", "", Intent.NOT_BRAND_RELATED, OpportunityType.OTHER, Compensation.UNKNOWN, 0, "",
-                "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "");
+                "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "", "", List.of());
     }
 
     private static MessageAnalysis a(String brand, String contact, Intent intent, OpportunityType type, Compensation comp,
@@ -102,6 +110,13 @@ final class DemoInbox {
                                      List<ExtractedDeadline> deadlines, List<String> missing, boolean reply, Priority urgency,
                                      String action, String summary) {
         return new MessageAnalysis(true, brand, contact, intent, type, comp, budget, budget > 0 ? "USD" : "",
-                budget > 0 ? "$" + (int) budget : "", deliverables, usageRights, campaign, deadlines, missing, reply, urgency, action, summary);
+                budget > 0 ? "$" + (int) budget : "", deliverables, usageRights, campaign, deadlines, missing, reply, urgency, action, summary, "", List.of());
+    }
+
+    private static MessageAnalysis withTask(MessageAnalysis x, String brief, TaskLink... links) {
+        return new MessageAnalysis(x.brandRelated(), x.brandName(), x.contactName(), x.intent(), x.opportunityType(),
+                x.compensation(), x.budgetAmount(), x.currency(), x.budgetText(), x.deliverables(), x.usageRights(),
+                x.campaign(), x.deadlines(), x.missingInfo(), x.requiresReply(), x.urgency(), x.suggestedAction(),
+                x.updatedSummary(), brief, List.of(links));
     }
 }

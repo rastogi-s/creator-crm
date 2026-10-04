@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.23.0",
+    "title": "To-dos that explain themselves",
+    "features": [
+      {
+        "id": "task-briefs",
+        "title": "Know what a to-do is about without opening the email",
+        "body": "When a brand email gives you something to do, the to-do now has a short summary from Claude: what they're asking, what the opportunity is, the pay or perks, and what you need ready. For an application form it says what the form asks for and what it's for. Links from the email (forms, briefs, contracts) sit right on the to-do. Read email opens the deal at that email in one click, and Open in Gmail jumps to the original. You can add your own rules for how Claude writes to-dos in Settings, About you.",
+        "video": "task-briefs.webm",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.21.0",
     "title": "Contract check",
     "features": [

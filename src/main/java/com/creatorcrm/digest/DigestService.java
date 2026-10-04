@@ -1,5 +1,6 @@
 package com.creatorcrm.digest;
 
+import com.creatorcrm.channels.gmail.GmailLinks;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.Deadline;
@@ -23,6 +24,7 @@ import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.DeadlineRepo;
 import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.InvoiceRepo;
+import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.repo.TaskRepo;
 import com.creatorcrm.scoring.LeadScoring;
@@ -48,7 +50,12 @@ public class DigestService {
 
     /** {@code lead} and {@code leadWhy}: the deal's lead score (HIGH, MEDIUM, LOW) and its reasons, for leads only. */
     public record Item(String kind, String title, String detail, LocalDate due, long overdueDays, String priority,
-                       Long opportunityId, Long refId, String brand, int score, String lead, String leadWhy) {
+                       Long opportunityId, Long refId, String brand, int score, String lead, String leadWhy,
+                       TaskInfo task) {
+        public Item(String kind, String title, String detail, LocalDate due, long overdueDays, String priority,
+                    Long opportunityId, Long refId, String brand, int score, String lead, String leadWhy) {
+            this(kind, title, detail, due, overdueDays, priority, opportunityId, refId, brand, score, lead, leadWhy, null);
+        }
         public Item(String kind, String title, String detail, LocalDate due, long overdueDays, String priority,
                     Long opportunityId, Long refId, String brand, int score) {
             this(kind, title, detail, due, overdueDays, priority, opportunityId, refId, brand, score, null, null);
@@ -87,10 +94,18 @@ public class DigestService {
     private final SettingsService settings;
     private final InvoiceRepo invoices;
     private final LeadScoring scoring;
+    private final MessageRepo messages;
+    private final GmailLinks gmailLinks;
+
+    /** What a to-do is about: Claude's brief, the links from the email, and where to read the email. */
+    public record TaskInfo(String brief, List<Task.Link> links, Long messageId, String gmailUrl) {}
 
     public DigestService(TaskRepo tasks, OpportunityRepo opportunities, BrandRepo brands, DeadlineRepo deadlines,
                          DraftRepo drafts, ActivityRepo activity, FollowUpEngine followUps, DraftService draftService,
-                         SettingsService settings, InvoiceRepo invoices, LeadScoring scoring) {
+                         SettingsService settings, InvoiceRepo invoices, LeadScoring scoring, MessageRepo messages,
+                         GmailLinks gmailLinks) {
+        this.messages = messages;
+        this.gmailLinks = gmailLinks;
         this.invoices = invoices;
         this.scoring = scoring;
         this.tasks = tasks;
@@ -294,7 +309,14 @@ public class DigestService {
         if (t.dueDate != null) detail.add(when(t.dueDate, today));
         return new Item("TASK", t.description, String.join(" · ", detail), t.dueDate, overdue,
                 t.priority == null ? "MEDIUM" : t.priority.name(), o == null ? null : o.id, t.id, brand, score,
-                lead == null ? null : lead.level().name(), lead == null ? null : lead.summary());
+                lead == null ? null : lead.level().name(), lead == null ? null : lead.summary(), taskInfo(t));
+    }
+
+    private TaskInfo taskInfo(Task t) {
+        if (t.brief == null && t.linksJson == null && t.sourceMessageId == null) return null;
+        String gmailUrl = t.sourceMessageId == null ? null
+                : messages.findById(t.sourceMessageId).map(gmailLinks::urlFor).orElse(null);
+        return new TaskInfo(t.brief, t.getLinks(), t.sourceMessageId, gmailUrl);
     }
 
     private Approval approval(Draft d, Map<Long, Opportunity> opps, Map<Long, String> brandNames) {
