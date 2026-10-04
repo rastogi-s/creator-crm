@@ -93,6 +93,22 @@
 
   function emptyLine(text) { return el("div", { class: "empty" }, text); }
 
+  // ---------- password managers ----------
+  // Browsers treat every password box on a page as one big login form: they fill her saved password into
+  // the first one (the Claude API key) and her username into whatever text box comes before it (a search
+  // box). Keys and tokens are marked as not-a-login, and each card that asks for her password gets its own
+  // form with a hidden username box, so the saved login never lands anywhere else.
+
+  const NOT_A_LOGIN = { autocomplete: "new-password", "data-lpignore": "true", "data-1p-ignore": "true", "data-bwignore": "true" };
+
+  function passwordForm(node) {
+    // Buttons in a form submit it by default, and Enter in a field "clicks" the first one. Neither should run an action.
+    node.querySelectorAll("button:not([type])").forEach((b) => { b.type = "button"; });
+    return el("form", { class: "password-form", onsubmit: (e) => e.preventDefault() },
+      el("input", { type: "text", name: "username", autocomplete: "username", hidden: true, tabindex: "-1", "aria-hidden": "true" }),
+      node);
+  }
+
   // ---------- list controls: search, filter chips, sortable columns ----------
 
   /** A view's filters and sort, kept in this browser so they survive a refresh. */
@@ -109,7 +125,8 @@
   }
 
   function searchBox(value, placeholder, onChange) {
-    const input = el("input", { type: "search", class: "search", value: value || "", placeholder, "aria-label": placeholder, maxlength: "100" });
+    const input = el("input", { type: "search", class: "search", value: value || "", placeholder, "aria-label": placeholder, maxlength: "100",
+      autocomplete: "off", name: "filter" });
     let timer;
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => onChange(input.value), 150); });
     return input;
@@ -1546,8 +1563,14 @@
   }
 
   async function renderSettings(root) {
+    // A second render (a sync finishing, a Save) can start while this one waits on the server. Only the newest
+    // one may add cards, or the page ends up with two of some cards.
+    const gen = String(Number(root.dataset.renderGen || 0) + 1);
+    root.dataset.renderGen = gen;
+    const stale = () => root.dataset.renderGen !== gen;
     const s = await api("GET", "/api/settings");
     updateStatus = await api("GET", "/api/updates").catch(() => updateStatus);
+    if (stale()) return;
     const c = s.credentials;
     const p = s.preferences;
     clear(root);
@@ -1555,7 +1578,7 @@
     root.appendChild(el("p", { class: "muted" }, "Everything here is stored encrypted in your own database. Saved credentials are never shown again — leave a field blank to keep the current value."));
 
     const secretField = (name, label, placeholder) => {
-      const input = el("input", { type: "password", autocomplete: "off", placeholder: c[name] ? "•••••••• (saved)" : placeholder || "" });
+      const input = el("input", Object.assign({ type: "password", placeholder: c[name] ? "•••••••• (saved)" : placeholder || "" }, NOT_A_LOGIN));
       input.dataset.name = name;
       return el("div", {}, el("label", {}, label), input);
     };
@@ -1795,7 +1818,9 @@
       }, "Saved") }, "Save"))));
 
     // 10. Google Calendar
-    steps.appendChild(await calendarStep(root, c));
+    const calendar = await calendarStep(root, c);
+    if (stale()) return;
+    steps.appendChild(calendar);
 
     // 11. MCP
     const keyOut = el("div", { class: "code hidden" });
@@ -1815,24 +1840,26 @@
       keyOut,
       el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
 
-    root.appendChild(await claudeSpendCard(root));
-    root.appendChild(await learningCard(root));
+    const [spend, learning, startup, errorReports, autoBackup] = await Promise.all([claudeSpendCard(root), learningCard(root),
+      startWithWindowsCard(), errorReportsCard(root, c), autoBackupCard(root)]);
+    if (stale()) return;
+    root.appendChild(spend);
+    root.appendChild(learning);
     root.appendChild(updatesCard(root));
-    const startup = await startWithWindowsCard();
     if (startup) root.appendChild(startup);
-    root.appendChild(await errorReportsCard(root, c));
-    root.appendChild(await autoBackupCard(root));
+    root.appendChild(errorReports);
+    root.appendChild(autoBackup);
     root.appendChild(backupCard(root));
 
     // Password
     const cur = el("input", { type: "password", autocomplete: "current-password" });
     const nw = el("input", { type: "password", autocomplete: "new-password", minlength: "12" });
-    root.appendChild(card("Change password", el("div", { class: "grid" },
+    root.appendChild(passwordForm(card("Change password", el("div", { class: "grid" },
       el("div", {}, el("label", {}, "Current password"), cur), el("div", {}, el("label", {}, "New password (12+ characters)"), nw)),
       el("p", {}, el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/settings/password", { currentPassword: cur.value, newPassword: nw.value });
         cur.value = ""; nw.value = "";
-      }, "Password changed") }, "Change password"))));
+      }, "Password changed") }, "Change password")))));
 
     if (s.pendingAnalysis > 0) {
       root.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + " message(s) waiting for AI analysis" + (c.ANTHROPIC_API_KEY ? "." : " — add your Claude API key.")));
@@ -2008,7 +2035,7 @@
         }, "Backup saved") }, "Back up now") : null),
       el("p", { class: "small muted" }, "To restore one, use Restore from a backup below with the same passphrase."));
     c.id = "backup";
-    return c;
+    return passwordForm(c);
   }
 
   function backupCard() {
@@ -2037,7 +2064,7 @@
 
     // Restore
     const file = el("input", { type: "file", accept: ".crmbak" });
-    const rePass = el("input", { type: "password", autocomplete: "off" });
+    const rePass = el("input", Object.assign({ type: "password" }, NOT_A_LOGIN));
     const rePw = el("input", { type: "password", autocomplete: "current-password" });
     const restoreHeaders = () => ({ "Content-Type": "application/octet-stream", "X-XSRF-TOKEN": csrf(),
       "X-Backup-Passphrase": encodeURIComponent(rePass.value) });
@@ -2060,7 +2087,7 @@
       location.replace("/login.html");
     });
 
-    return card("Backup & restore",
+    return passwordForm(card("Backup & restore",
       el("p", { class: "small muted" }, "A backup is one encrypted file with all your deals, messages, settings and connected-account credentials. "
         + "It can be restored on any Creator CRM install (embedded database or PostgreSQL). Without the passphrase it can't be opened — and it can't be recovered if you forget it."),
       el("div", { class: "grid" },
@@ -2073,7 +2100,7 @@
         el("div", {}, el("label", {}, "Backup file"), file),
         el("div", {}, el("label", {}, "Backup passphrase"), rePass),
         el("div", {}, el("label", {}, "Your current password"), rePw)),
-      el("p", {}, el("button", { class: "danger small", onclick: doRestore }, "Restore…")));
+      el("p", {}, el("button", { class: "danger small", onclick: doRestore }, "Restore…"))));
   }
 
   function channelStatus(ch) {
@@ -2258,7 +2285,7 @@
     const d = await api("GET", "/api/diagnostics").catch(() => null);
     if (!d) return el("div");
     const tokenBox = el("div", {}, (() => {
-      const input = el("input", { type: "password", autocomplete: "off", placeholder: c.ERROR_REPORT_TOKEN ? "•••••••• (saved)" : "github_pat_…" });
+      const input = el("input", Object.assign({ type: "password", placeholder: c.ERROR_REPORT_TOKEN ? "•••••••• (saved)" : "github_pat_…" }, NOT_A_LOGIN));
       input.dataset.name = "ERROR_REPORT_TOKEN";
       return el("div", {}, el("label", {}, "Error-report token"), input);
     })());

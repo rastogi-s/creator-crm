@@ -292,3 +292,6 @@ details.collapsible[open] > summary { margin-bottom: .5rem; }
 #exclusivity li.flag { display: flex; gap: .6rem; padding: .35rem 0; align-items: baseline; }
 #exclusivity li.flag .mark { flex: 0 0 1.4rem; height: 1.4rem; border-radius: 50%; text-align: center; font-weight: 700; line-height: 1.4rem; font-size: .8rem; background: var(--warn-soft); color: var(--warn); }
 #settings-calendar p.warn { color: var(--warn); font-weight: 600; }
+
+/* A form only so password managers keep her login inside it; it adds no box of its own. */
+.password-form { display: contents; }
