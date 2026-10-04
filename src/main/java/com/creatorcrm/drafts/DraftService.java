@@ -13,6 +13,7 @@ import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
+import com.creatorcrm.learning.LearningService;
 import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.Intent;
@@ -57,10 +58,12 @@ public class DraftService {
     private final ActivityRepo activity;
     private final WorkflowEngine workflow;
     private final SettingsService settings;
+    private final LearningService learning;
 
     public DraftService(LlmClient llm, List<ChannelConnector> connectors, DraftRepo drafts,
                         OpportunityRepo opportunities, ConversationRepo conversations, MessageRepo messages,
-                        BrandRepo brands, ActivityRepo activity, WorkflowEngine workflow, SettingsService settings) {
+                        BrandRepo brands, ActivityRepo activity, WorkflowEngine workflow, SettingsService settings,
+                        LearningService learning) {
         this.llm = llm;
         this.channels = connectors.stream().collect(Collectors.toMap(ChannelConnector::platform, Function.identity()));
         this.drafts = drafts;
@@ -71,6 +74,7 @@ public class DraftService {
         this.activity = activity;
         this.workflow = workflow;
         this.settings = settings;
+        this.learning = learning;
     }
 
     public Optional<Draft> draftForTask(Task t) {
@@ -118,11 +122,14 @@ public class DraftService {
         DraftText text = llm.writeDraft(new DraftInput(settings.today(), type.name(), d.channel.name(), b.name,
                 b.contactName == null ? "" : b.contactName, dealRecord(o),
                 conv == null || conv.summary == null ? "" : conv.summary,
-                recent.stream().map(Untrusted::wrap).toList(), extra.strip()));
+                recent.stream().map(Untrusted::wrap).toList(), extra.strip(),
+                learning.examplesFor(type.name(), d.channel, o.id)));
 
         d.subject = d.channel == Platform.EMAIL
                 ? (text.subject().isBlank() ? d.subject : text.subject()) : "";
         d.body = text.body();
+        d.originalSubject = d.subject;
+        d.originalBody = d.body;
         d.status = DraftStatus.PENDING;
         d.createdAt = OffsetDateTime.now();
         d = drafts.save(d);
@@ -282,6 +289,7 @@ public class DraftService {
             messages.save(m);
         }
         workflow.onCreatorMessage(o, intentOf(d.type), settings.today());
+        learning.recordDraftSent(d, workflow.brandName(o));
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
                 d.type.name().toLowerCase().replace('_', ' ') + (automatic ? " sent automatically to " : " sent to ")
                         + workflow.brandName(o)));

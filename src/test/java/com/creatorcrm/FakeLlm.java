@@ -19,6 +19,7 @@ public class FakeLlm implements LlmClient {
     public final Deque<MessageAnalysis> next = new ArrayDeque<>();
     public int draftCalls;
     public int classifyCalls;
+    public DraftInput lastDraftInput;
     /** When set, every classify call throws this (simulates Claude being down). */
     public RuntimeException failWith;
 
@@ -44,6 +45,7 @@ public class FakeLlm implements LlmClient {
     @Override
     public DraftText writeDraft(DraftInput input) {
         draftCalls++;
+        lastDraftInput = input;
         return new DraftText("Re: collab", "Hi Maya, thanks! [" + input.draftType() + "]");
     }
 

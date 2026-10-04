@@ -12,4 +12,6 @@ public record DraftInput(
         String opportunityContext,
         String conversationSummary,
         List<String> recentMessages,
-        String extraInstructions) {}
+        String extraInstructions,
+        /** Messages the creator sent before, rendered for the prompt (see LearningService). May be empty. */
+        List<String> pastExamples) {}

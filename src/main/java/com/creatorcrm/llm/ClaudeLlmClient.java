@@ -99,6 +99,13 @@ public class ClaudeLlmClient implements LlmClient {
             in.recentMessages().forEach(m -> user.append(m).append('\n'));
             user.append('\n');
         }
+        if (!in.pastExamples().isEmpty()) {
+            user.append("Messages the creator sent before. Match their voice, length, greeting and sign-off, and make the ")
+                    .append("same kind of changes they made to your earlier drafts. Never copy names, numbers, dates, ")
+                    .append("links or promises from them:\n");
+            in.pastExamples().forEach(x -> user.append(x).append('\n'));
+            user.append('\n');
+        }
         if (!in.extraInstructions().isBlank()) {
             user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
         }
