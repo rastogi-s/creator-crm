@@ -116,6 +116,41 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "search"(page) {
+    const { pause, say, point, click } = helpers(page);
+    await page.goto(BASE + "/#pipeline");
+    await page.locator("#view-pipeline table").waitFor();
+    const box = page.locator("#global-search");
+    await point(box);
+    await say("Search everything from the top bar: brands, contacts, old emails and DMs, and invoices.", 4200);
+    await box.click();
+    await box.pressSequentially("serum", { delay: 90 });
+    const hit = page.locator("#global-results .hit").first();
+    await hit.waitFor();
+    await point(hit);
+    await say("It even finds words inside past emails. Click a result to open that deal.", 4000);
+    await box.fill("");
+    await page.keyboard.press("Escape");
+    const tabSearch = page.locator("#view-pipeline input[type=search]");
+    await point(tabSearch);
+    await say("Each list has its own search and filters too. Pipeline, Outreach, Money and Drafts all have them.", 4400);
+    await tabSearch.pressSequentially("glow", { delay: 90 });
+    await pause(600);
+    await tabSearch.fill("");
+    await pause(400);
+    await click(page.locator("#view-pipeline th button", { hasText: "Updated" }));
+    await say("Click a column name to sort by it. Click it again to flip the order.", 3800);
+    await click(page.locator("#view-pipeline .chip").first());
+    await say("The status counts are filters too. Your choices stay put, even after the app restarts.", 4200);
+    await click(page.locator("#view-pipeline .chip.active"));
+    await click(page.locator(".tab[data-tab=money]"));
+    const overdue = page.locator("#view-money .stat", { hasText: "Invoiced, waiting for payment" });
+    await overdue.waitFor();
+    await click(overdue);
+    await say("On Money, click a total to see the invoices behind it.", 3800);
+    await say("", 600);
+  },
+
   async "win-back"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");
