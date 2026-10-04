@@ -46,6 +46,10 @@ class ClaudeLlmClientTest {
     void startStub() throws Exception {
         api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         api.createContext("/v1/messages", ex -> {
+            if (ex.getRequestURI().getPath().startsWith("/v1/messages/batches")) {
+                batchEndpoint(ex);
+                return;
+            }
             lastRequest.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             requests.add(lastRequest.get());
             if (errorStatus != 0) {
@@ -236,5 +240,73 @@ class ClaudeLlmClientTest {
         assertThat(quick.runs()).isEqualTo(runsBefore + 1);
         assertThat(quick.measured()).isTrue();
         if (runsBefore == 0) assertThat(quick.usd()).isCloseTo(0.24, offset(0.011));
+    }
+
+    // ---- Batch API stand-in: one batch, finished when batchEnded is set.
+    private volatile boolean batchEnded;
+    private volatile String batchRequest;
+
+    private void batchEndpoint(com.sun.net.httpserver.HttpExchange ex) throws java.io.IOException {
+        String path = ex.getRequestURI().getPath();
+        String body;
+        if (path.endsWith("/results")) {
+            String analysis = """
+                    {"brandRelated": true, "brandName": "Glow Co", "contactName": "Maya", "intent": "RATES_REQUEST",
+                     "opportunityType": "UGC", "compensation": "PAID", "budgetAmount": 0, "currency": "",
+                     "budgetText": "", "deliverables": "", "usageRights": "", "campaign": "",
+                     "deadlines": [], "missingInfo": [], "requiresReply": true, "urgency": "MEDIUM",
+                     "suggestedAction": "", "updatedSummary": "Glow Co asked for rates."}""";
+            Map<String, Object> ok = Map.of("custom_id", "m1", "result", Map.of("type", "succeeded", "message", Map.of(
+                    "id", "msg_b1", "type", "message", "role", "assistant", "model", "claude-sonnet-5-5",
+                    "content", List.of(Map.of("type", "text", "text", analysis)), "stop_reason", "end_turn",
+                    "usage", Map.of("input_tokens", 1_000_000, "output_tokens", 0))));
+            Map<String, Object> failed = Map.of("custom_id", "m2", "result", Map.of("type", "errored", "error",
+                    Map.of("type", "error", "error", Map.of("type", "api_error", "message", "boom"))));
+            body = JsonMapper.shared().writeValueAsString(ok) + "\n" + JsonMapper.shared().writeValueAsString(failed) + "\n";
+        } else {
+            if ("POST".equals(ex.getRequestMethod())) {
+                batchRequest = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            }
+            String base = "http://127.0.0.1:" + api.getAddress().getPort();
+            java.util.Map<String, Object> batch = new java.util.HashMap<>(Map.of(
+                    "id", "msgbatch_1", "type", "message_batch",
+                    "processing_status", batchEnded ? "ended" : "in_progress",
+                    "request_counts", Map.of("processing", batchEnded ? 0 : 2, "succeeded", batchEnded ? 1 : 0,
+                            "errored", batchEnded ? 1 : 0, "canceled", 0, "expired", 0),
+                    "created_at", "2026-10-04T00:00:00Z", "expires_at", "2026-10-05T00:00:00Z"));
+            if (batchEnded) {
+                batch.put("ended_at", "2026-10-04T01:00:00Z");
+                batch.put("results_url", base + "/v1/messages/batches/msgbatch_1/results");
+            }
+            body = JsonMapper.shared().writeValueAsString(batch);
+        }
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().add("Content-Type", path.endsWith("/results") ? "application/binary" : "application/json");
+        ex.sendResponseHeaders(200, bytes.length);
+        ex.getResponseBody().write(bytes);
+        ex.close();
+    }
+
+    @Test
+    void classifiesInABatchAtHalfPrice() throws Exception {
+        assertThat(claude.supportsBatch()).isTrue();
+        String id = claude.submitClassifyBatch(new java.util.LinkedHashMap<>(Map.of("m1", sample())));
+        assertThat(id).isEqualTo("msgbatch_1");
+        Map<?, ?> req = JsonMapper.shared().readValue(batchRequest, Map.class);
+        Map<?, ?> first = (Map<?, ?>) ((List<?>) req.get("requests")).getFirst();
+        assertThat(first.get("custom_id")).isEqualTo("m1");
+        Map<?, ?> params = (Map<?, ?>) first.get("params");
+        assertThat(params.get("model")).isEqualTo("claude-sonnet-5-5"); // the new default for reading messages
+        assertThat(params.toString()).contains("NEW MESSAGE TO ANALYZE").contains("output_config");
+
+        assertThat(claude.pollClassifyBatch(id)).isNull(); // still running
+
+        batchEnded = true;
+        double spentBefore = spend.summary().trackedUsd();
+        Map<String, MessageAnalysis> results = claude.pollClassifyBatch(id);
+        assertThat(results).containsOnlyKeys("m1"); // the errored one is left out, to be classified again
+        assertThat(results.get("m1").intent()).isEqualTo(Intent.RATES_REQUEST);
+        // 1M Sonnet input tokens at $2, half price in a batch
+        assertThat(spend.summary().trackedUsd() - spentBefore).isCloseTo(1.0, offset(0.011));
     }
 }

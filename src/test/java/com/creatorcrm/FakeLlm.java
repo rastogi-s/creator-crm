@@ -13,6 +13,10 @@ import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.Deque;
 import java.util.List;
 
@@ -62,5 +66,32 @@ public class FakeLlm implements LlmClient {
     @Override
     public boolean isConfigured() {
         return true;
+    }
+
+    // ---- Batch API stand-in: tests switch it on, see what was sent, and decide when it finishes.
+    public boolean batch;
+    public boolean batchDone;
+    public final List<Map<String, ClassificationInput>> batches = new ArrayList<>();
+    public Function<ClassificationInput, MessageAnalysis> batchAnswer =
+            in -> analysis(Intent.NOT_BRAND_RELATED, "", false, List.of());
+
+    @Override
+    public boolean supportsBatch() {
+        return batch;
+    }
+
+    @Override
+    public String submitClassifyBatch(Map<String, ClassificationInput> inputs) {
+        batches.add(new LinkedHashMap<>(inputs));
+        batchDone = false;
+        return "batch-" + batches.size();
+    }
+
+    @Override
+    public Map<String, MessageAnalysis> pollClassifyBatch(String batchId) {
+        if (!batchDone) return null;
+        Map<String, MessageAnalysis> out = new LinkedHashMap<>();
+        batches.get(Integer.parseInt(batchId.substring(6)) - 1).forEach((id, in) -> out.put(id, batchAnswer.apply(in)));
+        return out;
     }
 }

@@ -14,6 +14,10 @@ import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.WebSearchTool20260209;
+import com.anthropic.models.messages.batches.BatchCreateParams;
+import com.anthropic.models.messages.batches.MessageBatch;
+import com.anthropic.models.messages.batches.MessageBatchIndividualResponse;
+import com.anthropic.core.http.StreamResponse;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.links.LinkService;
 import com.creatorcrm.security.CryptoService;
@@ -24,8 +28,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -67,6 +73,12 @@ public class ClaudeLlmClient implements LlmClient {
 
     @Override
     public MessageAnalysis classify(ClassificationInput in) {
+        MessageAnalysis a = call(ClaudeSpend.Feature.CLASSIFY, settings.classifierModel(), settings.classifierEffort(),
+                classifierSystem, null, classifyPrompt(in), MessageAnalysis.class, 4000, null);
+        return AnalysisValidator.sanitize(a);
+    }
+
+    private static String classifyPrompt(ClassificationInput in) {
         StringBuilder user = new StringBuilder()
                 .append("Today: ").append(in.today()).append('\n')
                 .append("Channel: ").append(in.platform()).append('\n')
@@ -85,11 +97,61 @@ public class ClaudeLlmClient implements LlmClient {
             user.append('\n');
         }
         user.append("NEW MESSAGE TO ANALYZE:\n").append(in.newMessage());
-
-        MessageAnalysis a = call(ClaudeSpend.Feature.CLASSIFY, settings.classifierModel(), settings.classifierEffort(), classifierSystem, null,
-                user.toString(), MessageAnalysis.class, 4000, null);
-        return AnalysisValidator.sanitize(a);
+        return user.toString();
     }
+
+    @Override
+    public boolean supportsBatch() {
+        return true;
+    }
+
+    @Override
+    public String submitClassifyBatch(Map<String, ClassificationInput> inputs) {
+        String model = settings.classifierModel();
+        OutputConfig out = outputConfig(model, settings.classifierEffort(), MessageAnalysis.class);
+        List<TextBlockParam> system = systemBlocks(classifierSystem, null);
+        BatchCreateParams.Builder batch = BatchCreateParams.builder();
+        inputs.forEach((id, in) -> batch.addRequest(BatchCreateParams.Request.builder()
+                .customId(id)
+                .params(BatchCreateParams.Request.Params.builder()
+                        .model(model)
+                        .maxTokens(4000L)
+                        .outputConfig(out)
+                        .systemOfTextBlockParams(system)
+                        .addUserMessage(classifyPrompt(in))
+                        .build())
+                .build()));
+        return api(() -> client().messages().batches().create(batch.build())).id();
+    }
+
+    @Override
+    public Map<String, MessageAnalysis> pollClassifyBatch(String batchId) {
+        MessageBatch batch = api(() -> client().messages().batches().retrieve(batchId));
+        if (!MessageBatch.ProcessingStatus.ENDED.equals(batch.processingStatus())) return null;
+        Map<String, MessageAnalysis> results = new LinkedHashMap<>();
+        try (StreamResponse<MessageBatchIndividualResponse> stream =
+                     api(() -> client().messages().batches().resultsStreaming(batchId))) {
+            stream.stream().forEach(r -> r.result().succeeded().ifPresent(ok -> {
+                Message m = ok.message();
+                spend.record(ClaudeSpend.Feature.CLASSIFY, m, BATCH_DISCOUNT);
+                // Refused, cut off or unreadable: leave it out, and it's classified again the normal way.
+                if (!StopReason.END_TURN.equals(m.stopReason().orElse(null))) return;
+                m.content().stream().flatMap(b -> b.text().stream()).map(t -> t.text()).reduce((a, b) -> b)
+                        .ifPresent(json -> {
+                            try {
+                                results.put(r.customId(), AnalysisValidator.sanitize(
+                                        OutputSchemas.parse(json, MessageAnalysis.class)));
+                            } catch (RuntimeException e) {
+                                // as above
+                            }
+                        });
+            }));
+        }
+        return results;
+    }
+
+    /** Batch requests are billed at half the normal price. */
+    static final double BATCH_DISCOUNT = 0.5;
 
     @Override
     public DraftText writeDraft(DraftInput in) {
@@ -153,24 +215,11 @@ public class ClaudeLlmClient implements LlmClient {
 
     private <T> T call(ClaudeSpend.Feature feature, String model, String effort, String system, String system2, String user,
                        Class<T> type, long maxTokens, SearchDepth webSearch) {
-        JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
-        OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
-        OutputConfig.Builder out = OutputConfig.builder()
-                .format(JsonOutputFormat.builder().schema(schema.build()).build());
-        if (supportsEffort(model)) out.effort(OutputConfig.Effort.of(effort));
-
-        List<TextBlockParam> systemBlocks = new ArrayList<>();
-        systemBlocks.add(TextBlockParam.builder().text(system).build());
-        if (system2 != null) systemBlocks.add(TextBlockParam.builder().text(system2).build());
-        // Cache the stable system prefix; the per-message content comes after it.
-        TextBlockParam last = systemBlocks.remove(systemBlocks.size() - 1);
-        systemBlocks.add(last.toBuilder().cacheControl(CacheControlEphemeral.builder().build()).build());
-
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
-                .outputConfig(out.build())
-                .systemOfTextBlockParams(systemBlocks)
+                .outputConfig(outputConfig(model, effort, type))
+                .systemOfTextBlockParams(systemBlocks(system, system2))
                 .addUserMessage(user);
         if (webSearch != null) params.addTool(WebSearchTool20260209.builder().maxUses((long) webSearch.maxSearches).build());
         if (supportsDefaultFallback(model)) {
@@ -205,10 +254,33 @@ public class ClaudeLlmClient implements LlmClient {
         }
     }
 
+    private static OutputConfig outputConfig(String model, String effort, Class<?> type) {
+        JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
+        OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
+        OutputConfig.Builder out = OutputConfig.builder()
+                .format(JsonOutputFormat.builder().schema(schema.build()).build());
+        if (supportsEffort(model)) out.effort(OutputConfig.Effort.of(effort));
+        return out.build();
+    }
+
+    private static List<TextBlockParam> systemBlocks(String system, String system2) {
+        List<TextBlockParam> blocks = new ArrayList<>();
+        blocks.add(TextBlockParam.builder().text(system).build());
+        if (system2 != null) blocks.add(TextBlockParam.builder().text(system2).build());
+        // Cache the stable system prefix; the per-message content comes after it.
+        TextBlockParam last = blocks.remove(blocks.size() - 1);
+        blocks.add(last.toBuilder().cacheControl(CacheControlEphemeral.builder().build()).build());
+        return blocks;
+    }
+
     private Message create(MessageCreateParams.Builder params) {
-        Message response;
+        return api(() -> client().messages().create(params.build()));
+    }
+
+    /** One API call, with its errors turned into readable {@link LlmException}s. */
+    private <R> R api(java.util.function.Supplier<R> request) {
         try {
-            response = client().messages().create(params.build());
+            return request.get();
         } catch (AnthropicServiceException e) {
             if (isOutOfCredits(e)) {
                 spend.markOutOfCredits(firstLine(e));
@@ -219,7 +291,6 @@ public class ClaudeLlmClient implements LlmClient {
             // Network trouble, timeouts, a response we couldn't read: not an HTTP error, but just as fatal.
             throw new LlmException("Claude request failed: " + e.getClass().getSimpleName() + ": " + firstLine(e), e);
         }
-        return response;
     }
 
     /**

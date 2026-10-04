@@ -8,16 +8,23 @@ import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Message;
+import com.creatorcrm.llm.ClassificationInput;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.LlmException;
+import com.creatorcrm.llm.MessageAnalysis;
 import com.creatorcrm.llm.OutOfCreditsException;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.MessageRepo;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,14 +75,14 @@ public class IngestionService {
 
     /** What the header shows: is work running, how much is waiting for AI, and why it might be stuck. */
     public record Status(boolean syncing, boolean analyzing, long waitingForAi, boolean aiConfigured,
-                         String aiError, String importingSince, long version) {}
+                         String aiError, String importingSince, long version, int inBatch) {}
 
     public Status status() {
         String importing = connectors.stream().map(c -> read("sync." + c.platform() + IMPORT))
                 .flatMap(Optional::stream).findFirst().orElse(null);
         return new Status(syncLock.isLocked(), processLock.isLocked(),
                 messages.countByAiProcessedFalseAndFilteredReasonIsNull(), llm.isConfigured(),
-                read(AI_ERROR).orElse(null), importing, version.get());
+                read(AI_ERROR).orElse(null), importing, version.get(), batchMessageIds().size());
     }
 
     private static final String AI_ERROR = "ai.error";
@@ -207,18 +214,61 @@ public class IngestionService {
         executor.execute(this::processPending);
     }
 
-    /** Classify and apply every stored message that passed the pre-filter. Oldest first, so state builds up in order. */
+    /** History at least this old can wait for a batch: half price, results usually within an hour or two. */
+    static final Duration BATCH_OLDER_THAN = Duration.ofDays(14);
+    /** Fewer old messages waiting than this (no import running): not worth the wait, analyze them right away. */
+    static final int MIN_BATCH = 20;
+    static final int MAX_BATCH = 1000;
+    /** Batches end within 24 hours; one older than this was lost, so its messages go again. */
+    static final Duration BATCH_GIVE_UP = Duration.ofHours(48);
+    private static final String BATCH_ID = "ai.batch.id";
+    private static final String BATCH_MESSAGES = "ai.batch.messages";
+    private static final String BATCH_AT = "ai.batch.submittedAt";
+
+    public boolean batchInFlight() {
+        return read(BATCH_ID).isPresent();
+    }
+
+    private List<Long> batchMessageIds() {
+        return read(BATCH_MESSAGES).map(v -> Arrays.stream(v.split(",")).map(Long::valueOf).toList()).orElse(List.of());
+    }
+
+    /**
+     * Classify and apply every stored message that passed the pre-filter. Oldest first, so state builds up in order.
+     *
+     * <p>A big history import goes through the Batch API at half price instead: each round sends the oldest waiting
+     * message of every conversation, and the next message of a conversation waits until the one before it is
+     * applied, because its analysis builds on that. New messages in other conversations are analyzed right away.
+     */
     public int processPending() {
         if (!llm.isConfigured() || !processLock.tryLock()) return 0;
         int n = 0;
         int claudeFailuresInARow = 0;
+        boolean claudeDown = false;
         try {
-            for (Message m : messages.findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc()) {
+            n += collectBatch();
+            List<Long> inFlight = batchMessageIds();
+            Set<Long> waiting = new HashSet<>(); // conversations waiting on a batch
+            messages.findAllById(inFlight).forEach(m -> waiting.add(m.conversationId));
+
+            List<Message> pending = messages.findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc();
+            OffsetDateTime old = OffsetDateTime.now().minus(BATCH_OLDER_THAN);
+            boolean batching = llm.supportsBatch() && (!inFlight.isEmpty()
+                    || pending.stream().filter(m -> m.sentAt.isBefore(old)).count() >= MIN_BATCH);
+            List<Message> toBatch = new ArrayList<>();
+
+            for (Message m : pending) {
+                if (waiting.contains(m.conversationId)) continue;
                 if (messages.existsByConversationIdAndAiProcessedTrueAndSentAtAfter(m.conversationId, m.sentAt)) {
                     // Imported history from a thread already analyzed past this point: applying it now would move
                     // the deal backwards. Keep it as context for future analysis instead.
                     m.filteredReason = "older than messages already analyzed (kept as context)";
                     messages.save(m);
+                    continue;
+                }
+                if (batching && m.sentAt.isBefore(old)) {
+                    waiting.add(m.conversationId);
+                    if (inFlight.isEmpty() && toBatch.size() < MAX_BATCH) toBatch.add(m);
                     continue;
                 }
                 try {
@@ -232,14 +282,17 @@ public class IngestionService {
                     write(AI_ERROR, OffsetDateTime.now() + " " + e.getMessage());
                     // Out of credits, bad key, rate limited, or Claude failing over and over: stop; the rest retry on
                     // the next run.
+                    claudeDown = true;
                     if (e instanceof OutOfCreditsException) break;
                     if (e.getMessage() != null && e.getMessage().matches("(?s).*\\((401|429)\\).*")) break;
                     if (++claudeFailuresInARow >= 3) break;
+                    claudeDown = false;
                 } catch (LinkageError e) {
                     // A broken build (e.g. clashing library versions): every message would fail the same way.
                     log.error("Analysis is broken in this build", e);
                     write(AI_ERROR, OffsetDateTime.now() + " App error, please update Creator CRM: "
                             + e.getClass().getSimpleName() + ": " + e.getMessage());
+                    claudeDown = true;
                     break;
                 } catch (RuntimeException e) {
                     // Something specific to this message (e.g. saving the result). Show it, and keep going.
@@ -248,9 +301,66 @@ public class IngestionService {
                             + e.getClass().getSimpleName() + ": " + e.getMessage());
                 }
             }
+            if (!toBatch.isEmpty() && !claudeDown) submitBatch(toBatch);
         } finally {
             processLock.unlock();
         }
+        return n;
+    }
+
+    private void submitBatch(List<Message> toBatch) {
+        Map<String, ClassificationInput> inputs = new LinkedHashMap<>();
+        try {
+            toBatch.forEach(m -> inputs.put(m.id.toString(), processor.input(m)));
+            String id = llm.submitClassifyBatch(inputs);
+            write(BATCH_MESSAGES, String.join(",", inputs.keySet()));
+            write(BATCH_AT, OffsetDateTime.now().toString());
+            write(BATCH_ID, id);
+            log.info("Sent {} older messages for half-price batch analysis ({})", inputs.size(), id);
+        } catch (LlmException e) {
+            log.warn("Couldn't start batch analysis: {}", e.getMessage());
+            write(AI_ERROR, OffsetDateTime.now() + " " + e.getMessage());
+        }
+    }
+
+    /** If the batch in flight has finished, apply its results oldest first. Returns how many were applied. */
+    private int collectBatch() {
+        String id = read(BATCH_ID).orElse(null);
+        if (id == null) return 0;
+        Map<String, MessageAnalysis> results;
+        try {
+            results = llm.pollClassifyBatch(id);
+        } catch (LlmException e) {
+            log.warn("Couldn't check batch analysis {}: {}", id, e.getMessage());
+            results = null;
+        }
+        if (results == null) {
+            boolean lost = read(BATCH_AT).map(at -> OffsetDateTime.parse(at).plus(BATCH_GIVE_UP)
+                    .isBefore(OffsetDateTime.now())).orElse(true);
+            if (!lost) return 0;
+            log.warn("Batch analysis {} didn't finish; its messages will be analyzed again", id);
+            results = Map.of();
+        }
+        List<Message> sent = new ArrayList<>(messages.findAllById(batchMessageIds()));
+        write(BATCH_ID, "");
+        write(BATCH_MESSAGES, "");
+        write(BATCH_AT, "");
+        sent.sort(Comparator.comparing((Message m) -> m.sentAt));
+        int n = 0;
+        for (Message m : sent) {
+            MessageAnalysis a = results.get(m.id.toString());
+            if (a == null || m.aiProcessed || m.filteredReason != null) continue; // failed ones go again
+            try {
+                processor.apply(m, a);
+                n++;
+                version.incrementAndGet();
+            } catch (RuntimeException e) {
+                log.error("Processing failed for message {}", m.id, e);
+                write(AI_ERROR, OffsetDateTime.now() + " Analysis failed for one message: "
+                        + e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+        }
+        if (n > 0 && read(AI_ERROR).isPresent()) write(AI_ERROR, "");
         return n;
     }
 

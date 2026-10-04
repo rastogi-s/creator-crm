@@ -54,6 +54,11 @@ public class MessageProcessor {
     }
 
     public void process(Message m) {
+        apply(m, llm.classify(input(m)));
+    }
+
+    /** What Claude is asked about a message, given everything already known about its conversation. */
+    public ClassificationInput input(Message m) {
         Conversation conv = conversations.findById(m.conversationId).orElseThrow();
         Opportunity opp = opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).orElse(null);
 
@@ -63,10 +68,14 @@ public class MessageProcessor {
         List<String> recent = earlier.subList(Math.max(0, earlier.size() - CONTEXT_MESSAGES), earlier.size())
                 .stream().map(Untrusted::wrap).toList();
 
-        MessageAnalysis analysis = llm.classify(new ClassificationInput(
+        return new ClassificationInput(
                 settings.today(), conv.platform.name(), m.direction.name(), describe(opp),
-                conv.summary == null ? "" : conv.summary, recent, Untrusted.wrap(m)));
+                conv.summary == null ? "" : conv.summary, recent, Untrusted.wrap(m));
+    }
 
+    /** Apply Claude's analysis: the deterministic workflow, then drafts for recent messages. */
+    public void apply(Message m, MessageAnalysis analysis) {
+        Conversation conv = conversations.findById(m.conversationId).orElseThrow();
         WorkflowEngine.Outcome outcome = workflow.apply(m, conv, analysis);
         // A newer email in the thread would supersede the draft at once (common when importing history).
         if (m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF))

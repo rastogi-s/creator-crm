@@ -93,7 +93,12 @@ public class ClaudeSpend {
 
     /** Adds one reply's cost to the totals and returns it (USD). A reply means the credits work again. */
     public synchronized double record(Feature feature, Message response) {
-        long micros = Math.round(cost(response.model().asString(), response.usage()) * 1_000_000);
+        return record(feature, response, 1.0);
+    }
+
+    /** As above, at a discount: batch requests cost half. */
+    public synchronized double record(Feature feature, Message response, double priceFactor) {
+        long micros = Math.round(cost(response.model().asString(), response.usage()) * priceFactor * 1_000_000);
         if (get(SINCE).isEmpty()) put(SINCE, settings.today().toString());
         add(TOTAL, micros);
         add(CALLS, 1);

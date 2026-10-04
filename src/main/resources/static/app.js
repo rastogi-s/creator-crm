@@ -934,7 +934,8 @@
     return el("div", { class: "import-box" },
       el("h4", {}, "Import older email"),
       el("p", { class: "small muted" }, "Brings in past deals. Older email is analyzed oldest first so each deal's status builds up in order, and "
-        + "reply drafts are only written for unanswered email from the last 2 months. Already-imported email is skipped; "
+        + "reply drafts are only written for unanswered email from the last 2 months. Big imports are analyzed at half price "
+        + "in the background, so deals fill in over a few hours. Already-imported email is skipped; "
         + "Gmail rate limits pause and resume it automatically."),
       el("div", { class: "row" }, days,
         el("button", { class: "small", onclick: action(async () => {
@@ -1207,6 +1208,9 @@
     else if (since) text = "Import since " + since + " continues on the next sync";
     else if (n > 0 && !s.aiConfigured) {
       text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
+    } else if (s.inBatch > 0 && !s.aiError) {
+      text = s.inBatch + " older message" + (s.inBatch === 1 ? "" : "s") + " being analyzed at half price"
+        + (n > s.inBatch ? " (" + n + " waiting in all)" : "") + ". Results come in over the next few hours.";
     } else if (n > 0 && s.aiError) {
       const reason = s.aiError.replace(/^\S+\s+/, "");
       text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude API key rejected"
