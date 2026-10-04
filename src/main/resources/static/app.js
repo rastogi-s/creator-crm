@@ -543,7 +543,7 @@
     const webhookOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: channel.INSTAGRAM.connected ? "done" : "" },
       el("h3", {}, "Connect Instagram (optional)"),
-      el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions. Add yourself as a tester; App Review is only needed if other people's accounts will use your app."),
+      el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions (add instagram_business_manage_insights to show your reach). Add yourself as a tester; App Review is only needed if other people's accounts will use your app."),
       el("p", { class: "small muted" }, "OAuth redirect URI (Meta requires https — deploy the app or use a tunnel):"),
       el("div", { class: "code" }, s.instagramRedirectUri),
       igBox,
@@ -556,6 +556,7 @@
       igTokenBox,
       el("div", { class: "row" }, el("button", { class: "small", onclick: saveSecrets(igTokenBox) }, "Save token")),
       channelStatus(channel.INSTAGRAM),
+      channel.INSTAGRAM.connected ? instagramStatsLine(s.instagramStats, root) : null,
       s.instagramTokenExpiresAt ? el("p", { class: "small muted" }, "Token renews automatically; current expiry " + fmtDate(s.instagramTokenExpiresAt) + ".") : null,
       el("p", { class: "small muted" }, "Real-time DMs (optional): in the Meta dashboard set the webhook callback URL to the address below, subscribe to “messages”, and use a verify token generated here. Without webhooks, DMs are fetched on each sync."),
       el("div", { class: "code" }, s.instagramWebhookUrl),
@@ -650,6 +651,17 @@
     if (s.pendingAnalysis > 0) {
       root.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + " message(s) waiting for AI analysis" + (c.ANTHROPIC_API_KEY ? "." : " — add your Claude API key.")));
     }
+  }
+
+  function instagramStatsLine(st, root) {
+    const fmt = (n) => Number(n).toLocaleString();
+    const text = st
+      ? fmt(st.followers) + " followers · " + (st.postsSampled ? st.engagementRatePct + "% engagement over " + st.postsSampled + " posts" : "no recent posts")
+        + (st.reach28d != null ? " · " + fmt(st.reach28d) + " accounts reached in 28 days" : "") + " · updated " + fmtDate(st.updatedAt)
+      : "Your follower and engagement numbers haven't been read yet.";
+    return el("div", { class: "row" }, el("span", { class: "small" }, "📊 " + text), el("button", { class: "small", onclick: action(async () => {
+      await api("POST", "/api/settings/instagram-stats/refresh"); renderSettings(root);
+    }, "Instagram stats updated") }, "Refresh stats"));
   }
 
   async function learningCard(root) {
