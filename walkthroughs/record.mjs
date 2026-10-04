@@ -155,6 +155,32 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "linktree-import"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-links");
+    await page.goto(BASE + "/#links");
+    await view.locator("h1").waitFor();
+    await say("The Links page keeps your profiles, shop and portfolio in one place, and drafts use these exact links.", 4400);
+    await click(view.getByRole("tab", { name: "From Linktree" }));
+    const input = view.locator(".links-add input").first();
+    await point(input);
+    await input.pressSequentially("linktr.ee/mayamakes", { delay: 60 });
+    await say("Paste your Linktree link and press Find links.", 3000);
+    await click(view.getByRole("button", { name: "Find links" }));
+    await view.locator(".links-pick").waitFor();
+    await say("Everything on your Linktree shows up here. Untick anything you don't want, or rename it.", 4400);
+    const add = view.locator(".links-pick button.primary");
+    await click(add);
+    await view.locator(".link-card").first().waitFor();
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    await point(view.locator(".social-chip").first());
+    await say("Your profiles sit at the top as quick buttons, and every link gets its own card.", 4200);
+    const card = view.locator(".link-card").first();
+    await point(card.getByRole("button", { name: "Copy" }));
+    await say("Copy a link for a DM, change the order with the arrows, or press Edit to rename it.", 4200);
+    await say("", 600);
+  },
+
   async "win-back"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");

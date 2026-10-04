@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.12.0",
+    "version": "1.14.0",
     "title": "Lead scores and batch decline",
     "features": [
       {
@@ -15,6 +15,19 @@
         "title": "Say no to several leads at once",
         "body": "In Pipeline, pick Low-value leads, tick the ones that aren't a fit and press Decline selected. A short, polite no-thanks is written for each. In Drafts, read them and press Approve all declines to send them together. Each deal closes as declined.",
         "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
+    "version": "1.13.0",
+    "title": "A prettier Links page",
+    "features": [
+      {
+        "id": "linktree-import",
+        "title": "Bring your Linktree over in one click",
+        "body": "The Links page has a fresh look: each link is a card with its own colour, and your Instagram, TikTok and YouTube sit at the top as quick buttons. Under Add links, choose From Linktree, paste your Linktree link and press Find links. You see everything it found, untick anything you don't want, rename if you like, and press Add. Links you already have are skipped, and tracking bits like ?utm_source are left off. You can also paste a list of links, one per line. Drafts use these exact links whenever a brand asks for your portfolio or shop.",
+        "video": "linktree-import.webm",
+        "tryIt": "#links"
       }
     ]
   },
