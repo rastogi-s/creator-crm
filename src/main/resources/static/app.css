@@ -214,3 +214,4 @@ label.check input { width: auto; }
   .item { flex-wrap: wrap; }
   .item .actions { width: 100%; padding-left: 2.25rem; }
 }
+.row select.inline { width: auto; }

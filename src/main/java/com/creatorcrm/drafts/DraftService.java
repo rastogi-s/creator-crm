@@ -288,6 +288,7 @@ public class DraftService {
             m.messageType = intentOf(d.type).name();
             messages.save(m);
         }
+        if (d.type == DraftType.PITCH && o.pitchedAt == null) o.pitchedAt = settings.today();
         workflow.onCreatorMessage(o, intentOf(d.type), settings.today());
         learning.recordDraftSent(d, workflow.brandName(o));
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
@@ -298,6 +299,7 @@ public class DraftService {
     private static Intent intentOf(DraftType type) {
         return switch (type) {
             case FOLLOW_UP -> Intent.CREATOR_FOLLOW_UP;
+            case PITCH -> Intent.PITCH;
             case DECLINE -> Intent.CREATOR_DECLINED;
             case RATES, MEDIA_KIT -> Intent.SENT_RATES_OR_MEDIA_KIT;
             case CONTENT_SUBMISSION -> Intent.CONTENT_SUBMITTED;

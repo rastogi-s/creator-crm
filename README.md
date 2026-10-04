@@ -27,6 +27,10 @@ message before anything is sent.
 - **Links page**: your Instagram, TikTok, YouTube, website and portfolio in one list you can add to any time.
   Drafts use these exact links instead of placeholders.
 - **Outreach database**: brands you've pitched, with follow-up #1–#5 dates, and duplicate-pitch protection.
+- **Find brands to pitch**: describe the brands you want ("clean skincare brands like Glossier that work with
+  UGC creators") and Claude searches the web for ones that fit your profile, finds their published
+  partnerships/PR email, and suggests a pitch idea. Pick one and a personalised pitch lands in Drafts; once you
+  send it, the follow-up schedule starts like any other pitch.
 - **Drafts in your voice**: replies, rates, negotiation, follow-ups, declines, "ask for budget / usage
   rights", and so on. Email drafts are also saved in your Gmail Drafts folder.
 - **End-of-day summary**: what was completed, what's pending, new opportunities, tomorrow's priorities.

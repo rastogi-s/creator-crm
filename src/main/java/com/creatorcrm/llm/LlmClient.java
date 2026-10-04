@@ -12,5 +12,8 @@ public interface LlmClient {
     /** Write a message in the creator's voice. Always goes to the approval queue, never sent directly. */
     DraftText writeDraft(DraftInput input);
 
+    /** Research brands on the web that could be pitched. Results are suggestions the creator reviews. */
+    BrandLeads findBrands(BrandSearchInput input);
+
     boolean isConfigured();
 }
