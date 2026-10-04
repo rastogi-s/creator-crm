@@ -1,5 +1,23 @@
 [
   {
+    "version": "1.16.0",
+    "title": "Brands from Instagram",
+    "features": [
+      {
+        "id": "instagram-engagement",
+        "title": "See brands already engaging with you",
+        "body": "Outreach now lists accounts that tagged you in a post, @mentioned you or commented on your recent posts, so you can pitch brands that already know you. Press Add as lead and it joins your brand leads, ready for Draft pitch, or press Not a brand to hide it. To allow this, press Reconnect Instagram once on the Settings page.",
+        "tryIt": "#outreach"
+      },
+      {
+        "id": "instagram-lookup",
+        "title": "Look up any brand on Instagram",
+        "body": "Connect Facebook on the Settings page (your Instagram needs to be linked to a Facebook Page) and Outreach can look up a brand's Instagram by handle: followers, bio, an email in the bio and the creators it tags in sponsored posts. Brands found with Find brands get these details too, pitches use them, and fans are hidden from the accounts engaging with you. Nothing is scraped; it all uses Instagram's official API.",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
     "version": "1.15.0",
     "title": "Lead scores and batch decline",
     "features": [
