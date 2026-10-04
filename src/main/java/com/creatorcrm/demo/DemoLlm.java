@@ -35,6 +35,11 @@ public class DemoLlm implements LlmClient {
                     "Hi " + who + ",\n\nJust following up on " + what + ". Could you let me know when I can expect the payment? "
                             + "I've attached the invoice again.\n\nThanks so much,\nAva");
         }
+        if ("DECLINE".equals(input.draftType())) {
+            return new DraftText("Re: " + input.brandName() + " collab",
+                    "Hi " + who + ",\n\nThank you so much for thinking of me! It isn't quite the right fit for me right now, "
+                            + "but I'd love to stay in touch for future collaborations.\n\nAll the best,\nAva");
+        }
         if ("REPITCH".equals(input.draftType())) {
             // extraInstructions: "... Last collab: <what> (paid, $750), finished <Month Year>. ..." from WinBack.
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("Last collab: (.+?)(?: \\(([^)]*)\\))?, finished ([A-Za-z]+ \\d{4})")

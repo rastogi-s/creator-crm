@@ -195,6 +195,14 @@
     return c;
   }
 
+  // Lead score from LeadScoring: High / Medium / Low, with the reasons on hover.
+  function leadBadge(level, why) {
+    if (!level) return null;
+    const cls = level === "HIGH" ? "badge ok" : level === "MEDIUM" ? "badge medium" : "badge";
+    const text = level === "HIGH" ? "High value" : level === "MEDIUM" ? "Medium" : "Low value";
+    return el("span", { class: cls + " lead", title: why || "" }, text);
+  }
+
   function stat(v, l) { return el("div", { class: "stat" }, el("div", { class: "v" }, String(v)), el("div", { class: "l" }, l)); }
 
   function itemList(items, emptyText, numbered) {
@@ -206,6 +214,7 @@
         el("div", { class: "detail" },
           it.overdueDays > 0 ? el("span", { class: "badge overdue" }, "Overdue " + it.overdueDays + "d") : null, " ",
           it.priority === "HIGH" && !it.overdueDays ? el("span", { class: "badge high" }, "High") : null, " ",
+          it.lead ? leadBadge(it.lead, it.leadWhy) : null, it.lead ? " " : null,
           it.detail)),
       el("div", { class: "actions" },
         it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
@@ -237,7 +246,7 @@
 
   // ---------- Pipeline ----------
 
-  let pipelineFilter = { status: "", closed: false };
+  let pipelineFilter = { status: "", closed: false, lead: "" };
 
   async function renderPipeline(root) {
     const rows = await api("GET", "/api/pipeline?includeClosed=" + pipelineFilter.closed);
@@ -247,19 +256,54 @@
       Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: pipelineFilter.status === k }, v)));
     const closedBox = el("input", { type: "checkbox", checked: pipelineFilter.closed,
       onchange: (e) => { pipelineFilter.closed = e.target.checked; renderPipeline(root); } });
+    const leadSelect = el("select", { id: "lead-filter", onchange: (e) => { pipelineFilter.lead = e.target.value; renderPipeline(root); } },
+      [["", "All deals"], ["LEADS", "Leads only"], ["LOW", "Low-value leads"]].map(([v, t]) => el("option", { value: v, selected: pipelineFilter.lead === v }, t)));
     root.appendChild(el("div", { class: "row" }, el("h1", {}, "Pipeline"), el("div", { class: "spacer" }),
-      el("div", {}, statusSelect), el("label", { class: "row" }, closedBox, "Show closed")));
+      el("div", {}, leadSelect), el("div", {}, statusSelect), el("label", { class: "row" }, closedBox, "Show closed")));
 
-    const shown = rows.filter((r) => !pipelineFilter.status || r.status === pipelineFilter.status);
+    const shown = rows.filter((r) => (!pipelineFilter.status || r.status === pipelineFilter.status)
+      && (pipelineFilter.lead !== "LEADS" || r.lead) && (pipelineFilter.lead !== "LOW" || r.lead === "LOW"));
     const counts = {};
     rows.forEach((r) => { counts[r.statusLabel] = (counts[r.statusLabel] || 0) + 1; });
     root.appendChild(el("div", { class: "row card" }, Object.entries(counts).map(([k, v]) => el("span", { class: "badge" }, k + " · " + v))));
 
-    if (!shown.length) { root.appendChild(card(null, emptyLine("No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch."))); return; }
+    if (!shown.length) {
+      root.appendChild(card(null, emptyLine(pipelineFilter.lead ? "No leads match this filter." : "No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch.")));
+      return;
+    }
+
+    // Batch decline: tick leads, then write a polite decline draft for each.
+    const picked = new Set();
+    const declineBtn = el("button", { class: "small", disabled: true, onclick: action(async () => {
+      const n = picked.size;
+      if (!confirm("Write a polite decline for " + n + (n === 1 ? " lead" : " leads") + "? They'll wait in Drafts for you to read and send.")) return;
+      const r = await api("POST", "/api/opportunities/decline", { ids: [...picked] });
+      toast(r.done + (r.done === 1 ? " decline" : " declines") + " drafted" + (r.skipped.length ? ". Skipped: " + r.skipped.join("; ") : ""), r.skipped.length > 0);
+      location.hash = "#drafts";
+    }) }, "Decline selected");
+    const sync = () => { declineBtn.disabled = picked.size === 0; declineBtn.textContent = picked.size ? "Decline selected (" + picked.size + ")" : "Decline selected"; };
+    const leadRows = shown.filter((r) => r.lead);
+    const pickAll = el("input", { type: "checkbox", title: "Select all leads shown", onclick: (e) => e.stopPropagation(), onchange: (e) => {
+      leadRows.forEach((r) => (e.target.checked ? picked.add(r.id) : picked.delete(r.id)));
+      root.querySelectorAll("input.pick").forEach((b) => { b.checked = e.target.checked; });
+      sync();
+    } });
+    if (leadRows.length) {
+      root.appendChild(el("div", { class: "row card", id: "decline-bar" },
+        el("span", { class: "small muted" }, "Not a fit? Tick the leads you'd like to turn down and press Decline selected. "
+          + "A short, polite no-thanks is written for each; nothing is sent until you approve it."),
+        el("div", { class: "spacer" }), declineBtn));
+    }
     root.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, ["Brand", "Status", "Deal", "Budget", "Next follow-up", "Open tasks", "Updated"].map((h) => el("th", {}, h)))),
+      el("thead", {}, el("tr", {}, el("th", {}, leadRows.length ? pickAll : null),
+        ["Brand", "Lead", "Status", "Deal", "Budget", "Next follow-up", "Open tasks", "Updated"].map((h) => el("th", {}, h)))),
       el("tbody", {}, shown.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.id) },
+        el("td", { onclick: (e) => e.stopPropagation() }, r.lead ? el("input", { type: "checkbox", class: "pick", onchange: (e) => {
+          if (e.target.checked) picked.add(r.id); else picked.delete(r.id);
+          sync();
+        } }) : null),
         el("td", {}, el("strong", {}, r.brand)),
+        el("td", {}, leadBadge(r.lead, r.leadWhy) || el("span", { class: "muted" }, "—")),
         el("td", {}, r.statusLabel),
         el("td", {}, pretty(r.type) + " · " + pretty(r.compensation)),
         el("td", {}, r.budget || "—"),
@@ -471,7 +515,7 @@
       Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: o.status === k }, v)));
     drawer.appendChild(card(null,
       el("label", {}, "Status"), statusSel,
-      facts([["Type", pretty(o.type)], ["Compensation", pretty(o.compensation)], ["Budget", o.budgetText],
+      facts([["Lead", d.summary.lead && (pretty(d.summary.lead) + (d.summary.leadWhy ? ": " + d.summary.leadWhy : ""))], ["Type", pretty(o.type)], ["Compensation", pretty(o.compensation)], ["Budget", o.budgetText],
              ["Deliverables", o.deliverables], ["Usage rights", o.usageRights], ["Campaign", o.campaign],
              ["Still unknown", o.missingInfo], ["Next step", o.nextStep], ["Origin", pretty(o.origin)],
              ["Contact", d.brand && [d.brand.contactName, d.brand.contactEmail, d.brand.instagram && "@" + d.brand.instagram].filter(Boolean).join(" · ")]])));
@@ -746,6 +790,18 @@
     root.appendChild(el("h1", {}, "Drafts awaiting approval"));
     root.appendChild(el("p", { class: "muted" }, "Nothing is sent until you press Send. Edit freely first."));
     if (!list.length) { root.appendChild(card(null, emptyLine("No drafts waiting."))); return; }
+    const declines = list.filter((x) => x.draft.type === "DECLINE");
+    if (declines.length > 1) {
+      root.appendChild(el("div", { class: "row card", id: "send-declines" },
+        el("span", {}, declines.length + " polite declines are ready below. Read them, then send them all at once."),
+        el("div", { class: "spacer" }),
+        el("button", { class: "primary small", onclick: action(async () => {
+          if (!confirm("Send all " + declines.length + " declines now? Each deal is closed as declined.")) return;
+          const r = await api("POST", "/api/drafts/send-declines");
+          toast(r.done + " sent" + (r.skipped.length ? ". Not sent: " + r.skipped.join("; ") : ""), r.skipped.length > 0);
+          route();
+        }) }, "Approve all declines")));
+    }
     for (const { draft: d, brand, blockedReason } of list) {
       const subject = el("input", { value: d.subject || "", maxlength: "1000" });
       const body = el("textarea", { class: "tall", maxlength: "20000" });

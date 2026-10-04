@@ -53,8 +53,18 @@ function helpers(page) {
   const pause = (ms) => page.waitForTimeout(ms);
   const say = async (text, ms = 3200) => { await page.evaluate((t) => window.__caption(t), text); await pause(ms); };
   const point = async (locator) => {
-    await locator.scrollIntoViewIfNeeded();
-    const box = await locator.boundingBox();
+    // Views can re-render while we look (e.g. after a sync), so look again if the element was just replaced.
+    let box = null;
+    for (let i = 0; i < 10 && !box; i++) {
+      try {
+        await locator.scrollIntoViewIfNeeded({ timeout: 2000 });
+        box = await locator.boundingBox();
+      } catch (e) {
+        box = null;
+      }
+      if (!box) await pause(300);
+    }
+    if (!box) throw new Error("Not visible: " + locator);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 25 });
     await pause(400);
   };
@@ -113,6 +123,35 @@ const scenarios = {
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
     await point(page.locator("#view-money .stat").nth(2));
     await say("It now counts in Paid this month. Export CSV gives you the year's invoices for taxes.", 4200);
+    await say("", 600);
+  },
+
+  async "lead-scoring"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#pipeline");
+    const table = page.locator("#view-pipeline table");
+    await table.waitFor();
+    await say("Every new lead now gets a score: High value, Medium or Low value.", 3800);
+    await point(table.locator("tr", { hasText: "Glowberry Skin" }).locator(".lead"));
+    await say("Glowberry offers a paid Reel close to your usual rate, so it's high value. Hover to see why.", 4400);
+    await point(table.locator("tr", { hasText: "Tiny Treats" }).locator(".lead"));
+    await say("Tiny Treats offers far less than you usually get, so it's low value.", 3800);
+    await page.locator("#lead-filter").selectOption("LOW");
+    await point(page.locator("#lead-filter"));
+    await say("Show just the low-value leads, then tick the ones that aren't a fit.", 3800);
+    for (const box of await page.locator("#view-pipeline input.pick").all()) {
+      await box.check();
+      await page.waitForTimeout(400);
+    }
+    page.once("dialog", (d) => d.accept());
+    await click(page.getByRole("button", { name: /Decline selected/ }));
+    const bar = page.locator("#send-declines");
+    await bar.waitFor();
+    const decline = page.locator("#view-drafts .card", { hasText: "Tiny Treats — Decline" }).first();
+    await point(decline.locator("textarea"));
+    await say("A short, polite no-thanks is written for each one. Read them, and change anything you like.", 4400);
+    await point(page.locator("#send-declines").getByRole("button", { name: "Approve all declines" }));
+    await say("Happy with them? Approve all declines sends them together, and each deal is closed.", 4400);
     await say("", 600);
   },
 

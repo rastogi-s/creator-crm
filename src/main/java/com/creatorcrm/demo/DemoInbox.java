@@ -35,6 +35,10 @@ final class DemoInbox {
                     "Hi Ava, Sky from Maple & Moss. The August Reel looks great, approved! Go ahead and post it."),
             new Mail("Coastline Coffee", "Noor", "noor@coastlinecoffee.example", 100, "Spring Reel payment",
                     "Hi Ava, Noor from Coastline Coffee. The $900 payment for the Spring Reel is on its way. Thanks again, it did so well for us!"),
+            new Mail("Sparkle Socks", "Jay", "jay@sparklesocks.example", 0, "Affiliate partnership",
+                    "Hi Ava! Jay from Sparkle Socks. We'd love you to join our affiliate program: 15% commission on every sale through your link."),
+            new Mail("Tiny Treats", "Bea", "bea@tinytreats.example", 0, "Quick Reel for Tiny Treats?",
+                    "Hi Ava, Bea at Tiny Treats here. We have $100 for one Reel and three Stories about our new snack box. Interested?"),
             new Mail("Petal & Pine", "Mia", "mia@petalpine.example", 25, "Loved your candle post",
                     "Hi Ava, Mia at Petal & Pine. We saw your post with our candle gift set, it looks lovely! Thanks so much for sharing it."));
 
@@ -66,6 +70,12 @@ final class DemoInbox {
         if (t.contains("Maple & Moss")) return a("Maple & Moss", "Sky", Intent.CONTENT_APPROVED, OpportunityType.PAID, Compensation.PAID, 750,
                 "1 Reel", "August Reel", List.of(), List.of(), false, Priority.MEDIUM,
                 "Post the Maple & Moss Reel", "Maple & Moss approved the August Reel.");
+        if (t.contains("Sparkle Socks")) return a("Sparkle Socks", "Jay", Intent.NEW_OPPORTUNITY, OpportunityType.AFFILIATE, Compensation.AFFILIATE, 0,
+                "", "Affiliate program", List.of(), List.of("budget"), true, Priority.LOW,
+                "Reply to Sparkle Socks about their affiliate program", "Sparkle Socks offers 15% commission as an affiliate.");
+        if (t.contains("Tiny Treats")) return a("Tiny Treats", "Bea", Intent.NEW_OPPORTUNITY, OpportunityType.PAID, Compensation.PAID, 100,
+                "1 Reel + 3 Stories", "Snack box", List.of(), List.of(), true, Priority.LOW,
+                "Reply to Tiny Treats about their $100 offer", "Tiny Treats offers $100 for a Reel and three Stories.");
         if (t.contains("Coastline Coffee")) return a("Coastline Coffee", "Noor", Intent.PAYMENT_UPDATE, OpportunityType.PAID, Compensation.PAID, 900,
                 "1 Reel", "Spring Reel", List.of(), List.of(), false, Priority.LOW,
                 "Check that Coastline Coffee's $900 payment arrived", "Coastline Coffee says the $900 payment for the Spring Reel is on its way.");

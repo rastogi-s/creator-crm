@@ -25,6 +25,7 @@ import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.repo.TaskRepo;
+import com.creatorcrm.scoring.LeadScoring;
 import com.creatorcrm.settings.SettingsService;
 import com.creatorcrm.workflow.FollowUpEngine;
 import java.math.BigDecimal;
@@ -45,8 +46,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class DigestService {
 
+    /** {@code lead} and {@code leadWhy}: the deal's lead score (HIGH, MEDIUM, LOW) and its reasons, for leads only. */
     public record Item(String kind, String title, String detail, LocalDate due, long overdueDays, String priority,
-                       Long opportunityId, Long refId, String brand, int score) {}
+                       Long opportunityId, Long refId, String brand, int score, String lead, String leadWhy) {
+        public Item(String kind, String title, String detail, LocalDate due, long overdueDays, String priority,
+                    Long opportunityId, Long refId, String brand, int score) {
+            this(kind, title, detail, due, overdueDays, priority, opportunityId, refId, brand, score, null, null);
+        }
+    }
 
     public record OpportunityCounts(int total, int paid, int gifted, int affiliate, int other, List<String> items) {}
 
@@ -71,11 +78,13 @@ public class DigestService {
     private final DraftService draftService;
     private final SettingsService settings;
     private final InvoiceRepo invoices;
+    private final LeadScoring scoring;
 
     public DigestService(TaskRepo tasks, OpportunityRepo opportunities, BrandRepo brands, DeadlineRepo deadlines,
                          DraftRepo drafts, ActivityRepo activity, FollowUpEngine followUps, DraftService draftService,
-                         SettingsService settings, InvoiceRepo invoices) {
+                         SettingsService settings, InvoiceRepo invoices, LeadScoring scoring) {
         this.invoices = invoices;
+        this.scoring = scoring;
         this.tasks = tasks;
         this.opportunities = opportunities;
         this.brands = brands;
@@ -96,10 +105,12 @@ public class DigestService {
 
         List<Item> urgent = new ArrayList<>();
         List<Item> upcoming = new ArrayList<>();
+        Map<Long, LeadScoring.Score> leads = scoring.scores(opps.values());
         for (Task t : tasks.findByStatus(TaskStatus.OPEN)) {
             Opportunity o = t.opportunityId == null ? null : opps.get(t.opportunityId);
             if (o != null && !o.status.isOpen()) continue;
-            Item item = taskItem(t, o, o == null ? "" : brandNames.getOrDefault(o.brandId, ""), today);
+            Item item = taskItem(t, o, o == null ? "" : brandNames.getOrDefault(o.brandId, ""), today,
+                    o == null ? null : leads.get(o.id));
             boolean isUrgent = (t.dueDate != null && !t.dueDate.isAfter(today)) || t.priority == Priority.HIGH || item.score() >= 70;
             if (isUrgent) urgent.add(item);
             else if (t.dueDate == null || !t.dueDate.isAfter(today.plusDays(7))) upcoming.add(item);
@@ -204,7 +215,7 @@ public class DigestService {
         return new EndOfDay(today, completed, pending, fresh, next);
     }
 
-    private Item taskItem(Task t, Opportunity o, String brand, LocalDate today) {
+    private Item taskItem(Task t, Opportunity o, String brand, LocalDate today, LeadScoring.Score lead) {
         long overdue = t.dueDate == null ? 0 : Math.max(0, ChronoUnit.DAYS.between(t.dueDate, today));
         int score = switch (t.type) {
             case SIGN_CONTRACT -> 50;
@@ -232,7 +243,8 @@ public class DigestService {
         }
         if (t.dueDate != null) detail.add(when(t.dueDate, today));
         return new Item("TASK", t.description, String.join(" · ", detail), t.dueDate, overdue,
-                t.priority == null ? "MEDIUM" : t.priority.name(), o == null ? null : o.id, t.id, brand, score);
+                t.priority == null ? "MEDIUM" : t.priority.name(), o == null ? null : o.id, t.id, brand, score,
+                lead == null ? null : lead.level().name(), lead == null ? null : lead.summary());
     }
 
     private Approval approval(Draft d, Map<Long, Opportunity> opps, Map<Long, String> brandNames) {
