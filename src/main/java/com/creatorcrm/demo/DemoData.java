@@ -4,11 +4,14 @@ import com.creatorcrm.channels.NormalizedMessage;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.calendar.CalendarSync;
+import com.creatorcrm.contracts.ContractService;
 import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.invoices.PaymentReminders;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.repo.ActivityRepo;
+import com.creatorcrm.repo.ContractRepo;
 import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.security.AppUser;
@@ -50,11 +53,28 @@ public class DemoData implements ApplicationRunner {
     private final PaymentReminders paymentReminders;
     private final ActivityRepo activity;
     private final WinBack winBack;
+    private final ContractService contracts;
+    private final ContractRepo contractRepo;
+    private final CalendarSync calendar;
+
+    static final String DEMO_CONTRACT = """
+            INFLUENCER AGREEMENT between Bloomleaf Tea Co. ("Brand") and Ava Rivera ("Creator").
+            1. Services. Creator will produce one (1) Instagram Reel and two (2) Instagram Stories featuring Bloomleaf's
+            October blends. Creator will make revisions as requested by Brand until the content is approved.
+            2. Fee. Brand will pay Creator USD 650. Payment is due net 60 from receipt of Creator's invoice.
+            3. Usage. Brand may use the content in paid social advertising for twelve (12) months from first posting.
+            4. Exclusivity. For two (2) months after posting, Creator will not promote other tea or coffee brands.
+            5. Term. Creator will keep the Reel live on her profile for at least twelve (12) months.
+            """;
 
     public DemoData(AppUserRepo users, PasswordEncoder encoder, SettingsService settings, IngestionService ingestion,
                     OutreachService outreach, InvoiceService invoices, OpportunityRepo opportunities,
                     WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
-                    ActivityRepo activity, WinBack winBack) {
+                    ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
+                    CalendarSync calendar) {
+        this.calendar = calendar;
+        this.contracts = contracts;
+        this.contractRepo = contractRepo;
         this.activity = activity;
         this.winBack = winBack;
         this.invoiceRepo = invoiceRepo;
@@ -122,6 +142,15 @@ public class DemoData implements ApplicationRunner {
                     activity.save(a);
                 }));
         winBack.draftDue(settings.today());
+        // Bloomleaf Tea's contract, as if read from the PDF attached to their email (demo mode has no Gmail).
+        opportunities.findAll().stream()
+                .filter(o -> "Bloomleaf Tea".equals(workflow.brandName(o))).findFirst()
+                .ifPresent(o -> {
+                    contractRepo.findByOpportunityIdOrderByIdDesc(o.id).forEach(contractRepo::delete);
+                    contracts.checkText(o.id, "Bloomleaf-October-agreement.pdf", DEMO_CONTRACT);
+                });
+        // Deal dates on the pretend Google Calendar, as if she had connected it.
+        calendar.sync();
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
     }
 }

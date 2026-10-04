@@ -7,6 +7,8 @@ import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.llm.BrandLeads;
 import com.creatorcrm.llm.BrandSearchInput;
 import com.creatorcrm.llm.ClassificationInput;
+import com.creatorcrm.llm.ContractInput;
+import com.creatorcrm.llm.ContractTerms;
 import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.Intent;
@@ -77,6 +79,19 @@ public class FakeLlm implements LlmClient {
     @Override
     public BrandLeads findBrands(BrandSearchInput input) {
         return nextLeads;
+    }
+
+    /** What the next contract read returns: net 60, $500, 12 months of ads, no kill fee, unless a test sets it. */
+    public ContractTerms nextContract = new ContractTerms(60, "Net 60 from invoice", 500, "USD", 12, "Paid ads for 12 months",
+            0, "", 0, "", List.of(), List.of("The brand owns the content forever"), "A $500 UGC video with 12 months of ads.");
+    public ContractInput lastContractInput;
+    public int contractCalls;
+
+    @Override
+    public ContractTerms extractContractTerms(ContractInput input) {
+        contractCalls++;
+        lastContractInput = input;
+        return nextContract;
     }
 
     @Override

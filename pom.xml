@@ -91,6 +91,12 @@
             <artifactId>google-api-services-gmail</artifactId>
             <version>v1-rev20260727-2.0.0</version>
         </dependency>
+        <!-- Deal dates on her Google Calendar (only a calendar the app creates). -->
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-calendar</artifactId>
+            <version>v3-rev20260925-2.0.0</version>
+        </dependency>
         <dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>
@@ -102,6 +108,12 @@
             <groupId>com.github.librepdf</groupId>
             <artifactId>openpdf</artifactId>
             <version>2.0.5</version>
+        </dependency>
+        <!-- Reading the text of contract PDFs brands send. Apache 2.0. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.5</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

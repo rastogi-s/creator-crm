@@ -701,6 +701,45 @@
       }
     }
 
+    // Contract check: terms read from the contract the brand sent, against her limits
+    const contracts = await api("GET", "/api/opportunities/" + id + "/contracts");
+    if (contracts.length || ["CONTRACT_PENDING", "CONTRACT_TO_SIGN"].includes(o.status)) {
+      const icon = { RED: "✕", AMBER: "!", OK: "✓" };
+      const box = el("div", { class: "card", id: "contract-check" }, el("h2", {}, "Contract check"));
+      for (const c of contracts) {
+        const head = el("div", { class: "row" }, el("strong", {}, c.fileName || "Contract"), el("div", { class: "spacer" }),
+          c.status === "CHECKED" ? el("span", { class: "badge " + (c.red ? "overdue" : c.amber ? "medium" : "ok") },
+            c.red || c.amber ? [c.red ? c.red + " to push back on" : null, c.amber ? c.amber + " to look at" : null].filter(Boolean).join(" · ") : "Looks fine") : null);
+        box.appendChild(head);
+        if (c.note) box.appendChild(el("p", { class: "small muted" }, c.note));
+        if (c.terms && c.terms.summary) box.appendChild(el("p", { class: "small" }, c.terms.summary));
+        if (c.flags.length) {
+          box.appendChild(el("ul", { class: "flags" }, c.flags.map((f) => el("li", { class: "flag " + f.level.toLowerCase() },
+            el("span", { class: "mark", "aria-label": { RED: "Push back", AMBER: "Look at", OK: "Fine" }[f.level] }, icon[f.level]), el("span", {}, f.text)))));
+        }
+        if (c.terms && c.terms.deadlines && c.terms.deadlines.length) {
+          box.appendChild(el("p", { class: "small" }, "Dates in the contract: " + c.terms.deadlines.map((x) => fmtDate(x.date) + " " + x.what).join("; ")));
+        }
+        if (c.status === "CHECKED") {
+          box.appendChild(el("p", {}, el("button", { class: "small", onclick: action(async () => {
+            await api("POST", "/api/contracts/" + c.id + "/recheck"); refresh();
+          }, "Checked again with your current limits") }, "Check again")));
+        }
+      }
+      const needsText = !contracts.some((c) => c.status === "CHECKED");
+      const paste = el("textarea", { maxlength: "60000", placeholder: "Paste the contract's text, e.g. copied from the DocuSign page" });
+      box.appendChild(el("details", needsText ? { open: true } : {},
+        el("summary", { class: "small" }, contracts.length ? "Check another version" : "No contract file yet. Paste its text to check it"),
+        paste,
+        el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+          await api("POST", "/api/opportunities/" + id + "/contracts", { text: paste.value });
+          refresh();
+        }, "Contract checked") }, "Check this contract"))));
+      box.appendChild(el("p", { class: "small muted" }, "Claude reads the terms and the app checks them against your limits in Settings, Contract check. "
+        + "It's a checklist, not legal advice; you decide what to sign."));
+      drawer.appendChild(box);
+    }
+
     // Invoices
     const invoiceAsked = d.tasks.some((t) => t.status === "OPEN" && t.type === "SEND_INVOICE");
     if (o.compensation !== "GIFTED" || invoices.length) {
@@ -766,10 +805,19 @@
         refresh();
       }, "Task added") }, "Add"))));
 
+    // Exclusivity: another brand's exclusive window (or date) clashes with this deal's
+    const clashes = await api("GET", "/api/opportunities/" + id + "/exclusivity");
+    if (clashes.length) {
+      drawer.appendChild(el("div", { class: "card", id: "exclusivity" }, el("h2", {}, "Exclusivity clash"),
+        el("ul", { class: "flags" }, clashes.map((x) => el("li", { class: "flag amber" }, el("span", { class: "mark" }, "!"),
+          el("span", {}, x.text, " ", el("a", { href: "#", onclick: (e) => { e.preventDefault(); openDeal(x.otherOpportunityId); } }, "Open " + x.otherBrand))))),
+        el("p", { class: "small muted" }, "Exclusivity comes from the contract or what the brand wrote. Only you know whether the brands compete.")));
+    }
+
     if (d.deadlines.length) {
       drawer.appendChild(card("Deadlines", el("ul", { class: "list" }, d.deadlines.map((x) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, pretty(x.type) + " — " + fmtDate(x.dueDate)),
-          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.description || ""))))))));
+          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "📅 on your calendar · " : "") + (x.description || ""))))))));
     }
 
     const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : "") },
@@ -1481,6 +1529,39 @@
 
   // ---------- Settings ----------
 
+  // Deal dates on a "Creator CRM" calendar in her Google account
+  async function calendarStep(root, c) {
+    const cal = await api("GET", "/api/calendar");
+    const li = el("li", { class: cal.state === "READY" && cal.on ? "done" : "", id: "settings-calendar" }, el("h3", {}, "Google Calendar"),
+      el("p", { class: "small muted" }, "Contracts to sign, content due, posting days and payments go on a calendar called Creator CRM in your Google account, "
+        + "so they show on your phone. Dates move when a deal changes and disappear when they're done. The app can't see your other calendars."));
+    if (cal.state === "NO_GOOGLE") {
+      li.appendChild(el("p", { class: "small" }, "Connect Gmail first (step 2). The calendar uses the same Google sign-in."));
+      return li;
+    }
+    if (cal.state === "NEEDS_RECONNECT") {
+      li.appendChild(el("p", { class: "small" }, "Press Reconnect Gmail once and allow calendar access on Google's screen."));
+      if (c.GOOGLE_CLIENT_ID && c.GOOGLE_CLIENT_SECRET) li.appendChild(el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        const r = await api("POST", "/oauth/google/start"); location.href = r.url;
+      }) }, "Reconnect Gmail")));
+      return li;
+    }
+    const on = el("input", { type: "checkbox", checked: cal.on, onchange: action(async (e) => {
+      await api("POST", "/api/calendar", { on: e.target.checked });
+      renderSettings(root);
+    }, "Saved") });
+    li.appendChild(el("label", { class: "check" }, on, " Put deal dates on my Google Calendar"));
+    li.appendChild(el("p", { class: "small" + (cal.error ? " warn" : "") }, cal.error ? cal.error
+      : cal.on ? cal.events + (cal.events === 1 ? " date" : " dates") + " on your Creator CRM calendar" + (cal.lastRun ? ", updated " + fmtDateTime(cal.lastRun) : "") + "."
+        : "Off. Turning it off removed the app's events."));
+    if (cal.on) li.appendChild(el("p", {}, el("button", { class: "small", onclick: action(async () => {
+      const r = await api("POST", "/api/calendar/sync");
+      if (r.error) throw new Error(r.error);
+      renderSettings(root);
+    }, "Calendar updated") }, "Update now")));
+    return li;
+  }
+
   async function renderSettings(root) {
     // A second render (a sync finishing, a Save) can start while this one waits on the server. Only the newest
     // one may add cards, or the page ends up with two of some cards.
@@ -1529,7 +1610,7 @@
     const gmailBox = el("div", {}, secretField("GOOGLE_CLIENT_ID", "Google OAuth client ID"), secretField("GOOGLE_CLIENT_SECRET", "Google OAuth client secret"));
     steps.appendChild(el("li", { class: channel.EMAIL.connected ? "done" : "" },
       el("h3", {}, "Connect Gmail"),
-      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
+      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API and the Google Calendar API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
       el("div", { class: "code" }, s.googleRedirectUri),
       gmailBox,
       el("div", { class: "row" },
@@ -1540,7 +1621,7 @@
         channel.EMAIL.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/google/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
       channelStatus(channel.EMAIL),
       channel.EMAIL.connected ? importHistory() : null,
-      el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts. The app cannot delete or change existing mail.")));
+      el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts, and a Creator CRM calendar for deal dates. The app cannot delete or change existing mail or see your other calendars.")));
 
     // 3. Instagram
     const igBox = el("div", {}, secretField("INSTAGRAM_APP_ID", "Instagram app ID"), secretField("INSTAGRAM_APP_SECRET", "Instagram app secret"));
@@ -1715,7 +1796,33 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 9. MCP
+    // 9. Contract check
+    const ck = {
+      contractMaxPaymentDays: el("input", { type: "number", min: "0", max: "999", value: p.contractMaxPaymentDays }),
+      contractFreeUsageMonths: el("input", { type: "number", min: "0", max: "999", value: p.contractFreeUsageMonths }),
+      contractRevisionsIncluded: el("input", { type: "number", min: "0", max: "99", value: p.contractRevisionsIncluded }),
+    };
+    steps.appendChild(el("li", { class: "done", id: "settings-contracts" },
+      el("h3", {}, "Contract check"),
+      el("p", { class: "small muted" }, "When a brand emails a contract as a PDF, Claude reads its terms and the app flags anything outside these limits. "
+        + "Contracts on DocuSign and similar sites can't be opened by the app; paste their text on the deal instead. Each contract costs one Claude call."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Get paid within (days)"), ck.contractMaxPaymentDays),
+        el("div", {}, el("label", {}, "Paid usage your fee includes (months)"), ck.contractFreeUsageMonths),
+        el("div", {}, el("label", {}, "Revision rounds you include"), ck.contractRevisionsIncluded)),
+      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        const body = {};
+        for (const [k, v] of Object.entries(ck)) body[k] = v.value;
+        await api("PUT", "/api/settings/preferences", body);
+        renderSettings(root);
+      }, "Saved") }, "Save"))));
+
+    // 10. Google Calendar
+    const calendar = await calendarStep(root, c);
+    if (stale()) return;
+    steps.appendChild(calendar);
+
+    // 11. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),
@@ -1841,7 +1948,7 @@
     const sp = await api("GET", "/api/claude-spend").catch(() => null);
     if (!sp) return el("div");
     showCreditBanner(sp);
-    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands" };
+    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts" };
     const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
       value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
     const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

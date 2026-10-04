@@ -253,7 +253,7 @@ public class WorkflowEngine {
         if (!a.suggestedAction().isBlank()) o.nextStep = a.suggestedAction();
     }
 
-    private Task upsertTask(Opportunity o, TaskType type, String description, Priority priority, LocalDate due, Long msgId) {
+    public Task upsertTask(Opportunity o, TaskType type, String description, Priority priority, LocalDate due, Long msgId) {
         Task t = tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN).stream()
                 .filter(x -> x.type == type).findFirst().orElseGet(() -> {
                     Task n = new Task();

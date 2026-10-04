@@ -65,6 +65,14 @@ public class SettingsService {
     public static final String RATE_USAGE_PCT = "rateUsagePercentPerMonth";
     public static final String RATE_EXCLUSIVITY_PCT = "rateExclusivityPercent";
 
+    /** Contract check limits: longest payment wait, paid-usage months included in her fee, revision rounds included. */
+    public static final String CONTRACT_MAX_PAYMENT_DAYS = "contractMaxPaymentDays";
+    public static final String CONTRACT_FREE_USAGE_MONTHS = "contractFreeUsageMonths";
+    public static final String CONTRACT_REVISIONS_INCLUDED = "contractRevisionsIncluded";
+
+    /** "false" = deal dates stay off her Google Calendar (and any already there are removed). */
+    public static final String CALENDAR_SYNC = "calendarSync";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
@@ -72,7 +80,8 @@ public class SettingsService {
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
-            WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT);
+            WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
+            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -164,6 +173,10 @@ public class SettingsService {
         return Boolean.parseBoolean(raw(LEARN_FROM_HISTORY, "true"));
     }
 
+    public boolean calendarSync() {
+        return Boolean.parseBoolean(raw(CALENDAR_SYNC, "true"));
+    }
+
     /** The business name on invoices; the creator's name until one is set. */
     public String invoiceBusinessName() { return raw(INVOICE_BUSINESS_NAME, creatorName()); }
 
@@ -192,6 +205,12 @@ public class SettingsService {
     public int rateUsagePercent() { return Integer.parseInt(raw(RATE_USAGE_PCT, "30")); }
 
     public int rateExclusivityPercent() { return Integer.parseInt(raw(RATE_EXCLUSIVITY_PCT, "25")); }
+
+    public int contractMaxPaymentDays() { return Integer.parseInt(raw(CONTRACT_MAX_PAYMENT_DAYS, "30")); }
+
+    public int contractFreeUsageMonths() { return Integer.parseInt(raw(CONTRACT_FREE_USAGE_MONTHS, "3")); }
+
+    public int contractRevisionsIncluded() { return Integer.parseInt(raw(CONTRACT_REVISIONS_INCLUDED, "1")); }
 
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
@@ -228,6 +247,10 @@ public class SettingsService {
         m.put(WIN_BACK_WEEKLY_LIMIT, String.valueOf(winBackWeeklyLimit()));
         m.put(RATE_USAGE_PCT, String.valueOf(rateUsagePercent()));
         m.put(RATE_EXCLUSIVITY_PCT, String.valueOf(rateExclusivityPercent()));
+        m.put(CONTRACT_MAX_PAYMENT_DAYS, String.valueOf(contractMaxPaymentDays()));
+        m.put(CONTRACT_FREE_USAGE_MONTHS, String.valueOf(contractFreeUsageMonths()));
+        m.put(CONTRACT_REVISIONS_INCLUDED, String.valueOf(contractRevisionsIncluded()));
+        m.put(CALENDAR_SYNC, String.valueOf(calendarSync()));
         return m;
     }
 
@@ -258,7 +281,7 @@ public class SettingsService {
                     throw new IllegalArgumentException("Follow-up time must be HH:mm, e.g. 08:00");
                 }
             }
-            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY -> {
+            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
             }
             case PAYMENT_REMINDER_DAYS -> {
@@ -274,6 +297,11 @@ public class SettingsService {
             case WIN_BACK_WEEKLY_LIMIT -> {
                 if (!v.isBlank() && !v.trim().matches("\\d|1\\d|20")) {
                     throw new IllegalArgumentException("Re-pitches per week: 0 to 20 (0 = off)");
+                }
+            }
+            case CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED -> {
+                if (!v.isBlank() && !v.trim().matches("\\d{1,3}")) {
+                    throw new IllegalArgumentException("Contract limits: a whole number from 0 to 999, e.g. 30");
                 }
             }
             case RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT -> {

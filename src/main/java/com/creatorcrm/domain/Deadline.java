@@ -13,4 +13,7 @@ public class Deadline {
     public LocalDate dueDate;
     public String description;
     public boolean done;
+    /** The event on her "Creator CRM" Google calendar, and a fingerprint of what it last showed. */
+    public String calendarEventId;
+    public String calendarFingerprint;
 }

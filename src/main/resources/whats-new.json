@@ -1,5 +1,31 @@
 [
   {
+    "version": "1.22.0",
+    "title": "Deal dates on your Google Calendar",
+    "features": [
+      {
+        "id": "calendar-sync",
+        "title": "Your deal dates, on your phone",
+        "body": "Contracts to sign, content due, posting days and payments now go on a calendar called Creator CRM in your Google account. Dates move when a deal changes and disappear when they're done. To turn it on, press Reconnect Gmail in Settings once and allow calendar access. A deal also warns you when its dates clash with another brand's exclusivity, so you can check the two don't compete.",
+        "video": "calendar-sync.webm",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
+    "version": "1.21.0",
+    "title": "Contract check",
+    "features": [
+      {
+        "id": "contract-check",
+        "title": "Spot the catches before you sign",
+        "body": "When a brand emails a contract as a PDF, Claude reads it and the deal shows a checklist: when you get paid, the fee, how long they can use your content in ads, exclusivity, revision rounds and a kill fee. Anything outside your limits is marked red or amber, and a Review contract task appears on Today. For contracts on DocuSign and similar sites, paste the text on the deal to check it. Set your limits in Settings, Contract check.",
+        "video": "contract-check.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.20.0",
     "title": "A friendlier Day summary",
     "features": [

@@ -1,12 +1,15 @@
 package com.creatorcrm.ingest;
 
+import com.creatorcrm.contracts.ContractService;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.Conversation;
+import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.llm.ClassificationInput;
+import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
 import com.creatorcrm.llm.Untrusted;
@@ -39,10 +42,12 @@ public class MessageProcessor {
     private final OpportunityRepo opportunities;
     private final BrandRepo brands;
     private final SettingsService settings;
+    private final ContractService contracts;
 
     public MessageProcessor(LlmClient llm, WorkflowEngine workflow, DraftService drafts, ConversationRepo conversations,
                             MessageRepo messages, OpportunityRepo opportunities, BrandRepo brands,
-                            SettingsService settings) {
+                            SettingsService settings, ContractService contracts) {
+        this.contracts = contracts;
         this.llm = llm;
         this.workflow = workflow;
         this.drafts = drafts;
@@ -77,6 +82,11 @@ public class MessageProcessor {
     public void apply(Message m, MessageAnalysis analysis) {
         Conversation conv = conversations.findById(m.conversationId).orElseThrow();
         WorkflowEngine.Outcome outcome = workflow.apply(m, conv, analysis);
+        boolean recent = !m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF));
+        if (recent && m.direction == Direction.INBOUND && analysis.intent() == Intent.CONTRACT_SENT) {
+            // Read the contract's terms; old contracts in an import aren't worth a Claude call.
+            opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).ifPresent(o -> contracts.onContractSent(m, o));
+        }
         // A newer email in the thread would supersede the draft at once (common when importing history).
         if (m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF))
                 || messages.existsByConversationIdAndSentAtAfter(conv.id, m.sentAt)) return;

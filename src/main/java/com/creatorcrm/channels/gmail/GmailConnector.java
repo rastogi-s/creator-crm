@@ -46,16 +46,21 @@ import org.springframework.stereotype.Component;
 
 /**
  * Gmail via the official API. Scopes are read-only + compose: the app can read mail and create/send
- * drafts, but cannot delete, archive or modify existing mail.
+ * drafts, but cannot delete, archive or modify existing mail. The same Google sign-in also covers
+ * {@link #CALENDAR_SCOPE}, which only reaches calendars the app creates itself.
  */
 @Component
 public class GmailConnector implements ChannelConnector {
 
+    /** Create a calendar and manage the events on it, without access to any of her other calendars. */
+    public static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+
     public static final List<String> SCOPES = List.of(
             "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.compose");
+            "https://www.googleapis.com/auth/gmail.compose",
+            CALENDAR_SCOPE);
 
-    static final JsonFactory JSON = GsonFactory.getDefaultInstance();
+    public static final JsonFactory JSON = GsonFactory.getDefaultInstance();
 
     private final SecretStore secrets;
     private final CrmProperties.Gmail config;
@@ -81,23 +86,27 @@ public class GmailConnector implements ChannelConnector {
         return secrets.get(SecretName.GMAIL_ADDRESS).orElse("");
     }
 
-    static HttpTransport transport() throws Exception {
+    public static HttpTransport transport() throws Exception {
         return GoogleNetHttpTransport.newTrustedTransport();
     }
 
-    Gmail gmail() throws Exception {
-        UserCredentials creds = UserCredentials.newBuilder()
+    /** The connected Google account's credentials, shared with the calendar. */
+    public UserCredentials credentials() {
+        return UserCredentials.newBuilder()
                 .setClientId(secrets.require(SecretName.GOOGLE_CLIENT_ID))
                 .setClientSecret(secrets.require(SecretName.GOOGLE_CLIENT_SECRET))
                 .setRefreshToken(secrets.require(SecretName.GMAIL_REFRESH_TOKEN))
                 .build();
-        return new Gmail.Builder(transport(), JSON, withRetries(new HttpCredentialsAdapter(creds)))
+    }
+
+    Gmail gmail() throws Exception {
+        return new Gmail.Builder(transport(), JSON, withRetries(new HttpCredentialsAdapter(credentials())))
                 .setApplicationName("creator-crm")
                 .build();
     }
 
     /** Keeps the token-refresh handling and adds exponential backoff on 429 (rate limit), 5xx and network errors. */
-    static HttpRequestInitializer withRetries(HttpCredentialsAdapter auth) {
+    public static HttpRequestInitializer withRetries(HttpCredentialsAdapter auth) {
         return request -> {
             auth.initialize(request);
             HttpBackOffUnsuccessfulResponseHandler backoff = new HttpBackOffUnsuccessfulResponseHandler(backOff())
@@ -238,6 +247,40 @@ public class GmailConnector implements ChannelConnector {
                 replyTo.email(),
                 OffsetDateTime.ofInstant(Instant.ofEpochMilli(m.getInternalDate()), ZoneId.systemDefault()),
                 bulk);
+    }
+
+    /** A file attached to an email. */
+    public record FileAttachment(String fileName, byte[] data) {}
+
+    /**
+     * The PDF attachments of one message, for the contract check: at most {@code max} files, each at most
+     * {@code maxBytes}. Needs only the read-only scope the app already has.
+     */
+    public List<FileAttachment> pdfAttachments(String messageId, int max, long maxBytes) throws Exception {
+        Gmail gmail = gmail();
+        Message m = gmail.users().messages().get("me", messageId).setFormat("full").execute();
+        List<MessagePart> parts = new ArrayList<>();
+        collectParts(m.getPayload(), parts);
+        List<FileAttachment> out = new ArrayList<>();
+        for (MessagePart p : parts) {
+            if (out.size() >= max) break;
+            String name = p.getFilename() == null ? "" : p.getFilename();
+            boolean pdf = "application/pdf".equalsIgnoreCase(p.getMimeType()) || name.toLowerCase().endsWith(".pdf");
+            if (!pdf || p.getBody() == null) continue;
+            Integer size = p.getBody().getSize();
+            if (size != null && size > maxBytes) continue;
+            byte[] data = p.getBody().getAttachmentId() != null
+                    ? gmail.users().messages().attachments().get("me", messageId, p.getBody().getAttachmentId()).execute().decodeData()
+                    : p.getBody().decodeData();
+            if (data != null && data.length > 0 && data.length <= maxBytes) out.add(new FileAttachment(name.isBlank() ? "contract.pdf" : name, data));
+        }
+        return out;
+    }
+
+    private static void collectParts(MessagePart part, List<MessagePart> out) {
+        if (part == null) return;
+        out.add(part);
+        if (part.getParts() != null) part.getParts().forEach(p -> collectParts(p, out));
     }
 
     @Override
