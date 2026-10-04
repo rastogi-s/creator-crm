@@ -634,6 +634,7 @@
       keyOut,
       el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
 
+    root.appendChild(await learningCard(root));
     root.appendChild(backupCard(root));
 
     // Password
@@ -649,6 +650,42 @@
     if (s.pendingAnalysis > 0) {
       root.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + " message(s) waiting for AI analysis" + (c.ANTHROPIC_API_KEY ? "." : " — add your Claude API key.")));
     }
+  }
+
+  async function learningCard(root) {
+    const { stats, recent } = await api("GET", "/api/learning");
+    const toggle = el("input", { type: "checkbox", id: "learn-toggle" });
+    toggle.checked = stats.enabled;
+    toggle.addEventListener("change", action(async () => {
+      await api("PUT", "/api/settings/preferences", { learnFromHistory: String(toggle.checked) });
+    }, "Saved"));
+    const kinds = { FOLLOW_UP: "Follow-up", RATES: "Rates", PITCH: "Pitch", DECLINE: "Decline", REPLY: "Reply" };
+    const rows = recent.map((e) => {
+      const detail = el("div", { class: "hidden" },
+        e.edited && e.aiBody ? el("div", { class: "msg" }, el("div", { class: "meta" }, "Claude's draft"), el("div", { class: "text" }, e.aiBody)) : null,
+        el("div", { class: "msg out" }, el("div", { class: "meta" }, e.edited ? "What you sent instead" : "What you sent"), el("div", { class: "text" }, e.sentBody)));
+      const exclude = el("button", { class: "small" + (e.excluded ? "" : " danger"), onclick: action(async () => {
+        await api("POST", "/api/learning/examples/" + e.id + "/excluded?excluded=" + !e.excluded);
+        renderSettings(root);
+      }, e.excluded ? "Claude will learn from this again" : "Claude won't use this one") }, e.excluded ? "Use again" : "Don't learn from this");
+      return el("div", { class: "item" + (e.excluded ? " muted" : "") },
+        el("div", { class: "body" },
+          el("div", { class: "row" }, el("strong", {}, e.brandName || "—"), el("span", { class: "badge" }, kinds[e.kind] || pretty(e.kind)),
+            e.source === "WRITTEN" ? el("span", { class: "badge" }, "Written by you") : null,
+            e.edited ? el("span", { class: "badge accent" }, "You edited it") : null,
+            e.gotReply ? el("span", { class: "badge ok" }, "Brand replied") : null,
+            e.excluded ? el("span", { class: "badge" }, "Not used") : null,
+            el("span", { class: "small muted" }, fmtDate(e.sentAt))),
+          detail),
+        el("div", { class: "actions" },
+          el("button", { class: "small", onclick: (ev) => { detail.classList.toggle("hidden"); ev.currentTarget.textContent = detail.classList.contains("hidden") ? "Show" : "Hide"; } }, "Show"),
+          exclude));
+    });
+    return card("Learning from your writing",
+      el("p", { class: "small muted" }, "Every message you send is saved with Claude's original draft and whether the brand replied. New drafts get your closest past examples, favouring the ones you edited and the ones that got answers. Messages you write yourself in Gmail or Instagram count too."),
+      el("label", { class: "check", for: "learn-toggle" }, toggle, " Use my past messages when writing drafts"),
+      el("div", { class: "stats" }, stat(stats.examples, "messages to learn from"), stat(stats.edited, "drafts you edited"), stat(stats.gotReply, "got a reply")),
+      recent.length ? el("div", {}, rows) : emptyLine("Nothing yet. Send a draft or write to a brand and it will show up here."));
   }
 
   function backupCard() {

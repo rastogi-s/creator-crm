@@ -39,11 +39,14 @@ public class SettingsService {
     /** "true" = email follow-ups drafted in the daily run are sent without waiting for approval. */
     public static final String FOLLOWUP_AUTO_SEND = "followupAutoSend";
 
+    /** "false" = drafts don't get examples of the creator's past messages. */
+    public static final String LEARN_FROM_HISTORY = "learnFromHistory";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
 
     public static final Set<String> EDITABLE = Set.of(
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
-            FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND);
+            FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -112,6 +115,10 @@ public class SettingsService {
         return Boolean.parseBoolean(raw(FOLLOWUP_AUTO_SEND, "false"));
     }
 
+    public boolean learnFromHistory() {
+        return Boolean.parseBoolean(raw(LEARN_FROM_HISTORY, "true"));
+    }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -135,6 +142,7 @@ public class SettingsService {
         m.put(BRAND_KEYWORDS, String.join(", ", brandKeywords()));
         m.put(FOLLOWUP_TIME, followupTime().toString());
         m.put(FOLLOWUP_AUTO_SEND, String.valueOf(followupAutoSend()));
+        m.put(LEARN_FROM_HISTORY, String.valueOf(learnFromHistory()));
         return m;
     }
 
@@ -165,8 +173,8 @@ public class SettingsService {
                     throw new IllegalArgumentException("Follow-up time must be HH:mm, e.g. 08:00");
                 }
             }
-            case FOLLOWUP_AUTO_SEND -> {
-                if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException("Auto-send must be true or false");
+            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY -> {
+                if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
             }
             case CLASSIFIER_MODEL, WRITER_MODEL -> {
                 if (!v.matches("[a-z0-9.-]{3,64}")) throw new IllegalArgumentException("Invalid model id");

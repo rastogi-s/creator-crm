@@ -19,6 +19,7 @@ import com.creatorcrm.domain.Enums.TaskType;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
+import com.creatorcrm.learning.LearningService;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.MessageAnalysis;
 import com.creatorcrm.repo.ActivityRepo;
@@ -59,10 +60,11 @@ public class WorkflowEngine {
     private final DraftRepo drafts;
     private final ActivityRepo activity;
     private final FollowUpEngine followUps;
+    private final LearningService learning;
 
     public WorkflowEngine(BrandRepo brands, ConversationRepo conversations, MessageRepo messages,
                           OpportunityRepo opportunities, TaskRepo tasks, DeadlineRepo deadlines, DraftRepo drafts,
-                          ActivityRepo activity, FollowUpEngine followUps) {
+                          ActivityRepo activity, FollowUpEngine followUps, LearningService learning) {
         this.brands = brands;
         this.conversations = conversations;
         this.messages = messages;
@@ -72,6 +74,7 @@ public class WorkflowEngine {
         this.drafts = drafts;
         this.activity = activity;
         this.followUps = followUps;
+        this.learning = learning;
     }
 
     @Transactional
@@ -95,6 +98,7 @@ public class WorkflowEngine {
 
         List<Task> toDraft = new ArrayList<>();
         if (m.direction == Direction.INBOUND) {
+            learning.onBrandReply(o.id, m.sentAt);
             if (followUps.onBrandReply(o)) {
                 activity.save(Activity.of(o.id, Activity.BRAND_REPLIED, brandName(o) + " replied"));
                 if (o.origin == Origin.PITCH && (o.initialResponse == null || o.initialResponse.isBlank())) {
@@ -120,6 +124,7 @@ public class WorkflowEngine {
                 }
             }
         } else {
+            learning.recordWritten(m, conv.platform, o.id, a.intent(), brandName(o));
             onCreatorMessage(o, a.intent(), day);
         }
 

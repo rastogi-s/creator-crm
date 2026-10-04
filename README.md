@@ -18,6 +18,10 @@ message before anything is sent.
 - **Follow-up engine**: #1 after 4 days, then 5, 7, 7, 7 (configurable). Stops when the brand replies;
   marks the deal 🧊 Cold if there's still no answer after the final one. You pick the daily time follow-ups
   are drafted, and can opt in to sending email follow-ups automatically at that time.
+- **Learns from your writing**: every message you send is kept next to Claude's original draft, with whether
+  the brand replied. New drafts get your closest past examples, favouring the ones you edited and the ones
+  that got answers, so drafts drift toward how you actually write. You can see and prune the examples in
+  Settings, or switch it off.
 - **Links page**: your Instagram, TikTok, YouTube, website and portfolio in one list you can add to any time.
   Drafts use these exact links instead of placeholders.
 - **Outreach database**: brands you've pitched, with follow-up #1–#5 dates, and duplicate-pitch protection.
