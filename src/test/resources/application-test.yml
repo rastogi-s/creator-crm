@@ -10,6 +10,7 @@ crm:
     sync-cron: "-"
     morning-check-cron: "-"
     batch-check-cron: "-"
+    backup-check-cron: "-"
   updates:
     enabled: false
     check-cron: "-"
