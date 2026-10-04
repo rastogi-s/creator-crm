@@ -268,7 +268,7 @@ public class DigestService {
     private Item taskItem(Task t, Opportunity o, String brand, LocalDate today, LeadScoring.Score lead) {
         long overdue = t.dueDate == null ? 0 : Math.max(0, ChronoUnit.DAYS.between(t.dueDate, today));
         int score = switch (t.type) {
-            case SIGN_CONTRACT -> 50;
+            case SIGN_CONTRACT, REVIEW_CONTRACT -> 50;
             case SEND_RATES, NEGOTIATE -> 45;
             case COMPLETE_APPLICATION -> 40;
             case REPLY, CONFIRM_AVAILABILITY, SEND_MEDIA_KIT, SEND_INVOICE, CHASE_PAYMENT, ASK_MISSING_INFO -> 35;

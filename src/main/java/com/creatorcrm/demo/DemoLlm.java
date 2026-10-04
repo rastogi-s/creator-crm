@@ -3,6 +3,8 @@ package com.creatorcrm.demo;
 import com.creatorcrm.llm.BrandLeads;
 import com.creatorcrm.llm.BrandSearchInput;
 import com.creatorcrm.llm.ClassificationInput;
+import com.creatorcrm.llm.ContractInput;
+import com.creatorcrm.llm.ContractTerms;
 import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.LlmClient;
@@ -108,6 +110,16 @@ public class DemoLlm implements LlmClient {
             body = body + "\n\n(Demo mode: Claude would apply \"" + request + "\" here.)";
         }
         return new DraftText(current.subject(), body);
+    }
+
+    @Override
+    public ContractTerms extractContractTerms(ContractInput input) {
+        // The demo contract is Bloomleaf Tea's (see DemoData): long payment wait, a year of ads, unlimited revisions.
+        return new ContractTerms(60, "Net 60 from receipt of invoice", 650, "USD", 12,
+                "Brand may use the content in paid social ads for 12 months", 2, "No other tea or coffee brands for 2 months",
+                -1, "", List.of(new ContractTerms.ContractDate(input.today().plusDays(10).toString(), "Draft Reel to Bloomleaf for review")),
+                List.of("You must keep the post up for at least 12 months"),
+                "Bloomleaf Tea pays $650 for 1 Reel and 2 Stories for its October campaign, with a year of paid ads.");
     }
 
     @Override

@@ -49,6 +49,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final String classifierSystem;
     private final String writerSystem;
     private final String researchSystem;
+    private final String contractSystem;
 
     private AnthropicClient client;
     private String clientKeyHash;
@@ -64,6 +65,7 @@ public class ClaudeLlmClient implements LlmClient {
         this.classifierSystem = resource("prompts/classifier-system.md");
         this.writerSystem = resource("prompts/writer-system.md");
         this.researchSystem = resource("prompts/brand-research-system.md");
+        this.contractSystem = resource("prompts/contract-system.md");
     }
 
     @Override
@@ -224,6 +226,17 @@ public class ClaudeLlmClient implements LlmClient {
         }
         return call(ClaudeSpend.Feature.RESEARCH, settings.writerModel(), settings.writerEffort(), researchSystem, creatorProfile(), user.toString(),
                 BrandLeads.class, 16000, in.depth());
+    }
+
+    @Override
+    public ContractTerms extractContractTerms(ContractInput in) {
+        StringBuilder user = new StringBuilder()
+                .append("Today: ").append(in.today()).append('\n')
+                .append("Brand: ").append(Untrusted.escape(in.brandName())).append('\n');
+        if (!in.dealContext().isBlank()) user.append("What the app knows about this deal:\n").append(in.dealContext()).append("\n\n");
+        user.append("CONTRACT TO READ:\n").append(in.contractText());
+        return ContractTermsValidator.sanitize(call(ClaudeSpend.Feature.CONTRACT, settings.classifierModel(),
+                settings.classifierEffort(), contractSystem, null, user.toString(), ContractTerms.class, 4000, null));
     }
 
     private String creatorProfile() {
