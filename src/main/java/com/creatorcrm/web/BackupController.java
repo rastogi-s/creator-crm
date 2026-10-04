@@ -1,5 +1,6 @@
 package com.creatorcrm.web;
 
+import com.creatorcrm.backup.AutoBackupService;
 import com.creatorcrm.backup.BackupService;
 import com.creatorcrm.security.AppUser;
 import com.creatorcrm.security.AppUserRepo;
@@ -15,7 +16,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,12 +35,18 @@ public class BackupController {
 
     public record ExportRequest(@NotBlank String currentPassword, @NotBlank @Size(min = 12, max = 1000) String passphrase) {}
 
+    /** Automatic backups card. Null fields stay as they are; changing the passphrase needs the current password. */
+    public record AutoRequest(Boolean enabled, @Size(max = 1000) String folder, @Size(min = 12, max = 1000) String passphrase,
+                              String currentPassword) {}
+
     private final BackupService backups;
+    private final AutoBackupService auto;
     private final AppUserRepo users;
     private final PasswordEncoder encoder;
 
-    public BackupController(BackupService backups, AppUserRepo users, PasswordEncoder encoder) {
+    public BackupController(BackupService backups, AutoBackupService auto, AppUserRepo users, PasswordEncoder encoder) {
         this.backups = backups;
+        this.auto = auto;
         this.users = users;
         this.encoder = encoder;
     }
@@ -68,6 +77,22 @@ public class BackupController {
         checkSize(file);
         checkPassword(principal, new String(decode(currentPassword)));
         return backups.restore(file, decode(passphrase));
+    }
+
+    @GetMapping("/auto")
+    public AutoBackupService.Status autoStatus() {
+        return auto.status();
+    }
+
+    @PutMapping("/auto")
+    public AutoBackupService.Status updateAuto(@Valid @RequestBody AutoRequest r, Principal principal) {
+        if (r.passphrase() != null) checkPassword(principal, r.currentPassword() == null ? "" : r.currentPassword());
+        return auto.update(r.enabled(), r.folder(), r.passphrase());
+    }
+
+    @PostMapping("/auto/run")
+    public AutoBackupService.Status runAuto() {
+        return auto.runNow();
     }
 
     private void checkPassword(Principal principal, String password) {

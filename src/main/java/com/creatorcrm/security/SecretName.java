@@ -19,6 +19,8 @@ public enum SecretName {
     INSTAGRAM_WEBHOOK_VERIFY_TOKEN,
     /** GitHub token allowed to open issues on the app's repo; turns on error reports. */
     ERROR_REPORT_TOKEN,
+    /** Encrypts the automatic nightly backups. */
+    BACKUP_PASSPHRASE,
     /** Stored as a SHA-256 hash only; the plain key is shown once when generated. */
     MCP_API_KEY_HASH
 }
