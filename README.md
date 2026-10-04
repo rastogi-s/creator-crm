@@ -22,6 +22,8 @@ message before anything is sent.
   the brand replied. New drafts get your closest past examples, favouring the ones you edited and the ones
   that got answers, so drafts drift toward how you actually write. You can see and prune the examples in
   Settings, or switch it off.
+- **Your Instagram numbers**: followers, engagement rate on recent posts and 28-day reach are read from your
+  connected account once a day, so rate replies and pitches quote real figures.
 - **Links page**: your Instagram, TikTok, YouTube, website and portfolio in one list you can add to any time.
   Drafts use these exact links instead of placeholders.
 - **Outreach database**: brands you've pitched, with follow-up #1–#5 dates, and duplicate-pitch protection.
@@ -105,7 +107,8 @@ Every credential you enter is **your own** and is stored encrypted (AES-256-GCM)
 3. **Instagram** (optional; needs a Business or Creator account):
    1. At [developers.facebook.com](https://developers.facebook.com), create an app and add the **Instagram**
       product using **"API setup with Instagram login"**.
-   2. Request `instagram_business_basic` and `instagram_business_manage_messages`, and add your own account
+   2. Request `instagram_business_basic` and `instagram_business_manage_messages` (plus
+      `instagram_business_manage_insights` if you want your 28-day reach shown), and add your own account
       as an Instagram tester. **App Review is not needed** while only accounts with a role on the app use it.
    3. Either paste an access token generated in the dashboard (works on localhost), or save the app ID and
       secret and click **Connect Instagram**. Meta requires an **https** redirect URI for this, so it needs a

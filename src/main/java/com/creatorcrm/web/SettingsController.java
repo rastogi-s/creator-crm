@@ -6,6 +6,7 @@ import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.channels.gmail.GmailOAuthController;
 import com.creatorcrm.channels.instagram.InstagramConnector;
 import com.creatorcrm.channels.instagram.InstagramOAuthController;
+import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.config.CrmProperties;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.repo.MessageRepo;
@@ -65,14 +66,17 @@ public class SettingsController {
     private final PasswordEncoder encoder;
     private final CrmProperties props;
     private final com.creatorcrm.security.SessionEpoch sessions;
+    private final InstagramStatsService instagramStats;
 
     public SettingsController(SettingsService settings, SecretStore secrets, CryptoService crypto,
                               List<ChannelConnector> connectors, InstagramConnector instagram,
                               GmailOAuthController gmailOAuth, InstagramOAuthController instagramOAuth,
                               IngestionService ingestion, MessageRepo messages, AppUserRepo users,
                               PasswordEncoder encoder, CrmProperties props,
-                              com.creatorcrm.security.SessionEpoch sessions, LlmClient llm) {
+                              com.creatorcrm.security.SessionEpoch sessions, LlmClient llm,
+                              InstagramStatsService instagramStats) {
         this.sessions = sessions;
+        this.instagramStats = instagramStats;
         this.llm = llm;
         this.settings = settings;
         this.secrets = secrets;
@@ -103,6 +107,7 @@ public class SettingsController {
         out.put("preferences", settings.all());
         out.put("credentials", secrets.presence());
         out.put("channels", channels);
+        out.put("instagramStats", instagramStats.current().orElse(null));
         out.put("instagramTokenExpiresAt", secrets.get(SecretName.INSTAGRAM_TOKEN_EXPIRES_AT).orElse(null));
         out.put("googleRedirectUri", gmailOAuth.redirectUri());
         out.put("instagramRedirectUri", instagramOAuth.redirectUri());
@@ -171,6 +176,18 @@ public class SettingsController {
     public Map<String, Boolean> revokeMcpKey() {
         secrets.delete(SecretName.MCP_API_KEY_HASH);
         return Map.of("revoked", true);
+    }
+
+    /** Pull follower and engagement numbers from the connected Instagram account now. */
+    @PostMapping("/instagram-stats/refresh")
+    public InstagramStatsService.Stats refreshInstagramStats() {
+        try {
+            return instagramStats.refresh();
+        } catch (com.creatorcrm.security.SecretStore.MissingCredentialException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Couldn't read your Instagram stats: " + e.getMessage());
+        }
     }
 
     /** New webhook verify token, to paste into the Meta App Dashboard. */

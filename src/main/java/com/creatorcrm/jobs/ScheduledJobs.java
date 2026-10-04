@@ -1,5 +1,6 @@
 package com.creatorcrm.jobs;
 
+import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftStatus;
@@ -37,10 +38,11 @@ public class ScheduledJobs {
     private final LlmClient llm;
     private final SettingsService settings;
     private final SetupService setup;
+    private final InstagramStatsService instagramStats;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
-                         SettingsService settings, SetupService setup) {
+                         SettingsService settings, SetupService setup, InstagramStatsService instagramStats) {
         this.ingestion = ingestion;
         this.followUps = followUps;
         this.followUpRepo = followUpRepo;
@@ -50,6 +52,7 @@ public class ScheduledJobs {
         this.llm = llm;
         this.settings = settings;
         this.setup = setup;
+        this.instagramStats = instagramStats;
     }
 
     @Scheduled(cron = "${crm.schedule.sync-cron}")
@@ -70,6 +73,7 @@ public class ScheduledJobs {
         if (!morningDue(now)) return;
         markMorningRun(now.toLocalDate());
         sync();
+        instagramStats.refreshIfStale();
         prepareMorning();
         if (settings.followupAutoSend()) autoSendFollowUps();
     }
