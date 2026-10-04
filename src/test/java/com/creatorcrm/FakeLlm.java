@@ -4,6 +4,8 @@ import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.DeadlineType;
 import com.creatorcrm.domain.Enums.OpportunityType;
 import com.creatorcrm.domain.Enums.Priority;
+import com.creatorcrm.llm.BrandLeads;
+import com.creatorcrm.llm.BrandSearchInput;
 import com.creatorcrm.llm.ClassificationInput;
 import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
@@ -47,6 +49,14 @@ public class FakeLlm implements LlmClient {
         draftCalls++;
         lastDraftInput = input;
         return new DraftText("Re: collab", "Hi Maya, thanks! [" + input.draftType() + "]");
+    }
+
+    /** What the next brand search returns. */
+    public BrandLeads nextLeads = new BrandLeads(List.of());
+
+    @Override
+    public BrandLeads findBrands(BrandSearchInput input) {
+        return nextLeads;
     }
 
     @Override

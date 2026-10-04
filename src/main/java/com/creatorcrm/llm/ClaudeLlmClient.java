@@ -12,6 +12,7 @@ import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlockParam;
+import com.anthropic.models.messages.WebSearchTool20260209;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.links.LinkService;
 import com.creatorcrm.security.CryptoService;
@@ -38,6 +39,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final InstagramStatsService instagramStats;
     private final String classifierSystem;
     private final String writerSystem;
+    private final String researchSystem;
 
     private AnthropicClient client;
     private String clientKeyHash;
@@ -51,6 +53,7 @@ public class ClaudeLlmClient implements LlmClient {
         this.instagramStats = instagramStats;
         this.classifierSystem = resource("prompts/classifier-system.md");
         this.writerSystem = resource("prompts/writer-system.md");
+        this.researchSystem = resource("prompts/brand-research-system.md");
     }
 
     @Override
@@ -80,7 +83,7 @@ public class ClaudeLlmClient implements LlmClient {
         user.append("NEW MESSAGE TO ANALYZE:\n").append(in.newMessage());
 
         MessageAnalysis a = call(settings.classifierModel(), settings.classifierEffort(), classifierSystem, null,
-                user.toString(), MessageAnalysis.class, 4000);
+                user.toString(), MessageAnalysis.class, 4000, false);
         return AnalysisValidator.sanitize(a);
     }
 
@@ -113,17 +116,37 @@ public class ClaudeLlmClient implements LlmClient {
         if (!in.extraInstructions().isBlank()) {
             user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
         }
+        return call(settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
+                DraftText.class, 4000, false);
+    }
+
+    @Override
+    public BrandLeads findBrands(BrandSearchInput in) {
+        StringBuilder user = new StringBuilder()
+                .append("Find up to ").append(in.count()).append(" brands for this request: ")
+                .append(Untrusted.escape(in.query())).append('\n');
+        if (!in.excludeBrands().isEmpty()) {
+            user.append("\nAlready in the creator's CRM, don't return these: ")
+                    .append(String.join(", ", in.excludeBrands())).append('\n');
+        }
+        return call(settings.writerModel(), settings.writerEffort(), researchSystem, creatorProfile(), user.toString(),
+                BrandLeads.class, 16000, true);
+    }
+
+    private String creatorProfile() {
         StringBuilder profile = new StringBuilder("Creator name: ").append(settings.creatorName())
                 .append("\n\n# Creator profile\n").append(settings.creatorProfile());
         for (String section : List.of(links.profileSection(), instagramStats.profileSection())) {
             if (!section.isEmpty()) profile.append("\n\n").append(section);
         }
-        return call(settings.writerModel(), settings.writerEffort(), writerSystem, profile.toString(), user.toString(),
-                DraftText.class, 4000);
+        return profile.toString();
     }
 
+    /** Server-side tool loops pause after a while; resume a few times before giving up. */
+    private static final int MAX_CONTINUATIONS = 4;
+
     private <T> T call(String model, String effort, String system, String system2, String user,
-                       Class<T> type, long maxTokens) {
+                       Class<T> type, long maxTokens, boolean webSearch) {
         JsonOutputFormat.Schema.Builder schema = JsonOutputFormat.Schema.builder();
         OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
         OutputConfig.Builder out = OutputConfig.builder()
@@ -143,33 +166,44 @@ public class ClaudeLlmClient implements LlmClient {
                 .outputConfig(out.build())
                 .systemOfTextBlockParams(systemBlocks)
                 .addUserMessage(user);
+        if (webSearch) params.addTool(WebSearchTool20260209.builder().maxUses(15L).build());
         if (supportsDefaultFallback(model)) {
             // On a safety-classifier decline, let the API retry on its recommended fallback model.
             params.putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
                     .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"));
         }
 
-        Message response;
-        try {
-            response = client().messages().create(params.build());
-        } catch (AnthropicServiceException e) {
-            throw new LlmException("Claude API error (" + e.statusCode() + "): " + firstLine(e), e);
-        } catch (AnthropicException e) {
-            // Network trouble, timeouts, a response we couldn't read: not an HTTP error, but just as fatal.
-            throw new LlmException("Claude request failed: " + e.getClass().getSimpleName() + ": " + firstLine(e), e);
+        Message response = create(params);
+        for (int i = 0; i < MAX_CONTINUATIONS && StopReason.PAUSE_TURN.equals(response.stopReason().orElse(null)); i++) {
+            // Send the paused turn back as-is; the API resumes the search where it left off.
+            params.addMessage(response);
+            response = create(params);
         }
         StopReason stop = response.stopReason().orElse(null);
+        if (StopReason.PAUSE_TURN.equals(stop)) throw new LlmException("Claude's web research didn't finish; try a narrower search");
         if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined this request");
         if (StopReason.MAX_TOKENS.equals(stop)) throw new LlmException("Claude response was cut off (max tokens)");
+        // With web search the reply interleaves search blocks; the structured answer is the last text block.
         String json = response.content().stream()
                 .flatMap(b -> b.text().stream())
                 .map(t -> t.text())
-                .findFirst()
+                .reduce((a, b) -> b)
                 .orElseThrow(() -> new LlmException("Claude returned no structured output"));
         try {
             return OutputSchemas.parse(json, type);
         } catch (RuntimeException e) {
             throw new LlmException("Claude's reply didn't match the expected format: " + firstLine(e), e);
+        }
+    }
+
+    private Message create(MessageCreateParams.Builder params) {
+        try {
+            return client().messages().create(params.build());
+        } catch (AnthropicServiceException e) {
+            throw new LlmException("Claude API error (" + e.statusCode() + "): " + firstLine(e), e);
+        } catch (AnthropicException e) {
+            // Network trouble, timeouts, a response we couldn't read: not an HTTP error, but just as fatal.
+            throw new LlmException("Claude request failed: " + e.getClass().getSimpleName() + ": " + firstLine(e), e);
         }
     }
 

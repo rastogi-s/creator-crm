@@ -34,16 +34,20 @@ class ClaudeLlmClientTest {
     private HttpServer api;
     private final AtomicReference<String> lastRequest = new AtomicReference<>();
     private volatile String replyText;
+    private final java.util.Deque<String> stopReasons = new java.util.concurrent.ConcurrentLinkedDeque<>();
+    private final List<String> requests = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     @BeforeEach
     void startStub() throws Exception {
         api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         api.createContext("/v1/messages", ex -> {
             lastRequest.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            requests.add(lastRequest.get());
+            String stop = stopReasons.isEmpty() ? "end_turn" : stopReasons.poll();
             String body = JsonMapper.shared().writeValueAsString(Map.of(
                     "id", "msg_test", "type", "message", "role", "assistant", "model", "claude-opus-5-5",
                     "content", List.of(Map.of("type", "text", "text", replyText)),
-                    "stop_reason", "end_turn",
+                    "stop_reason", stop,
                     "usage", Map.of("input_tokens", 10, "output_tokens", 10)));
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "application/json");
@@ -111,6 +115,21 @@ class ClaudeLlmClientTest {
         claude.writeDraft(new DraftInput(LocalDate.now(), "RATES", "EMAIL", "Glow Co", "Maya", "", "", List.of(), "",
                 List.of("<past_example kind=\"RATES\">My reel rate is in my media kit</past_example>")));
         assertThat(lastRequest.get()).contains("Messages the creator sent before").contains("My reel rate is in my media kit");
+    }
+
+    @Test
+    void brandResearchUsesWebSearchAndResumesPausedTurns() {
+        replyText = "{\"leads\": [{\"name\": \"Glow Co\", \"website\": \"https://glow.example\", \"instagram\": \"glowco\","
+                + " \"contactEmail\": \"collabs@glow.example\", \"contactSourceUrl\": \"https://glow.example/contact\","
+                + " \"fitReason\": \"Runs a UGC program\", \"pitchAngle\": \"Morning routine reel\"}]}";
+        stopReasons.add("pause_turn"); // the server-side search loop pauses once
+
+        BrandLeads leads = claude.findBrands(new BrandSearchInput("clean skincare", 3, List.of("Bloom")));
+
+        assertThat(leads.leads()).extracting(BrandLeads.Lead::name).containsExactly("Glow Co");
+        assertThat(requests).hasSize(2);
+        assertThat(requests.get(0)).contains("web_search_20260209").contains("clean skincare").contains("Bloom");
+        assertThat(requests.get(1)).contains("\"role\":\"assistant\""); // the paused turn is sent back
     }
 
     @Test

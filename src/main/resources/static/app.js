@@ -330,10 +330,11 @@
   // ---------- Outreach ----------
 
   async function renderOutreach(root) {
-    const rows = await api("GET", "/api/pitches");
+    const [rows, leads] = await Promise.all([api("GET", "/api/pitches"), api("GET", "/api/leads")]);
     clear(root);
     root.appendChild(el("h1", {}, "Outreach"));
     root.appendChild(el("p", { class: "muted" }, "Every brand you've pitched, with automatic follow-up dates. Pitches you send from Gmail are detected automatically; log the rest here."));
+    root.appendChild(findBrandsCard(root, leads));
 
     const f = {
       brand: el("input", { required: true, maxlength: "200" }), contactName: el("input", { maxlength: "200" }),
@@ -372,6 +373,58 @@
         el("td", {}, pretty(r.platform)), el("td", {}, r.opportunity || ""), el("td", {}, r.initialResponse ? pretty(r.initialResponse) : "—"),
         r.followUps.map((x) => el("td", { class: x.startsWith("due") ? "" : "muted" }, x || "")),
         el("td", {}, r.status)))))));
+  }
+
+  function findBrandsCard(root, leads) {
+    const query = el("input", { placeholder: "e.g. clean skincare brands like Glossier that work with UGC creators", maxlength: "300" });
+    const count = el("select", { class: "inline" }, [3, 5, 10].map((n) => el("option", { value: n }, n + " brands")));
+    count.value = "5";
+    const status = el("span", { class: "small muted" });
+    const search = action(async () => {
+      if (query.value.trim().length < 3) throw new Error("Describe the kind of brands to look for");
+      status.textContent = "Researching brands on the web… this can take a minute or two.";
+      try {
+        const found = await api("POST", "/api/leads/search", { query: query.value, count: Number(count.value) });
+        toast(found.length ? found.length + " new brand" + (found.length === 1 ? "" : "s") + " found" : "No new brands found; try a different search");
+        renderOutreach(root);
+      } finally { status.textContent = ""; }
+    });
+    query.addEventListener("keydown", (e) => { if (e.key === "Enter") search(e); });
+    return card("Find brands to pitch",
+      el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
+      el("div", { class: "row" }, el("div", { class: "spacer" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
+      status,
+      leads.length ? el("div", {}, leads.map((l) => leadItem(root, l))) : null);
+  }
+
+  function leadItem(root, l) {
+    const safeUrl = (u) => u && /^https?:\/\//i.test(u) ? u : null;
+    const email = el("input", { type: "email", placeholder: "Contact email", value: l.contactEmail || "", maxlength: "320" });
+    const ig = el("input", { placeholder: "Instagram handle", value: l.instagram || "", maxlength: "100" });
+    const contactEdit = el("div", { class: "grid hidden" }, email, ig,
+      el("button", { class: "small", onclick: action(async () => {
+        await api("PUT", "/api/leads/" + l.id + "/contact", { email: email.value, instagram: ig.value.replace(/^@/, "") });
+        renderOutreach(root);
+      }, "Contact saved") }, "Save contact"));
+    const contact = l.contactEmail
+      ? el("span", {}, "✉️ " + l.contactEmail, safeUrl(l.contactSourceUrl) ? el("a", { href: l.contactSourceUrl, target: "_blank", rel: "noopener noreferrer", class: "small" }, " (source)") : null)
+      : el("span", { class: "muted" }, "No published email found");
+    return el("div", { class: "item" },
+      el("div", { class: "body" },
+        el("div", { class: "row" }, el("strong", {}, l.name),
+          safeUrl(l.website) ? el("a", { href: l.website, target: "_blank", rel: "noopener noreferrer", class: "small" }, l.website.replace(/^https?:\/\//, "")) : null,
+          l.instagram ? el("span", { class: "badge" }, "@" + l.instagram) : null),
+        l.fitReason ? el("div", { class: "detail" }, l.fitReason) : null,
+        l.pitchAngle ? el("div", { class: "detail" }, "💡 " + l.pitchAngle) : null,
+        el("div", { class: "small" }, contact),
+        contactEdit),
+      el("div", { class: "actions" },
+        el("button", { class: "small primary", onclick: action(async () => {
+          await api("POST", "/api/leads/" + l.id + "/pitch");
+          location.hash = "#drafts"; route();
+        }, "Pitch drafted. Review it in Drafts") }, "Draft pitch"),
+        el("button", { class: "small", onclick: () => contactEdit.classList.toggle("hidden") }, "Edit contact"),
+        el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/api/leads/" + l.id + "/dismiss"); renderOutreach(root); }) }, "Dismiss")));
   }
 
   // ---------- Links ----------

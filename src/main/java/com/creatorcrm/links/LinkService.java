@@ -92,7 +92,7 @@ public class LinkService {
     }
 
     /** Accepts "instagram.com/me" or a full http(s) URL; anything else (javascript:, mailto:...) is rejected. */
-    static String normalizeUrl(String raw) {
+    public static String normalizeUrl(String raw) {
         String v = raw == null ? "" : raw.strip();
         if (v.isEmpty()) throw new IllegalArgumentException("Link URL is required");
         if (v.length() > 1000) throw new IllegalArgumentException("Link URL is too long");
