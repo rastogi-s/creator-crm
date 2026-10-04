@@ -16,6 +16,7 @@ import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Enums.TaskStatus;
 import com.creatorcrm.domain.Enums.TaskType;
 import com.creatorcrm.domain.Invoice;
+import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.ingest.IngestionService;
@@ -23,6 +24,7 @@ import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmException;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.ConversationRepo;
+import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.repo.TaskRepo;
 import com.creatorcrm.settings.SettingsService;
@@ -68,11 +70,18 @@ class InvoiceIntegrationTest {
     @Autowired TaskRepo tasks;
     @Autowired SettingsService settings;
     @Autowired InvoicePdf pdf;
+    @Autowired MessageRepo messages;
 
     @BeforeEach
     void reset() {
         llm.next.clear();
         llm.failDraftsWith = null;
+        // The database is shared with other test classes. Messages they left unanalyzed would be processed first
+        // (oldest first) and take this test's scripted analysis, so set them aside.
+        for (Message m : messages.findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc()) {
+            m.filteredReason = "left over from another test";
+            messages.save(m);
+        }
     }
 
     /** A paid deal for a new brand whose last email was the given intent. */
