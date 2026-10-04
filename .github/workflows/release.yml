@@ -1,4 +1,4 @@
-# Publishing a version:  git tag v1.1.0 && git push origin v1.1.0
+# Runs automatically after every merge to main (see auto-release.yml), or by hand:  git tag v1.1.0 && git push origin v1.1.0
 # Builds and tests the app, makes installers for Windows / macOS / Linux, records the walkthrough videos, pushes a
 # Docker image to ghcr.io, and creates a GitHub Release with everything attached. Installed apps see the new
 # release within a few hours and offer "Update now". Tags with a suffix (v1.1.0-beta.1) become pre-releases, which
@@ -8,6 +8,16 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Called by auto-release.yml after every merge to main, with the tag it just created.
+  workflow_call:
+    inputs:
+      tag:
+        description: Version tag to build and publish, e.g. v1.2.3
+        required: true
+        type: string
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: read
@@ -17,13 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
       - name: Set version from tag
-        run: bash ./mvnw -B -q versions:set -DnewVersion="${GITHUB_REF_NAME#v}" -DgenerateBackupPoms=false
+        run: bash ./mvnw -B -q versions:set -DnewVersion="${TAG#v}" -DgenerateBackupPoms=false
       - name: Build and test
         run: bash ./mvnw -B verify
       - uses: actions/upload-artifact@v7
@@ -52,6 +64,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -69,13 +83,13 @@ jobs:
           "$env:RUNNER_TEMP\wix" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Build installer
         shell: bash
-        run: bash packaging/package.sh ${{ matrix.type }} "${GITHUB_REF_NAME#v}"
+        run: bash packaging/package.sh ${{ matrix.type }} "${TAG#v}"
       - name: Name it for the release page
         shell: bash
         run: |
           mkdir -p dist
           for f in target/installer/*.${{ matrix.type }}; do
-            cp "$f" "dist/Creator-CRM-${GITHUB_REF_NAME#v}-${{ matrix.suffix }}.${{ matrix.type }}"
+            cp "$f" "dist/Creator-CRM-${TAG#v}-${{ matrix.suffix }}.${{ matrix.type }}"
           done
           ls -la dist
       - uses: actions/upload-artifact@v7
@@ -91,6 +105,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v8
         with:
           name: jar
@@ -108,8 +124,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/creator-crm
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
             type=raw,value=latest
       - uses: docker/build-push-action@v7
         env:
@@ -129,6 +145,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -153,7 +171,7 @@ jobs:
         run: node record.mjs
       - name: Check every video this version promises was recorded
         run: |
-          V="${GITHUB_REF_NAME#v}"; V="${V%%-*}"
+          V="${TAG#v}"; V="${V%%-*}"
           for f in $(jq -r --arg v "$V" '.[] | select(.version == $v) | .features[].video // empty' src/main/resources/whats-new.json); do
             test -s "walkthroughs/videos/$f" || { echo "::error::Missing walkthrough video $f (add a scenario to walkthroughs/record.mjs)"; exit 1; }
           done
@@ -172,6 +190,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -180,9 +200,9 @@ jobs:
       - name: Release notes from whats-new.json
         id: notes
         run: |
-          V="${GITHUB_REF_NAME#v}"; V="${V%%-*}"
+          V="${TAG#v}"; V="${V%%-*}"
           TITLE=$(jq -r --arg v "$V" '.[] | select(.version == $v) | .title // empty' src/main/resources/whats-new.json)
-          echo "name=Creator CRM ${GITHUB_REF_NAME#v}${TITLE:+: $TITLE}" >> "$GITHUB_OUTPUT"
+          echo "name=Creator CRM ${TAG#v}${TITLE:+: $TITLE}" >> "$GITHUB_OUTPUT"
           jq -r --arg v "$V" '.[] | select(.version == $v) | .features[] | "**" + .title + ".** " + .body + "\n"' \
             src/main/resources/whats-new.json > release-notes.md
           cat release-notes.md
@@ -190,14 +210,15 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -type f \( -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.webm' \) -exec cp {} release/ \;
-          cp artifacts/jar/creator-manager-*.jar "release/creator-crm-${GITHUB_REF_NAME#v}.jar"
+          cp artifacts/jar/creator-manager-*.jar "release/creator-crm-${TAG#v}.jar"
           (cd release && sha256sum * > SHA256SUMS.txt)
           ls -la release
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ env.TAG }}
           files: release/*
           name: ${{ steps.notes.outputs.name }}
           body_path: release-notes.md
           generate_release_notes: true
           # v1.2.0-beta.1 and similar: for testing; installed apps only offer full releases.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.TAG, '-') }}

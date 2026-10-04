@@ -214,11 +214,14 @@ Tests cover the full deal lifecycle using a scripted fake model (inbound rates r
 pre-filter, encryption, header-injection safety, and the security rules (setup code, login, CSRF, MCP key,
 webhook signatures).
 
-**Releasing:** push a tag (`git tag v1.2.0 && git push origin v1.2.0`). The Release workflow builds the installers,
-records the walkthrough videos and publishes the release; installed apps offer it within a few hours. A tag like
-`v1.2.0-beta.1` becomes a pre-release that installed apps ignore, for trying a build first. Describe each version's
-features in `src/main/resources/whats-new.json` (it becomes the in-app What's New and the release notes) and add a
-video scenario for each one: see [walkthroughs/README.md](walkthroughs/README.md).
+**Releasing:** every merge to `main` publishes a release automatically (`.github/workflows/auto-release.yml`): the
+next patch version by default (1.2.0 → 1.2.1), or the version you add to `src/main/resources/whats-new.json` in the
+PR when it's newer (use that for feature releases, e.g. 1.3.0). The Release workflow builds the installers, records
+the walkthrough videos and publishes it; installed apps offer it within a few hours. Put `[skip release]` in the
+merge commit message to merge without releasing. You can still release by hand with a tag
+(`git tag v1.2.0 && git push origin v1.2.0`); a tag like `v1.2.0-beta.1` becomes a pre-release that installed apps
+ignore. Describe each feature in `whats-new.json` (it becomes the in-app What's New and the release notes) and add
+a video scenario for it: see [walkthroughs/README.md](walkthroughs/README.md).
 
 **Demo mode** (`--spring.profiles.active=demo`, with `CRM_DATA_DIR` pointing at an empty temp folder) starts the
 app with made-up deals, a fake Claude and the login `demo` / `demo-password-123`.
