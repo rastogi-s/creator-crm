@@ -268,3 +268,5 @@ details.collapsible[open] > summary { margin-bottom: .5rem; }
 .search-results .hit .title { font-weight: 600; overflow-wrap: anywhere; }
 .search-results .hit .detail { color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
 .search-results .empty { padding: .5rem; }
+.ask-claude { margin: .25rem 0 .75rem; padding: .5rem .75rem; border: 1px dashed var(--border); border-radius: 8px; display: grid; gap: .4rem; }
+.ask-claude .row input { margin: 0; }

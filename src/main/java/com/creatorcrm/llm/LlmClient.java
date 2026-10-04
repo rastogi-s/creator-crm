@@ -14,6 +14,12 @@ public interface LlmClient {
     /** Write a message in the creator's voice. Always goes to the approval queue, never sent directly. */
     DraftText writeDraft(DraftInput input);
 
+    /**
+     * Rewrite an existing draft the way the creator asks ("warmer", "shorter"). {@code context} is the same deal
+     * context a new draft gets. The result replaces the draft's text; it is never sent directly.
+     */
+    DraftText reviseDraft(DraftInput context, DraftText current, String request);
+
     /** Research brands on the web that could be pitched. Results are suggestions the creator reviews. */
     BrandLeads findBrands(BrandSearchInput input);
 

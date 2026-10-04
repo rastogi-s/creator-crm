@@ -1131,6 +1131,59 @@
 
   const draftsFilter = loadPrefs("drafts", { q: "", type: "all", order: "oldest" });
 
+  /**
+   * "Ask Claude to change this" under a draft: quick buttons or a typed request. Claude rewrites the text on screen
+   * and saves it; nothing is sent. Undo steps back through the earlier versions.
+   */
+  const quickChanges = [
+    ["Warmer", "Make it warmer and friendlier."],
+    ["Shorter", "Make it shorter. Keep the key points."],
+    ["More formal", "Make it more formal and professional."],
+    ["Add my rates", "Add my rates from my profile where they fit this message. If my profile has none for this, use placeholders."],
+  ];
+  function askClaude(d, subject, body) {
+    const history = [];
+    const ask = el("input", { class: "grow", placeholder: "Or say what to change, e.g. 'mention I'm free in March'", maxlength: "1000",
+      "aria-label": "What should Claude change?" });
+    const status = el("span", { class: "small muted" });
+    const undo = el("button", { class: "small hidden", title: "Put back the version before Claude's change", onclick: action(async () => {
+      const prev = history.pop();
+      if (!prev) return;
+      subject.value = prev.subject; body.value = prev.body;
+      undo.classList.toggle("hidden", !history.length);
+      await api("PUT", "/api/drafts/" + d.id, prev);
+    }, "Change undone") }, "Undo");
+    const buttons = [];
+    const run = async (request) => {
+      if (!request.trim()) { ask.focus(); return; }
+      buttons.forEach((b) => { b.disabled = true; });
+      status.textContent = "Claude is rewriting it…";
+      const before = { subject: subject.value, body: body.value };
+      try {
+        const r = await api("POST", "/api/drafts/" + d.id + "/revise", { subject: before.subject, body: before.body, request });
+        history.push(before);
+        subject.value = r.subject || ""; body.value = r.body;
+        undo.classList.remove("hidden");
+        ask.value = "";
+        status.textContent = "Changed. Read it over before you send.";
+      } catch (err) {
+        status.textContent = "";
+        toast(err.message, true);
+      } finally {
+        buttons.forEach((b) => { b.disabled = false; });
+      }
+    };
+    for (const [label, request] of quickChanges) buttons.push(el("button", { class: "small", onclick: () => run(request) }, label));
+    const go = el("button", { class: "small", onclick: () => run(ask.value) }, "Change");
+    buttons.push(go, ask);
+    ask.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(ask.value); } });
+    return el("div", { class: "ask-claude" },
+      el("div", { class: "small muted" }, "Ask Claude to change it"),
+      el("div", { class: "row" }, buttons.slice(0, quickChanges.length), undo),
+      el("div", { class: "row" }, ask, go),
+      status);
+  }
+
   async function renderDrafts(root) {
     const list = await api("GET", "/api/drafts");
     clear(root);
@@ -1185,6 +1238,7 @@
         d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
         el("label", {}, "Message"), body,
+        askClaude(d, subject, body),
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
         el("div", { class: "row" },
           blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
@@ -1553,7 +1607,7 @@
     const sp = await api("GET", "/api/claude-spend").catch(() => null);
     if (!sp) return el("div");
     showCreditBanner(sp);
-    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", RESEARCH: "Finding brands" };
+    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands" };
     const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
       value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
     const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

@@ -160,6 +160,36 @@ public class ClaudeLlmClient implements LlmClient {
                 .append("Write a ").append(in.draftType()).append(" message via ").append(in.platform())
                 .append(" to ").append(in.brandName())
                 .append(in.contactName().isBlank() ? "" : " (contact: " + in.contactName() + ")").append(".\n\n");
+        appendDraftContext(user, in);
+        if (!in.extraInstructions().isBlank()) {
+            user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
+        }
+        return call(ClaudeSpend.Feature.DRAFT, settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
+                DraftText.class, 4000, null);
+    }
+
+    @Override
+    public DraftText reviseDraft(DraftInput in, DraftText current, String request) {
+        StringBuilder user = new StringBuilder()
+                .append("Today: ").append(in.today()).append('\n')
+                .append("The creator wants to change a ").append(in.draftType()).append(" message via ").append(in.platform())
+                .append(" to ").append(in.brandName())
+                .append(in.contactName().isBlank() ? "" : " (contact: " + in.contactName() + ")").append(".\n\n");
+        appendDraftContext(user, in);
+        user.append("Current draft:\n<current_draft>\n");
+        if (!current.subject().isBlank()) user.append("Subject: ").append(current.subject()).append('\n');
+        user.append(current.body()).append("\n</current_draft>\n\n")
+                .append("Rewrite the current draft as the creator asks below and return the whole new version. Change only ")
+                .append("what the request is about: keep the facts, numbers, dates, links, placeholders and anything already ")
+                .append("agreed. Don't add rates, links or terms that aren't in the profile, the deal record or the draft; use ")
+                .append("a placeholder instead. Keep the subject unless the request is about it.\n\n")
+                .append("The creator's request: ").append(request).append('\n');
+        return call(ClaudeSpend.Feature.REVISE, settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
+                DraftText.class, 4000, null);
+    }
+
+    /** The deal, conversation and past examples a writer needs, shared by new drafts and rewrites. */
+    private static void appendDraftContext(StringBuilder user, DraftInput in) {
         if (!in.opportunityContext().isBlank()) {
             user.append("Deal record:\n").append(in.opportunityContext()).append("\n\n");
         }
@@ -179,11 +209,6 @@ public class ClaudeLlmClient implements LlmClient {
             in.pastExamples().forEach(x -> user.append(x).append('\n'));
             user.append('\n');
         }
-        if (!in.extraInstructions().isBlank()) {
-            user.append("Instructions from the creator: ").append(in.extraInstructions()).append('\n');
-        }
-        return call(ClaudeSpend.Feature.DRAFT, settings.writerModel(), settings.writerEffort(), writerSystem, creatorProfile(), user.toString(),
-                DraftText.class, 4000, null);
     }
 
     @Override

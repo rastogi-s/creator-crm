@@ -160,14 +160,7 @@ public class DraftService {
             route(d, b, conv, thread);
         }
 
-        String extra = (instructions == null ? "" : instructions)
-                + (o.missingInfo == null || o.missingInfo.isBlank() ? "" : " Still unknown in this deal: " + o.missingInfo + ".");
-        List<Message> recent = thread.subList(Math.max(0, thread.size() - CONTEXT_MESSAGES), thread.size());
-        DraftInput input = new DraftInput(settings.today(), type.name(), d.channel.name(), b.name,
-                b.contactName == null ? "" : b.contactName, dealRecord(o),
-                conv == null || conv.summary == null ? "" : conv.summary,
-                recent.stream().map(Untrusted::wrap).toList(), extra.strip(),
-                learning.examplesFor(type.name(), d.channel, o.id));
+        DraftInput input = draftInput(o, b, conv, thread, type, d.channel, instructions);
         DraftText text;
         try {
             text = llm.writeDraft(input);
@@ -197,6 +190,44 @@ public class DraftService {
             }
         }
         return d;
+    }
+
+    private DraftInput draftInput(Opportunity o, Brand b, Conversation conv, List<Message> thread, DraftType type,
+                                  Platform channel, String instructions) {
+        String extra = (instructions == null ? "" : instructions)
+                + (o.missingInfo == null || o.missingInfo.isBlank() ? "" : " Still unknown in this deal: " + o.missingInfo + ".");
+        List<Message> recent = thread.subList(Math.max(0, thread.size() - CONTEXT_MESSAGES), thread.size());
+        return new DraftInput(settings.today(), type.name(), channel.name(), b.name,
+                b.contactName == null ? "" : b.contactName, dealRecord(o),
+                conv == null || conv.summary == null ? "" : conv.summary,
+                recent.stream().map(Untrusted::wrap).toList(), extra.strip(),
+                learning.examplesFor(type.name(), channel, o.id));
+    }
+
+    /**
+     * Claude rewrites a pending draft the way the creator asks ("make it warmer"), starting from the text she sees,
+     * unsaved edits included. The new text is saved like a manual edit: the draft still waits for her Send, and
+     * the original Claude draft stays as it was, so learning treats the change as hers.
+     */
+    @Transactional
+    public Draft revise(Long draftId, String subject, String body, String request) {
+        Draft d = pending(draftId);
+        if (request == null || request.isBlank()) throw new IllegalArgumentException("Say what to change");
+        Opportunity o = opportunities.findById(d.opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
+        Brand b = brands.findById(o.brandId).orElseThrow();
+        Conversation conv = d.conversationId == null ? null : conversations.findById(d.conversationId).orElse(null);
+        List<Message> thread = conv == null ? List.of() : messages.findByConversationIdOrderBySentAtAsc(conv.id);
+        DraftText current = new DraftText(
+                d.channel == Platform.EMAIL ? (subject != null ? subject : d.subject == null ? "" : d.subject).strip() : "",
+                (body != null && !body.isBlank() ? body : d.body).strip());
+
+        DraftText text = llm.reviseDraft(draftInput(o, b, conv, thread, d.type, d.channel, null), current, request.strip());
+        if (text.body() == null || text.body().isBlank()) throw new IllegalStateException("Claude returned an empty message; try again");
+        d.body = text.body().strip();
+        if (d.channel == Platform.EMAIL) {
+            d.subject = text.subject() == null || text.subject().isBlank() ? current.subject() : text.subject().strip();
+        }
+        return drafts.save(d);
     }
 
     /** Pick channel, recipient and threading headers from the conversation (or brand contact for new threads). */
