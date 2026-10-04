@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.7.1",
+    "title": "Creator CRM starts with Windows",
+    "features": [
+      {
+        "id": "start-with-windows",
+        "title": "Always running, even after a restart",
+        "body": "Creator CRM now opens quietly in the tray when you sign in to your laptop, so new emails and follow-up reminders keep coming in, and the app keeps working from your phone, even after the laptop restarts for an update. Nothing pops up; click the tray icon or the desktop shortcut when you want it. You can turn this off under Settings, Start with Windows.",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
     "version": "1.5.0",
     "title": "Claude spending and credit warnings",
     "features": [

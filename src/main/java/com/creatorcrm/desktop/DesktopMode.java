@@ -21,6 +21,11 @@ import javax.swing.JOptionPane;
  */
 public final class DesktopMode {
 
+    /** Added by the Windows startup entry: start in the tray without opening the browser. */
+    public static final String BACKGROUND_ARG = "--background";
+
+    private static boolean background;
+
     private DesktopMode() {}
 
     public static boolean enabled() {
@@ -36,6 +41,17 @@ public final class DesktopMode {
         return "http://localhost:" + port();
     }
 
+    /** True when started by Windows at sign-in rather than by a click. */
+    public static boolean background() {
+        return background;
+    }
+
+    /** Takes out {@link #BACKGROUND_ARG}, which is ours, before Spring sees the arguments. */
+    public static String[] stripArgs(String[] args) {
+        background = java.util.Arrays.asList(args).contains(BACKGROUND_ARG);
+        return java.util.Arrays.stream(args).filter(a -> !BACKGROUND_ARG.equals(a)).toArray(String[]::new);
+    }
+
     /** Called from main() before Spring starts. May exit the JVM if the app is already running. */
     public static void prepare() {
         Path home = Path.of(System.getProperty("user.home"), ".creator-crm");
@@ -44,9 +60,10 @@ public final class DesktopMode {
         }
         if (portIsFree()) return;
         if (isOurApp()) {
-            openBrowser(baseUrl() + "/"); // second launch: just bring up the existing instance
+            if (!background) openBrowser(baseUrl() + "/"); // second launch: just bring up the existing instance
             System.exit(0);
         }
+        if (background) System.exit(0); // something else has the port; don't pop up an error at sign-in
         message("Creator CRM can't start because port " + port() + " is already used by another program.\n\n"
                 + "Close that program, or set the PORT environment variable to a different number.");
         System.exit(1);
