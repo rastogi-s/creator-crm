@@ -124,6 +124,7 @@
     }
     try {
       await views[tab](document.getElementById("view-" + tab));
+      if (q.has("spend")) { const c = document.getElementById("spend"); if (c) c.scrollIntoView({ block: "start" }); }
     } catch (err) {
       toast(err.message, true);
     }
@@ -581,12 +582,29 @@
     const query = el("input", { placeholder: "e.g. clean skincare brands like Glossier that work with UGC creators", maxlength: "300" });
     const count = el("select", { class: "inline" }, [3, 5, 10].map((n) => el("option", { value: n }, n + " brands")));
     count.value = "5";
+    // How hard to search: fewer web searches cost less. Labels show the real average once there are past runs.
+    const depthNames = { QUICK: "Quick", STANDARD: "Standard", THOROUGH: "Thorough" };
+    const depthNotes = { QUICK: "cheapest, may find fewer", STANDARD: "good balance", THOROUGH: "most brands, costs most" };
+    const depth = el("select", { class: "inline", "aria-label": "How hard to search" });
+    const fillDepth = (opts) => {
+      clear(depth);
+      opts.forEach((o) => depth.appendChild(el("option", { value: o.depth },
+        depthNames[o.depth] + ": up to " + o.maxSearches + " searches, " + (o.measured ? "" : "about ") + usd(o.usd)
+        + (o.measured ? " on average" : "") + " (" + depthNotes[o.depth] + ")")));
+      let saved = null;
+      try { saved = localStorage.getItem("crm.searchDepth"); } catch (e) { /* private window */ }
+      depth.value = opts.some((o) => o.depth === saved) ? saved : "STANDARD";
+    };
+    fillDepth([{ depth: "QUICK", maxSearches: 3, usd: 0.25 }, { depth: "STANDARD", maxSearches: 6, usd: 0.45 },
+      { depth: "THOROUGH", maxSearches: 15, usd: 1.0 }]);
+    api("GET", "/api/leads/search-options").then(fillDepth).catch(() => {});
+    depth.addEventListener("change", () => { try { localStorage.setItem("crm.searchDepth", depth.value); } catch (e) { /* ignore */ } });
     const status = el("span", { class: "small muted" });
     const search = action(async () => {
       if (query.value.trim().length < 3) throw new Error("Describe the kind of brands to look for");
       status.textContent = "Researching brands on the web… this can take a minute or two.";
       try {
-        const found = await api("POST", "/api/leads/search", { query: query.value, count: Number(count.value) });
+        const found = await api("POST", "/api/leads/search", { query: query.value, count: Number(count.value), depth: depth.value });
         toast(found.length ? found.length + " new brand" + (found.length === 1 ? "" : "s") + " found" : "No new brands found; try a different search");
         renderOutreach(root);
       } finally { status.textContent = ""; }
@@ -595,6 +613,7 @@
     return card("Find brands to pitch",
       el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
       el("div", { class: "row" }, el("div", { class: "spacer" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
+      el("div", { class: "row" }, el("span", { class: "small muted" }, "Search depth:"), depth),
       status,
       leads.length ? el("div", {}, leads.map((l) => leadItem(root, l))) : null);
   }
@@ -832,8 +851,12 @@
       creatorProfile: el("textarea", { class: "tall", maxlength: "20000" }),
       timezone: el("input", { value: p.timezone }),
       brandKeywords: el("textarea", { maxlength: "2000" }),
-      classifierModel: el("input", { value: p.classifierModel }),
-      writerModel: el("input", { value: p.writerModel }),
+      classifierModel: modelSelect(p.classifierModel, [
+        ["claude-sonnet-5-5", "Sonnet 5.5: cheaper, under 1¢ per message (recommended)"],
+        ["claude-opus-5-5", "Opus 5.5: most careful, about 2× the cost"]]),
+      writerModel: modelSelect(p.writerModel, [
+        ["claude-opus-5-5", "Opus 5.5: best writing, about 2–4¢ per draft (recommended)"],
+        ["claude-sonnet-5-5", "Sonnet 5.5: about half the cost, plainer drafts"]]),
     };
     pf.creatorProfile.value = p.creatorProfile;
     pf.brandKeywords.value = p.brandKeywords;
@@ -844,8 +867,9 @@
       el("label", {}, "Time zone"), pf.timezone,
       el("label", {}, "Brand keywords (emails without these in bulk/automated mail are skipped before AI)"), pf.brandKeywords,
       el("div", { class: "grid" },
-        el("div", {}, el("label", {}, "Classifier model"), pf.classifierModel),
-        el("div", {}, el("label", {}, "Writer model"), pf.writerModel)),
+        el("div", {}, el("label", {}, "Claude for reading messages"), pf.classifierModel),
+        el("div", {}, el("label", {}, "Claude for writing drafts and finding brands"), pf.writerModel)),
+      el("p", { class: "small muted" }, "Costs are rough. Settings → Claude spending shows what you actually spend."),
       el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
         const body = {};
         for (const [k, v] of Object.entries(pf)) body[k] = v.value;
@@ -928,8 +952,11 @@
       keyOut,
       el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
 
+    root.appendChild(await claudeSpendCard(root));
     root.appendChild(await learningCard(root));
     root.appendChild(updatesCard(root));
+    const startup = await startWithWindowsCard();
+    if (startup) root.appendChild(startup);
     root.appendChild(await errorReportsCard(root, c));
     root.appendChild(backupCard(root));
 
@@ -957,6 +984,14 @@
     return el("div", { class: "row" }, el("span", { class: "small" }, "📊 " + text), el("button", { class: "small", onclick: action(async () => {
       await api("POST", "/api/settings/instagram-stats/refresh"); renderSettings(root);
     }, "Instagram stats updated") }, "Refresh stats"));
+  }
+
+  // A model picker with rough costs; keeps a model typed in by hand on an older version.
+  function modelSelect(current, options) {
+    const s = el("select", {}, options.map(([v, label]) => el("option", { value: v }, label)));
+    if (current && !options.some(([v]) => v === current)) s.appendChild(el("option", { value: current }, current));
+    s.value = current || options[0][0];
+    return s;
   }
 
   async function learningCard(root) {
@@ -993,6 +1028,69 @@
       el("label", { class: "check", for: "learn-toggle" }, toggle, " Use my past messages when writing drafts"),
       el("div", { class: "stats" }, stat(stats.examples, "messages to learn from"), stat(stats.edited, "drafts you edited"), stat(stats.gotReply, "got a reply")),
       recent.length ? el("div", {}, rows) : emptyLine("Nothing yet. Send a draft or write to a brand and it will show up here."));
+  }
+
+  // ---------- Claude spending and credits ----------
+  // The API can't report the credit balance, so the app adds up an estimate of each call's cost and counts down
+  // from the balance last typed in here.
+
+  const usd = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  function showCreditBanner(sp) {
+    const b = clear(document.getElementById("credit-banner"));
+    const a = sp && sp.alert;
+    b.classList.toggle("hidden", !a);
+    if (!a) return;
+    b.classList.toggle("error", a.level === "OUT");
+    b.classList.toggle("warn", a.level !== "OUT");
+    b.appendChild(el("span", {}, el("strong", {}, a.level === "OUT" ? "⚠️ Out of Claude credits. " : "Claude credits low. "),
+      a.message.replace(/^Claude credits[^.:]*[.:]\s*/, "")));
+    b.appendChild(el("span", { class: "spacer" }));
+    b.appendChild(el("a", { class: "btn small", href: "#settings?spend" }, "Details"));
+  }
+
+  async function refreshCredits() {
+    try { showCreditBanner(await api("GET", "/api/claude-spend")); } catch (e) { /* signed out or offline */ }
+  }
+
+  async function claudeSpendCard(root) {
+    const sp = await api("GET", "/api/claude-spend").catch(() => null);
+    if (!sp) return el("div");
+    showCreditBanner(sp);
+    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", RESEARCH: "Finding brands" };
+    const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
+      value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
+    const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });
+    const save = (path, input) => action(async () => {
+      const v = input.value.trim();
+      await api("PUT", "/api/claude-spend/" + path, { usd: v === "" ? null : Number(v) });
+      renderSettings(root);
+    }, "Saved");
+    const since = sp.trackedSince ? "since " + fmtDate(sp.trackedSince) + (sp.beforeUsd ? ", plus " + usd(sp.beforeUsd) + " from before" : "") : "nothing yet";
+    const left = sp.outOfCreditsSince ? el("p", { class: "alert error" }, "Out of credits since " + fmtDateTime(sp.outOfCreditsSince)
+        + ". Add credits in the Claude Console, then enter the new balance below.")
+      : sp.remainingUsd != null ? el("p", { class: sp.alert ? "alert error" : "" }, "About " + usd(sp.remainingUsd) + " of credit left (you entered "
+        + usd(sp.balanceUsd) + " on " + fmtDate(sp.balanceAt) + ").")
+      : el("p", { class: "small muted" }, "Enter your balance below to get a warning before the credits run out.");
+    const card_ = card("Claude spending",
+      el("div", { class: "stats" },
+        stat(usd(sp.totalUsd), "spent in total (" + since + ")"),
+        stat(usd(sp.thisMonthUsd), "this month"),
+        stat(sp.calls.toLocaleString(), "Claude requests")),
+      el("ul", { class: "small" }, Object.entries(sp.byFeature).map(([k, v]) => el("li", {}, (names[k] || pretty(k)) + ": " + usd(v))),
+        sp.months.length > 1 ? sp.months.map((m) => el("li", { class: "muted" }, m.month + ": " + usd(m.usd))) : null),
+      left,
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Credit balance right now ($)"), balance,
+          el("div", { class: "row" }, el("button", { class: "primary small", onclick: save("balance", balance) }, "Save balance"))),
+        el("div", {}, el("label", {}, "Spent before this app started counting ($)"), before,
+          el("div", { class: "row" }, el("button", { class: "small", onclick: save("spent-before", before) }, "Save")))),
+      el("p", { class: "small muted" }, "Find both at console.anthropic.com: Billing shows the balance, Usage/Cost shows what was spent. "
+        + "Enter the balance again whenever you top up. You'll see a warning at the top when about 20% is left, and a red one if "
+        + "the credits run out. The totals are estimates from Claude's token counts and published prices, and may differ a little "
+        + "from the bill."));
+    card_.id = "spend";
+    return card_;
   }
 
   function backupCard() {
@@ -1076,7 +1174,8 @@
     return el("div", { class: "import-box" },
       el("h4", {}, "Import older email"),
       el("p", { class: "small muted" }, "Brings in past deals. Older email is analyzed oldest first so each deal's status builds up in order, and "
-        + "reply drafts are only written for unanswered email from the last 2 months. Already-imported email is skipped; "
+        + "reply drafts are only written for unanswered email from the last 2 months. Big imports are analyzed at half price "
+        + "in the background, so deals fill in over a few hours. Already-imported email is skipped; "
         + "Gmail rate limits pause and resume it automatically."),
       el("div", { class: "row" }, days,
         el("button", { class: "small", onclick: action(async () => {
@@ -1200,6 +1299,25 @@
       el("label", { class: "row check" }, auto, "Check for updates automatically (every few hours)"),
       el("p", { class: "small muted" }, "Nothing is installed without your click. Before installing, a copy of your data is saved in the "
         + "backups folder next to your data."));
+  }
+
+  // Only shown in the installed Windows app, the one place the setting can work.
+  async function startWithWindowsCard() {
+    const st = await api("GET", "/api/desktop/start-with-windows").catch(() => null);
+    if (!st || !st.supported) return null;
+    const box = el("input", { type: "checkbox", checked: st.enabled, onchange: action(async (e) => {
+      try {
+        const r = await api("PUT", "/api/desktop/start-with-windows", { enabled: e.target.checked });
+        e.target.checked = r.enabled;
+      } catch (err) {
+        e.target.checked = !e.target.checked;
+        throw err;
+      }
+    }, "Saved") });
+    return card("Start with Windows",
+      el("label", { class: "row check" }, box, "Start Creator CRM when Windows starts"),
+      el("p", { class: "small muted" }, "Creator CRM opens quietly in the tray when you sign in to this laptop, so follow-ups, email checks "
+        + "and your phone keep working after a restart. Click the tray icon or the desktop shortcut to open it."));
   }
 
   // "Something isn't working": her note plus recent (redacted) log lines go to the developer as a GitHub issue.
@@ -1359,6 +1477,9 @@
     else if (since) text = "Import since " + since + " continues on the next sync";
     else if (n > 0 && !s.aiConfigured) {
       text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
+    } else if (s.inBatch > 0 && !s.aiError) {
+      text = s.inBatch + " older message" + (s.inBatch === 1 ? "" : "s") + " being analyzed at half price"
+        + (n > s.inBatch ? " (" + n + " waiting in all)" : "") + ". Results come in over the next few hours.";
     } else if (n > 0 && s.aiError) {
       const reason = s.aiError.replace(/^\S+\s+/, "");
       text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude API key rejected"
@@ -1395,6 +1516,8 @@
   });
   window.addEventListener("hashchange", route);
   pollStatus();
+  refreshCredits();
+  setInterval(refreshCredits, 5 * 60 * 1000);
 
   refreshUpdate();
   setInterval(refreshUpdate, 30 * 60 * 1000);

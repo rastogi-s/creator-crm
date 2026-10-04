@@ -16,6 +16,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,6 +92,25 @@ public class SettingsService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** Marker row: the one-time switch of message reading from Opus to the cheaper Sonnet has run. */
+    static final String SONNET_SWITCH_DONE = "migrated.classifierSonnet";
+
+    /**
+     * Version 1.5.0 made Sonnet 5.5 the default for reading messages. Saving "About you" used to store the old
+     * default (Opus 5.5) too, so clear that once; a model picked later on purpose is kept.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void switchClassifierToSonnetOnce() {
+        if (repo.existsById(SONNET_SWITCH_DONE)) return;
+        repo.findById(CLASSIFIER_MODEL).filter(x -> "claude-opus-5-5".equals(x.value)).ifPresent(repo::delete);
+        Setting done = new Setting();
+        done.name = SONNET_SWITCH_DONE;
+        done.value = "true";
+        done.updatedAt = OffsetDateTime.now();
+        repo.save(done);
     }
 
     private String raw(String name, String fallback) {
