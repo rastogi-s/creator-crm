@@ -140,7 +140,18 @@ Every credential you enter is **your own** and is stored encrypted (AES-256-GCM)
 
    Tools: `get_today_plan`, `get_end_of_day_summary`, `list_pipeline`, `get_opportunity`,
    `get_followups_due`, `find_brand`, `log_pitch`, `create_task`, `complete_task`, `update_status`,
-   `mark_followup_sent`, `stop_followups`, `draft_message`, `list_pending_drafts`, `sync_now`, `send_draft`.
+   `mark_followup_sent`, `stop_followups`, `draft_message`, `list_pending_drafts`, `sync_now`, `send_draft`,
+   money and invoices (`get_money_summary`, `list_unpaid_invoices`, `create_invoice`, `draft_invoice_email`,
+   `mark_invoice_paid`), outreach (`find_brands_to_pitch`, `list_brand_leads`, `draft_pitch_for_lead`,
+   `dismiss_brand_lead`), rebooking (`list_rebook_candidates`, `draft_rebook_pitch`) and `get_instagram_stats`.
+   Every draft tool only queues a draft for approval. `find_brands_to_pitch` runs web research and costs Claude credit.
+
+   Claude Desktop (needs Node.js), in `claude_desktop_config.json`:
+
+   ```json
+   {"mcpServers": {"creator-crm": {"command": "npx", "args": ["-y", "mcp-remote", "http://localhost:8080/mcp",
+     "--header", "Authorization: Bearer <key>"]}}}
+   ```
    `send_draft` refuses unless you set `crm.mcp.allow-send=true`.
 
 ## How it works
