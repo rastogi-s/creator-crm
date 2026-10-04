@@ -40,6 +40,18 @@ public class DemoLlm implements LlmClient {
                     "Hi " + who + ",\n\nThank you so much for thinking of me! It isn't quite the right fit for me right now, "
                             + "but I'd love to stay in touch for future collaborations.\n\nAll the best,\nAva");
         }
+        if ("NEGOTIATION".equals(input.draftType())) {
+            // extraInstructions: "Counter-offer: propose $1,250 for 1 Reel + 2 Stories, .... The creator chose ..." from RateAdvisor.
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("propose (\\$[\\d,]+) for (.+?)\\. The creator")
+                    .matcher(input.extraInstructions());
+            boolean found = m.find();
+            String amount = found ? m.group(1) : "[MY RATE]";
+            String what = found ? m.group(2) : "this collab";
+            return new DraftText("Re: " + input.brandName() + " collab",
+                    "Hi " + who + ",\n\nThank you so much for the offer, I'd really love to make this happen! For " + what
+                            + ", my rate is " + amount + ". That covers the content itself plus the extra reach "
+                            + input.brandName() + " gets from running it as ads.\n\nHappy to talk it through if that helps.\n\nBest,\nAva");
+        }
         if ("REPITCH".equals(input.draftType())) {
             // extraInstructions: "... Last collab: <what> (paid, $750), finished <Month Year>. ..." from WinBack.
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("Last collab: (.+?)(?: \\(([^)]*)\\))?, finished ([A-Za-z]+ \\d{4})")

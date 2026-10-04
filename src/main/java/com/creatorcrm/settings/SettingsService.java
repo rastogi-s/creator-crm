@@ -61,6 +61,10 @@ public class SettingsService {
     public static final String WIN_BACK_QUIET_DAYS = "winBackQuietDays";
     public static final String WIN_BACK_WEEKLY_LIMIT = "winBackWeeklyLimit";
 
+    /** Rate advisor: percent added per month of paid usage, and percent added for exclusivity. */
+    public static final String RATE_USAGE_PCT = "rateUsagePercentPerMonth";
+    public static final String RATE_EXCLUSIVITY_PCT = "rateExclusivityPercent";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
@@ -68,7 +72,7 @@ public class SettingsService {
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
-            WIN_BACK_WEEKLY_LIMIT);
+            WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -185,6 +189,10 @@ public class SettingsService {
     /** 0 = win-back drafts are off. */
     public int winBackWeeklyLimit() { return Integer.parseInt(raw(WIN_BACK_WEEKLY_LIMIT, "5")); }
 
+    public int rateUsagePercent() { return Integer.parseInt(raw(RATE_USAGE_PCT, "30")); }
+
+    public int rateExclusivityPercent() { return Integer.parseInt(raw(RATE_EXCLUSIVITY_PCT, "25")); }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -218,6 +226,8 @@ public class SettingsService {
         m.put(PAYMENT_REMINDER_DAYS, String.join(",", paymentReminderDays().stream().map(String::valueOf).toList()));
         m.put(WIN_BACK_QUIET_DAYS, String.valueOf(winBackQuietDays()));
         m.put(WIN_BACK_WEEKLY_LIMIT, String.valueOf(winBackWeeklyLimit()));
+        m.put(RATE_USAGE_PCT, String.valueOf(rateUsagePercent()));
+        m.put(RATE_EXCLUSIVITY_PCT, String.valueOf(rateExclusivityPercent()));
         return m;
     }
 
@@ -264,6 +274,11 @@ public class SettingsService {
             case WIN_BACK_WEEKLY_LIMIT -> {
                 if (!v.isBlank() && !v.trim().matches("\\d|1\\d|20")) {
                     throw new IllegalArgumentException("Re-pitches per week: 0 to 20 (0 = off)");
+                }
+            }
+            case RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT -> {
+                if (!v.isBlank() && !v.trim().matches("\\d{1,3}")) {
+                    throw new IllegalArgumentException("Rate uplifts: a whole percent from 0 to 999, e.g. 30");
                 }
             }
             case INVOICE_PREFIX -> {

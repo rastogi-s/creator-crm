@@ -268,3 +268,10 @@ details.collapsible[open] > summary { margin-bottom: .5rem; }
 .search-results .hit .title { font-weight: 600; overflow-wrap: anywhere; }
 .search-results .hit .detail { color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
 .search-results .empty { padding: .5rem; }
+
+/* Rate advisor on the deal */
+#rate-advisor .big-number { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+#rate-advisor table.lines { width: 100%; border-collapse: collapse; margin: .5rem 0; }
+#rate-advisor table.lines td { padding: .2rem 0; border-bottom: 1px solid var(--border); }
+#rate-advisor table.lines td.num { text-align: right; font-variant-numeric: tabular-nums; }
+#rate-advisor p.warn { color: var(--warn); font-weight: 600; }

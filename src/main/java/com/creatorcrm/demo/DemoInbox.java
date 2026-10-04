@@ -39,6 +39,8 @@ final class DemoInbox {
                     "Hi Ava! Jay from Sparkle Socks. We'd love you to join our affiliate program: 15% commission on every sale through your link."),
             new Mail("Tiny Treats", "Bea", "bea@tinytreats.example", 0, "Quick Reel for Tiny Treats?",
                     "Hi Ava, Bea at Tiny Treats here. We have $100 for one Reel and three Stories about our new snack box. Interested?"),
+            new Mail("Fern & Field", "Theo", "theo@fernfield.example", 1, "Re: Spring planter campaign",
+                    "Hi Ava, Theo from Fern & Field here. Thanks for getting back to us! We can offer $600 for one Reel and two Stories, and we'd like to run the Reel as an ad for 3 months. Does that work?"),
             new Mail("Petal & Pine", "Mia", "mia@petalpine.example", 25, "Loved your candle post",
                     "Hi Ava, Mia at Petal & Pine. We saw your post with our candle gift set, it looks lovely! Thanks so much for sharing it."));
 
@@ -79,6 +81,9 @@ final class DemoInbox {
         if (t.contains("Coastline Coffee")) return a("Coastline Coffee", "Noor", Intent.PAYMENT_UPDATE, OpportunityType.PAID, Compensation.PAID, 900,
                 "1 Reel", "Spring Reel", List.of(), List.of(), false, Priority.LOW,
                 "Check that Coastline Coffee's $900 payment arrived", "Coastline Coffee says the $900 payment for the Spring Reel is on its way.");
+        if (t.contains("Fern & Field")) return a("Fern & Field", "Theo", Intent.NEGOTIATION, OpportunityType.PAID, Compensation.PAID, 600,
+                "1 Reel + 2 Stories", "3 months paid usage (Reel run as ads)", "Spring planters", List.of(), List.of("payment terms"), true,
+                Priority.HIGH, "Answer Fern & Field's $600 offer", "Fern & Field offers $600 for a Reel and two Stories, with the Reel run as an ad for 3 months.");
         if (t.contains("Petal & Pine")) return a("Petal & Pine", "Mia", Intent.CONTENT_POSTED, OpportunityType.GIFTED, Compensation.GIFTED, 0,
                 "1 post", "Candle gift set", List.of(), List.of(), false, Priority.LOW,
                 "", "Petal & Pine thanked Ava for posting their candle gift set.");
@@ -89,7 +94,14 @@ final class DemoInbox {
     private static MessageAnalysis a(String brand, String contact, Intent intent, OpportunityType type, Compensation comp,
                                      double budget, String deliverables, String campaign, List<ExtractedDeadline> deadlines,
                                      List<String> missing, boolean reply, Priority urgency, String action, String summary) {
+        return a(brand, contact, intent, type, comp, budget, deliverables, "", campaign, deadlines, missing, reply, urgency, action, summary);
+    }
+
+    private static MessageAnalysis a(String brand, String contact, Intent intent, OpportunityType type, Compensation comp,
+                                     double budget, String deliverables, String usageRights, String campaign,
+                                     List<ExtractedDeadline> deadlines, List<String> missing, boolean reply, Priority urgency,
+                                     String action, String summary) {
         return new MessageAnalysis(true, brand, contact, intent, type, comp, budget, budget > 0 ? "USD" : "",
-                budget > 0 ? "$" + (int) budget : "", deliverables, "", campaign, deadlines, missing, reply, urgency, action, summary);
+                budget > 0 ? "$" + (int) budget : "", deliverables, usageRights, campaign, deadlines, missing, reply, urgency, action, summary);
     }
 }
