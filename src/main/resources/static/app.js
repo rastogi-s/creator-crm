@@ -788,10 +788,19 @@
         refresh();
       }, "Task added") }, "Add"))));
 
+    // Exclusivity: another brand's exclusive window (or date) clashes with this deal's
+    const clashes = await api("GET", "/api/opportunities/" + id + "/exclusivity");
+    if (clashes.length) {
+      drawer.appendChild(el("div", { class: "card", id: "exclusivity" }, el("h2", {}, "Exclusivity clash"),
+        el("ul", { class: "flags" }, clashes.map((x) => el("li", { class: "flag amber" }, el("span", { class: "mark" }, "!"),
+          el("span", {}, x.text, " ", el("a", { href: "#", onclick: (e) => { e.preventDefault(); openDeal(x.otherOpportunityId); } }, "Open " + x.otherBrand))))),
+        el("p", { class: "small muted" }, "Exclusivity comes from the contract or what the brand wrote. Only you know whether the brands compete.")));
+    }
+
     if (d.deadlines.length) {
       drawer.appendChild(card("Deadlines", el("ul", { class: "list" }, d.deadlines.map((x) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, pretty(x.type) + " — " + fmtDate(x.dueDate)),
-          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.description || ""))))))));
+          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "📅 on your calendar · " : "") + (x.description || ""))))))));
     }
 
     const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : "") },
@@ -1503,6 +1512,39 @@
 
   // ---------- Settings ----------
 
+  // Deal dates on a "Creator CRM" calendar in her Google account
+  async function calendarStep(root, c) {
+    const cal = await api("GET", "/api/calendar");
+    const li = el("li", { class: cal.state === "READY" && cal.on ? "done" : "", id: "settings-calendar" }, el("h3", {}, "Google Calendar"),
+      el("p", { class: "small muted" }, "Contracts to sign, content due, posting days and payments go on a calendar called Creator CRM in your Google account, "
+        + "so they show on your phone. Dates move when a deal changes and disappear when they're done. The app can't see your other calendars."));
+    if (cal.state === "NO_GOOGLE") {
+      li.appendChild(el("p", { class: "small" }, "Connect Gmail first (step 2). The calendar uses the same Google sign-in."));
+      return li;
+    }
+    if (cal.state === "NEEDS_RECONNECT") {
+      li.appendChild(el("p", { class: "small" }, "Press Reconnect Gmail once and allow calendar access on Google's screen."));
+      if (c.GOOGLE_CLIENT_ID && c.GOOGLE_CLIENT_SECRET) li.appendChild(el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+        const r = await api("POST", "/oauth/google/start"); location.href = r.url;
+      }) }, "Reconnect Gmail")));
+      return li;
+    }
+    const on = el("input", { type: "checkbox", checked: cal.on, onchange: action(async (e) => {
+      await api("POST", "/api/calendar", { on: e.target.checked });
+      renderSettings(root);
+    }, "Saved") });
+    li.appendChild(el("label", { class: "check" }, on, " Put deal dates on my Google Calendar"));
+    li.appendChild(el("p", { class: "small" + (cal.error ? " warn" : "") }, cal.error ? cal.error
+      : cal.on ? cal.events + (cal.events === 1 ? " date" : " dates") + " on your Creator CRM calendar" + (cal.lastRun ? ", updated " + fmtDateTime(cal.lastRun) : "") + "."
+        : "Off. Turning it off removed the app's events."));
+    if (cal.on) li.appendChild(el("p", {}, el("button", { class: "small", onclick: action(async () => {
+      const r = await api("POST", "/api/calendar/sync");
+      if (r.error) throw new Error(r.error);
+      renderSettings(root);
+    }, "Calendar updated") }, "Update now")));
+    return li;
+  }
+
   async function renderSettings(root) {
     const s = await api("GET", "/api/settings");
     updateStatus = await api("GET", "/api/updates").catch(() => updateStatus);
@@ -1545,7 +1587,7 @@
     const gmailBox = el("div", {}, secretField("GOOGLE_CLIENT_ID", "Google OAuth client ID"), secretField("GOOGLE_CLIENT_SECRET", "Google OAuth client secret"));
     steps.appendChild(el("li", { class: channel.EMAIL.connected ? "done" : "" },
       el("h3", {}, "Connect Gmail"),
-      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
+      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API and the Google Calendar API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
       el("div", { class: "code" }, s.googleRedirectUri),
       gmailBox,
       el("div", { class: "row" },
@@ -1556,7 +1598,7 @@
         channel.EMAIL.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/google/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
       channelStatus(channel.EMAIL),
       channel.EMAIL.connected ? importHistory() : null,
-      el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts. The app cannot delete or change existing mail.")));
+      el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts, and a Creator CRM calendar for deal dates. The app cannot delete or change existing mail or see your other calendars.")));
 
     // 3. Instagram
     const igBox = el("div", {}, secretField("INSTAGRAM_APP_ID", "Instagram app ID"), secretField("INSTAGRAM_APP_SECRET", "Instagram app secret"));
@@ -1752,7 +1794,10 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 10. MCP
+    // 10. Google Calendar
+    steps.appendChild(await calendarStep(root, c));
+
+    // 11. MCP
     const keyOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
       el("h3", {}, "Use it from Claude (MCP, optional)"),

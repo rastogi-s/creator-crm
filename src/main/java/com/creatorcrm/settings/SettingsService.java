@@ -70,6 +70,9 @@ public class SettingsService {
     public static final String CONTRACT_FREE_USAGE_MONTHS = "contractFreeUsageMonths";
     public static final String CONTRACT_REVISIONS_INCLUDED = "contractRevisionsIncluded";
 
+    /** "false" = deal dates stay off her Google Calendar (and any already there are removed). */
+    public static final String CALENDAR_SYNC = "calendarSync";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
@@ -78,7 +81,7 @@ public class SettingsService {
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
             WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
-            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED);
+            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -170,6 +173,10 @@ public class SettingsService {
         return Boolean.parseBoolean(raw(LEARN_FROM_HISTORY, "true"));
     }
 
+    public boolean calendarSync() {
+        return Boolean.parseBoolean(raw(CALENDAR_SYNC, "true"));
+    }
+
     /** The business name on invoices; the creator's name until one is set. */
     public String invoiceBusinessName() { return raw(INVOICE_BUSINESS_NAME, creatorName()); }
 
@@ -243,6 +250,7 @@ public class SettingsService {
         m.put(CONTRACT_MAX_PAYMENT_DAYS, String.valueOf(contractMaxPaymentDays()));
         m.put(CONTRACT_FREE_USAGE_MONTHS, String.valueOf(contractFreeUsageMonths()));
         m.put(CONTRACT_REVISIONS_INCLUDED, String.valueOf(contractRevisionsIncluded()));
+        m.put(CALENDAR_SYNC, String.valueOf(calendarSync()));
         return m;
     }
 
@@ -273,7 +281,7 @@ public class SettingsService {
                     throw new IllegalArgumentException("Follow-up time must be HH:mm, e.g. 08:00");
                 }
             }
-            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY -> {
+            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
             }
             case PAYMENT_REMINDER_DAYS -> {

@@ -4,6 +4,7 @@ import com.creatorcrm.channels.NormalizedMessage;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
+import com.creatorcrm.calendar.CalendarSync;
 import com.creatorcrm.contracts.ContractService;
 import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.invoices.InvoiceService;
@@ -54,6 +55,7 @@ public class DemoData implements ApplicationRunner {
     private final WinBack winBack;
     private final ContractService contracts;
     private final ContractRepo contractRepo;
+    private final CalendarSync calendar;
 
     static final String DEMO_CONTRACT = """
             INFLUENCER AGREEMENT between Bloomleaf Tea Co. ("Brand") and Ava Rivera ("Creator").
@@ -68,7 +70,9 @@ public class DemoData implements ApplicationRunner {
     public DemoData(AppUserRepo users, PasswordEncoder encoder, SettingsService settings, IngestionService ingestion,
                     OutreachService outreach, InvoiceService invoices, OpportunityRepo opportunities,
                     WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
-                    ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo) {
+                    ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
+                    CalendarSync calendar) {
+        this.calendar = calendar;
         this.contracts = contracts;
         this.contractRepo = contractRepo;
         this.activity = activity;
@@ -145,6 +149,8 @@ public class DemoData implements ApplicationRunner {
                     contractRepo.findByOpportunityIdOrderByIdDesc(o.id).forEach(contractRepo::delete);
                     contracts.checkText(o.id, "Bloomleaf-October-agreement.pdf", DEMO_CONTRACT);
                 });
+        // Deal dates on the pretend Google Calendar, as if she had connected it.
+        calendar.sync();
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
     }
 }

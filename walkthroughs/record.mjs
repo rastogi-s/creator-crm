@@ -126,6 +126,41 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "calendar-sync"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    await page.locator("#view-pipeline tr").first().waitFor();
+    await say("Your deal dates can now go on your Google Calendar.", 3400);
+    await click(page.locator(".tab[data-tab=settings]"));
+    const step = page.locator("#settings-calendar");
+    await step.waitFor();
+    await step.scrollIntoViewIfNeeded();
+    await point(step.locator("h3"));
+    await say("In Settings, press Reconnect Gmail once and allow calendar access.", 4000);
+    await point(step.locator("label.check"));
+    await say("Contracts to sign, content due, posting days and payments go on a calendar called Creator CRM.", 4600);
+    await point(step.locator("p.small").last());
+    await say("They move when a deal changes and disappear when they're done. Your other calendars stay private.", 4600);
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Nova Nest Home" });
+    await row.waitFor();
+    await click(row.locator("strong"));
+    const clash = drawer.locator("#exclusivity");
+    await clash.waitFor();
+    await clash.scrollIntoViewIfNeeded();
+    await point(clash.locator("li.flag").first());
+    await say("Deals also warn you when their dates clash with another brand's exclusivity.", 4200);
+    await say("Only you know if the brands compete, so it's a heads-up, not a rule.", 3800);
+    const dates = drawer.locator(".card", { hasText: "on your calendar" }).first();
+    if (await dates.count()) {
+      await dates.scrollIntoViewIfNeeded();
+      await point(dates.locator(".detail").first());
+      await say("Dates on your calendar are marked here too.", 3200);
+    }
+    await say("", 600);
+  },
+
   async "contract-check"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");
