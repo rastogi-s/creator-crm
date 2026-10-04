@@ -32,7 +32,11 @@ final class DemoInbox {
             new Mail("Juniper Juice", "Dana", "dana@juniperjuice.example", 1, "Payment for the summer Reel",
                     "Hi Ava, Dana from Juniper Juice. Our finance team sent the $500 payment for the summer Reel yesterday. Let us know when it lands!"),
             new Mail("Maple & Moss", "Sky", "sky@maplemoss.example", 50, "Your August Reel is approved",
-                    "Hi Ava, Sky from Maple & Moss. The August Reel looks great, approved! Go ahead and post it."));
+                    "Hi Ava, Sky from Maple & Moss. The August Reel looks great, approved! Go ahead and post it."),
+            new Mail("Coastline Coffee", "Noor", "noor@coastlinecoffee.example", 100, "Spring Reel payment",
+                    "Hi Ava, Noor from Coastline Coffee. The $900 payment for the Spring Reel is on its way. Thanks again, it did so well for us!"),
+            new Mail("Petal & Pine", "Mia", "mia@petalpine.example", 25, "Loved your candle post",
+                    "Hi Ava, Mia at Petal & Pine. We saw your post with our candle gift set, it looks lovely! Thanks so much for sharing it."));
 
     static MessageAnalysis analysisFor(String text, LocalDate today) {
         String t = text == null ? "" : text;
@@ -62,6 +66,12 @@ final class DemoInbox {
         if (t.contains("Maple & Moss")) return a("Maple & Moss", "Sky", Intent.CONTENT_APPROVED, OpportunityType.PAID, Compensation.PAID, 750,
                 "1 Reel", "August Reel", List.of(), List.of(), false, Priority.MEDIUM,
                 "Post the Maple & Moss Reel", "Maple & Moss approved the August Reel.");
+        if (t.contains("Coastline Coffee")) return a("Coastline Coffee", "Noor", Intent.PAYMENT_UPDATE, OpportunityType.PAID, Compensation.PAID, 900,
+                "1 Reel", "Spring Reel", List.of(), List.of(), false, Priority.LOW,
+                "Check that Coastline Coffee's $900 payment arrived", "Coastline Coffee says the $900 payment for the Spring Reel is on its way.");
+        if (t.contains("Petal & Pine")) return a("Petal & Pine", "Mia", Intent.CONTENT_POSTED, OpportunityType.GIFTED, Compensation.GIFTED, 0,
+                "1 post", "Candle gift set", List.of(), List.of(), false, Priority.LOW,
+                "", "Petal & Pine thanked Ava for posting their candle gift set.");
         return new MessageAnalysis(false, "", "", Intent.NOT_BRAND_RELATED, OpportunityType.OTHER, Compensation.UNKNOWN, 0, "",
                 "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "");
     }

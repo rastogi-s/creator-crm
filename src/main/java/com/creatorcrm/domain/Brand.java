@@ -15,6 +15,8 @@ public class Brand {
     public String instagram;
     public String notes;
     public OffsetDateTime createdAt;
+    /** When a win-back re-pitch to this brand was last drafted. */
+    public OffsetDateTime lastRepitchAt;
 
     /** Normalized brand name used to detect duplicates ("Glow Co." == "glowco"). */
     public static String key(String name) {

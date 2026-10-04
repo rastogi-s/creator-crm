@@ -16,6 +16,7 @@ import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.invoices.InvoiceService;
+import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.Untrusted;
 import com.creatorcrm.repo.DraftRepo;
@@ -54,12 +55,14 @@ public class CrmMcpTools {
     private final SettingsService settings;
     private final CrmProperties props;
     private final InvoiceService invoices;
+    private final WinBack winBack;
 
     public CrmMcpTools(DigestService digest, OpportunityRepo opportunities, TaskRepo tasks, MessageRepo messages,
                        DraftRepo drafts, WorkflowEngine workflow, FollowUpEngine followUps, DraftService draftService,
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
-                       CrmProperties props, InvoiceService invoices) {
+                       CrmProperties props, InvoiceService invoices, WinBack winBack) {
         this.invoices = invoices;
+        this.winBack = winBack;
         this.digest = digest;
         this.opportunities = opportunities;
         this.tasks = tasks;
@@ -128,6 +131,16 @@ public class CrmMcpTools {
         return unpaid.stream().map(i -> "[opp " + i.opportunityId() + "] " + i.brand() + " — " + i.number() + " " + i.amountText()
                 + ", due " + i.dueDate() + (i.daysOverdue() > 0 ? " (overdue by " + i.daysOverdue() + " days)" : "")
                 + (i.remindersSent() > 0 ? ", " + i.remindersSent() + " reminder(s) sent" : ""))
+                .collect(Collectors.joining("\n"));
+    }
+
+    @McpTool(name = "list_rebook_candidates", description = "Past brands worth pitching again: paid collabs gone quiet and gifted collabs posted a while ago, best first, skipping brands with an open deal or a recent pitch. The app drafts a few re-pitches a week for the creator to approve.")
+    public String rebookCandidates() {
+        List<WinBack.Candidate> list = winBack.candidates(settings.today());
+        if (list.isEmpty()) return "No past brands to re-pitch right now.";
+        return list.stream().map(c -> "[opp " + c.opportunityId() + "] " + c.brand() + " — last collab: " + c.lastCollab()
+                + (c.gifted() ? " (gifted)" : c.amount() == null ? "" : " (" + c.amount() + ")")
+                + ", finished " + c.finishedOn() + ", quiet for " + c.quietDays() + " days")
                 .collect(Collectors.joining("\n"));
     }
 

@@ -35,6 +35,20 @@ public class DemoLlm implements LlmClient {
                     "Hi " + who + ",\n\nJust following up on " + what + ". Could you let me know when I can expect the payment? "
                             + "I've attached the invoice again.\n\nThanks so much,\nAva");
         }
+        if ("REPITCH".equals(input.draftType())) {
+            // extraInstructions: "... Last collab: <what> (paid, $750), finished <Month Year>. ..." from WinBack.
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Last collab: (.+?)(?: \\(([^)]*)\\))?, finished ([A-Za-z]+ \\d{4})")
+                    .matcher(input.extraInstructions());
+            boolean found = m.find();
+            String what = found ? m.group(1) : "our last collab";
+            String when = found ? " back in " + m.group(3) : "";
+            boolean gifted = input.extraInstructions().contains("(gifted)");
+            return new DraftText("Another idea for " + input.brandName(),
+                    "Hi " + who + ",\n\nI still think about the " + what + " we did together" + when + ". My audience loved it, "
+                            + "and a few people still ask me about it! I'd love to work with " + input.brandName() + " again"
+                            + (gifted ? ", this time as a paid collab" : "") + ". One idea: a 3-part Reel series showing how it fits "
+                            + "into my weekly routine.\n\nWould you be open to a quick chat?\n\nBest,\nAva");
+        }
         if ("INVOICE".equals(input.draftType())) {
             // extraInstructions starts "Send invoice INV-... for USD ..., due ....", written by InvoiceService.
             String what = input.extraInstructions();

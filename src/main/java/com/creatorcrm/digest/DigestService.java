@@ -54,7 +54,7 @@ public class DigestService {
 
     public record Morning(LocalDate date, String headline, List<Item> urgent, List<Item> followUps,
                           OpportunityCounts newOpportunities, List<Item> upcoming, List<Approval> approvals,
-                          Map<String, Long> pipeline, BigDecimal openPipelineValue) {}
+                          Map<String, Long> pipeline, BigDecimal openPipelineValue, List<Item> rebook) {}
 
     public record EndOfDay(LocalDate date, List<String> completed, List<String> stillPending,
                            OpportunityCounts newOpportunities, List<String> tomorrow) {}
@@ -145,6 +145,22 @@ public class DigestService {
         List<Approval> approvals = drafts.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING).stream()
                 .map(d -> approval(d, opps, brandNames)).toList();
 
+        // Win-back re-pitches waiting for her: past brands worth working with again.
+        List<Item> rebook = new ArrayList<>();
+        for (Draft d : drafts.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING)) {
+            if (d.type != DraftType.REPITCH) continue;
+            Opportunity o = opps.get(d.opportunityId);
+            if (o == null) continue;
+            String brand = brandNames.getOrDefault(o.brandId, "");
+            String last = o.campaign != null && !o.campaign.isBlank() ? o.campaign
+                    : o.deliverables != null && !o.deliverables.isBlank() ? o.deliverables : pretty(o.type.name());
+            rebook.add(new Item("REBOOK", brand + ": work together again?",
+                    "Last collab: " + last + (o.compensation == Compensation.GIFTED ? " (gifted)"
+                            : o.budgetText != null && !o.budgetText.isBlank() ? " (" + o.budgetText + ")" : "")
+                            + " · re-pitch ready in Drafts",
+                    null, 0, "MEDIUM", o.id, d.id, brand, 20));
+        }
+
         Map<String, Long> pipeline = new LinkedHashMap<>();
         for (OpportunityStatus s : OpportunityStatus.values()) {
             long n = opps.values().stream().filter(o -> o.status == s).count();
@@ -158,7 +174,7 @@ public class DigestService {
         int total = urgent.size() + fus.size();
         String headline = "Good morning, " + settings.creatorName() + ". You have " + total + (total == 1 ? " thing" : " things")
                 + " to do today" + (approvals.isEmpty() ? "" : " and " + approvals.size() + " draft" + (approvals.size() == 1 ? "" : "s") + " to approve") + ".";
-        return new Morning(today, headline, urgent, fus, fresh, upcoming, approvals, pipeline, value);
+        return new Morning(today, headline, urgent, fus, fresh, upcoming, approvals, pipeline, value, rebook);
     }
 
     public EndOfDay endOfDay() {
@@ -271,6 +287,10 @@ public class DigestService {
         c.items().forEach(s -> sb.append("• ").append(s).append('\n'));
         sb.append("\n📅 UPCOMING\n");
         m.upcoming().forEach(it -> sb.append("• ").append(it.title()).append(it.detail().isBlank() ? "" : " — " + it.detail()).append('\n'));
+        if (!m.rebook().isEmpty()) {
+            sb.append("\n🔁 REBOOK PAST BRANDS\n");
+            m.rebook().forEach(it -> sb.append("• ").append(it.title()).append(" — ").append(it.detail()).append('\n'));
+        }
         if (!m.approvals().isEmpty()) {
             sb.append("\n✉️ DRAFTS AWAITING YOUR APPROVAL\n");
             m.approvals().forEach(a -> sb.append("• #").append(a.draftId()).append(' ').append(a.brand()).append(" — ")

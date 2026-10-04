@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.11.0",
+    "title": "Rebook past brands",
+    "features": [
+      {
+        "id": "win-back",
+        "title": "Work with past brands again",
+        "body": "Brands that paid you before are the easiest yes. Each week the app writes a few short re-pitches to brands that paid you and have gone quiet for two months, and to brands whose gifted collab went up a couple of weeks ago, suggesting a paid one this time. Each re-pitch mentions your last collab, shows on Today under Rebook past brands and waits in Drafts for you. Sending one adds a new pitch with follow-ups. You can also press Pitch them again on any finished deal. Change the quiet period and how many a week under Settings, Rebooking past brands.",
+        "video": "win-back.webm",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.10.0",
     "title": "Payment reminders",
     "features": [
