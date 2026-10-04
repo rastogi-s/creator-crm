@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 /**
  * Installed-app conveniences once the server is up: opens the browser (on first run straight into setup,
  * with the one-time code in the URL fragment, which browsers never send to the server) and adds a
- * system-tray icon with Open / Quit.
+ * system-tray icon with Open / Quit. When Windows starts it at sign-in it stays in the tray instead.
  */
 @Component
 @ConditionalOnProperty(name = "crm.desktop", havingValue = "true")
@@ -31,10 +31,12 @@ public class DesktopIntegration {
     private static final Logger log = LoggerFactory.getLogger(DesktopIntegration.class);
 
     private final SetupService setup;
+    private final StartWithWindows startWithWindows;
     private final ConfigurableApplicationContext context;
 
-    public DesktopIntegration(SetupService setup, ConfigurableApplicationContext context) {
+    public DesktopIntegration(SetupService setup, StartWithWindows startWithWindows, ConfigurableApplicationContext context) {
         this.setup = setup;
+        this.startWithWindows = startWithWindows;
         this.context = context;
     }
 
@@ -44,7 +46,9 @@ public class DesktopIntegration {
         String url = code == null ? DesktopMode.baseUrl() + "/"
                 : DesktopMode.baseUrl() + "/setup.html#code=" + URLEncoder.encode(code, StandardCharsets.UTF_8);
         installTray();
-        DesktopMode.openBrowser(url);
+        // Started by Windows at sign-in: stay in the tray. First-run setup still opens, since it needs her.
+        if (!DesktopMode.background() || code != null) DesktopMode.openBrowser(url);
+        Thread.ofVirtual().name("start-with-windows").start(startWithWindows::applyDefault);
     }
 
     private void installTray() {
