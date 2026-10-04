@@ -3,6 +3,7 @@ package com.creatorcrm.diagnostics;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.creatorcrm.channels.gmail.GmailConnector;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
 import com.sun.net.httpserver.HttpServer;
@@ -12,12 +13,15 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** Errors logged by the app become one redacted GitHub issue per kind, with repeats as comments. */
 @SpringBootTest
@@ -64,9 +68,10 @@ class ErrorReporterIntegrationTest {
 
     @Autowired ErrorReporter reporter;
     @Autowired SecretStore secrets;
+    @MockitoBean GmailConnector gmail;
 
     @Test
-    void reportsErrorsGroupedAndRedacted() {
+    void reportsErrorsGroupedAndRedacted() throws Exception {
         assertThatThrownBy(() -> reporter.reportProblem("hi")).hasMessageContaining("aren't set up");
         reporter.sendPending(); // no token: nothing goes out
         assertThat(calls).isEmpty();
@@ -94,11 +99,30 @@ class ErrorReporterIntegrationTest {
         reporter.sendPending(); // nothing new
         assertThat(calls).hasSize(1);
 
-        Call report = null;
         ErrorReporter.Sent sent = reporter.reportProblem("Drafts page is blank, my email is priya.real@gmail.com");
-        assertThat(sent.number()).isEqualTo(7);
-        report = calls.get(calls.size() - 1);
+        assertThat(sent.url()).isEqualTo("https://github.test/acme/crm/issues/7");
+        assertThat(sent.emailed()).isFalse();
+        Call report = calls.get(calls.size() - 1);
         assertThat(report.body()).contains("[user-report] Drafts page is blank", "IllegalStateException")
                 .doesNotContain("priya.real");
+
+        // Email as well, sent from the connected Gmail account.
+        Mockito.when(gmail.isConnected()).thenReturn(true);
+        assertThatThrownBy(() -> reporter.setEmailTo("not an address")).isInstanceOf(IllegalArgumentException.class);
+        reporter.setEmailTo("dev@example.com");
+        LoggerFactory.getLogger("com.creatorcrm.drafts.DraftService").error("Draft failed", new IllegalArgumentException("boom"));
+        reporter.sendPending();
+        ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(gmail).sendPlain(Mockito.eq("dev@example.com"), subject.capture(), body.capture());
+        assertThat(subject.getValue()).startsWith("Creator CRM error: IllegalArgumentException in DraftService");
+        assertThat(body.getValue()).contains("Where:", "--- Stack trace ---", "GitHub issue: https://github.test/acme/crm/issues/7")
+                .doesNotContain("<details>", "```", "github_pat_test");
+
+        // Email only: GitHub token removed, reports still go out.
+        secrets.put(SecretName.ERROR_REPORT_TOKEN, "");
+        int before = calls.size();
+        assertThat(reporter.reportProblem("Still broken").emailed()).isTrue();
+        assertThat(calls).hasSize(before);
     }
 }

@@ -1,6 +1,7 @@
 package com.creatorcrm.diagnostics;
 
 import ch.qos.logback.classic.LoggerContext;
+import com.creatorcrm.channels.gmail.GmailConnector;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.security.SecretName;
@@ -46,6 +47,8 @@ public class ErrorReporter {
     static final String AUTO_KEY = "diagnostics.autoReport";
     static final String ISSUE_KEY = "diagnostics.issue.";
     static final String QUOTA_KEY = "diagnostics.quota";
+    static final String EMAIL_KEY = "diagnostics.emailTo";
+    static final String SEEN_KEY = "diagnostics.seen.";
     static final int MAX_NEW_PER_DAY = 10;
     static final int MAX_COMMENTS_PER_DAY = 30;
     static final int MAX_USER_REPORTS_PER_DAY = 5;
@@ -57,10 +60,12 @@ public class ErrorReporter {
 
     public record Recent(String title, int count, Instant lastSeen, String issueUrl) {}
 
-    public record Status(boolean configured, boolean autoReport, String repo, int waiting, Instant lastSentAt,
+    public record Status(boolean configured, boolean autoReport, String repo, boolean github, String emailTo,
+                         boolean gmailConnected, int waiting, Instant lastSentAt,
                          String lastError, List<Recent> recent) {}
 
-    public record Sent(int number, String url) {}
+    /** {@code url} is the GitHub issue, or null when the report only went by email. */
+    public record Sent(String url, boolean emailed) {}
 
     /** Errors not yet sent, by fingerprint. */
     private static final class Pending {
@@ -77,6 +82,7 @@ public class ErrorReporter {
     private final Environment env;
     private final String repo;
     private final String apiBaseUrl;
+    private final GmailConnector gmail;
     private final LogCapture capture = new LogCapture(this::record);
 
     private final Map<String, Pending> pending = new LinkedHashMap<>();
@@ -86,7 +92,7 @@ public class ErrorReporter {
     private volatile String lastError;
 
     public ErrorReporter(AppStateRepo state, SecretStore secrets, SettingsService settings, UpdateService updates,
-                         Environment env,
+                         Environment env, GmailConnector gmail,
                          @Value("${crm.diagnostics.repo:${crm.updates.repo:}}") String repo,
                          @Value("${crm.diagnostics.api-base-url:https://api.github.com}") String apiBaseUrl) {
         this.state = state;
@@ -96,6 +102,7 @@ public class ErrorReporter {
         this.env = env;
         this.repo = repo;
         this.apiBaseUrl = apiBaseUrl;
+        this.gmail = gmail;
         if (LoggerFactory.getILoggerFactory() instanceof LoggerContext ctx) {
             capture.setContext(ctx);
             capture.start();
@@ -141,7 +148,7 @@ public class ErrorReporter {
         synchronized (pending) {
             batch = new ArrayList<>(pending.entrySet());
         }
-        GitHubIssues gh = client();
+        GitHubIssues gh = githubReady() ? client() : null;
         Redactor redactor = redactor();
         for (Map.Entry<String, Pending> e : batch) {
             String fp = e.getKey();
@@ -155,6 +162,7 @@ public class ErrorReporter {
                 }
                 String url = send(gh, redactor, fp, p, count);
                 if (url == null) return; // daily limit reached
+                if (url.isEmpty()) url = null;
                 synchronized (pending) {
                     p.count -= count;
                     if (p.count <= 0) pending.remove(fp);
@@ -163,7 +171,6 @@ public class ErrorReporter {
                 }
                 lastSent.put(fp, Instant.now());
                 lastSentAt = Instant.now();
-                lastError = null;
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 return;
@@ -175,26 +182,72 @@ public class ErrorReporter {
         }
     }
 
-    /** Opens a new issue, or comments on the open one for this fingerprint. Returns null at the daily limit. */
+    /**
+     * Sends one group of errors on every channel that's set up: a new GitHub issue or a comment on the open one, and
+     * an email. Returns the issue link ("" if none), or null at the daily limit. Throws only if every channel failed.
+     */
     private String send(GitHubIssues gh, Redactor r, String fp, Pending p, int count) throws IOException, InterruptedException {
-        Optional<Integer> known = state.findById(ISSUE_KEY + fp).map(s -> Integer.parseInt(s.stateValue));
-        GitHubIssues.Issue existing = known.isPresent() ? gh.get(known.get()) : null;
-        if (existing != null && existing.open()) {
-            if (!takeQuota(Quota.COMMENT)) return null;
-            gh.comment(existing.number(), cap(commentBody(r, p, count)));
-            return existing.url();
+        boolean repeat = state.existsById(SEEN_KEY + fp);
+        if (!takeQuota(repeat ? Quota.COMMENT : Quota.NEW)) return null;
+        String url = "";
+        String body = null;
+        IOException failed = null;
+        String partial = null;
+        if (gh != null) {
+            try {
+                Optional<Integer> known = state.findById(ISSUE_KEY + fp).map(s -> Integer.parseInt(s.stateValue));
+                GitHubIssues.Issue existing = known.isPresent() ? gh.get(known.get()) : null;
+                if (existing != null && existing.open()) {
+                    body = commentBody(r, p, count);
+                    gh.comment(existing.number(), cap(body));
+                    url = existing.url();
+                } else {
+                    body = issueBody(r, fp, p, count, existing);
+                    GitHubIssues.Issue created = gh.create(cap(r.redact(p.title)), cap(body), List.of("auto-report"));
+                    put(ISSUE_KEY + fp, Integer.toString(created.number()));
+                    url = created.url();
+                }
+            } catch (IOException e) {
+                failed = e;
+            }
         }
-        if (!takeQuota(Quota.NEW)) return null;
-        String body = issueBody(r, fp, p, count, existing);
-        GitHubIssues.Issue created = gh.create(cap(r.redact(p.title)), cap(body), List.of("auto-report"));
-        put(ISSUE_KEY + fp, Integer.toString(created.number()));
-        return created.url();
+        if (emailReady()) {
+            String subject = "Creator CRM error" + (repeat ? " (again, " + count + "×)" : "") + ": "
+                    + r.redact(p.title).replaceFirst("^\\[auto-report\\] ", "");
+            String text = repeat ? commentBody(r, p, count) : issueBody(r, fp, p, count, null);
+            try {
+                email(subject, text + (url.isEmpty() ? "" : "\nGitHub issue: " + url));
+                if (failed != null) partial = "Emailed, but GitHub failed: " + failed.getMessage();
+                failed = null; // it got through
+            } catch (Exception e) {
+                if (gh == null || failed != null) throw e instanceof IOException io ? io : new IOException("email failed: " + e.getMessage(), e);
+                partial = "Reported on GitHub, but the email failed: " + e.getMessage();
+            }
+        }
+        if (failed != null) throw failed;
+        lastError = partial;
+        put(SEEN_KEY + fp, "1");
+        return url;
+    }
+
+    private void email(String subject, String markdown) throws Exception {
+        gmail.sendPlain(emailTo().orElseThrow(), clip(subject, 150), cap(plain(markdown)));
+    }
+
+    /** The issue markdown, made readable as a plain-text email. */
+    static String plain(String markdown) {
+        return markdown.replaceAll("<!--.*?-->\\n?", "")
+                .replaceAll("<details><summary>(.*?)</summary>\\n*", "--- $1 ---\n")
+                .replace("</details>", "")
+                .replaceAll("(?m)^```\\n?", "")
+                .replace("**", "")
+                .replaceAll("(?m)^_(.*)_$", "$1");
     }
 
     /** "Report a problem": her own words plus recent log lines, sent right away. */
     public Sent reportProblem(String note) {
         if (!isConfigured()) {
-            throw new IllegalStateException("Problem reports aren't set up on this computer yet. Use Save log file instead and send it by email.");
+            throw new IllegalStateException("Problem reports aren't set up on this computer yet. Use Save log file instead and send the file by email.");
         }
         if (!takeQuota(Quota.USER)) throw new IllegalStateException("That's a lot of reports today. Please try again tomorrow.");
         Redactor r = redactor();
@@ -213,17 +266,34 @@ public class ErrorReporter {
             }
         }
         b.append(details("Last " + LogCapture.KEEP_LINES + " log lines", r, capture.recentLines())).append(footer());
-        try {
-            GitHubIssues.Issue i = client().create(cap(title), cap(b.toString()), List.of("user-report"));
-            lastSentAt = Instant.now();
-            return new Sent(i.number(), i.url());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Sending was interrupted");
-        } catch (IOException e) {
-            throw new IllegalStateException("Couldn't send the report: " + e.getMessage()
+        String url = null;
+        String failure = null;
+        if (githubReady()) {
+            try {
+                url = client().create(cap(title), cap(b.toString()), List.of("user-report")).url();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Sending was interrupted");
+            } catch (IOException e) {
+                failure = e.getMessage();
+            }
+        }
+        boolean emailed = false;
+        if (emailReady()) {
+            try {
+                email("Creator CRM problem report: " + title.replaceFirst("^\\[user-report\\] ", ""),
+                        b + (url == null ? "" : "\nGitHub issue: " + url));
+                emailed = true;
+            } catch (Exception e) {
+                failure = e.getMessage();
+            }
+        }
+        if (url == null && !emailed) {
+            throw new IllegalStateException("Couldn't send the report: " + failure
                     + ". Check the internet connection, or use Save log file instead.");
         }
+        lastSentAt = Instant.now();
+        return new Sent(url, emailed);
     }
 
     // ---------------------------------------------------------------- settings page
@@ -232,7 +302,8 @@ public class ErrorReporter {
         synchronized (pending) {
             List<Recent> list = new ArrayList<>(recent.values());
             java.util.Collections.reverse(list);
-            return new Status(isConfigured(), autoReport(), repo, pending.size(), lastSentAt, lastError, list);
+            return new Status(isConfigured(), autoReport(), repo, githubReady(), emailTo().orElse(null), gmail.isConnected(),
+                    pending.size(), lastSentAt, lastError, list);
         }
     }
 
@@ -242,6 +313,23 @@ public class ErrorReporter {
 
     public void setAutoReport(boolean on) {
         put(AUTO_KEY, Boolean.toString(on));
+    }
+
+    public Optional<String> emailTo() {
+        return state.findById(EMAIL_KEY).map(s -> s.stateValue).filter(v -> !v.isBlank());
+    }
+
+    /** Where to email reports (sent from the connected Gmail account). Blank turns email reports off. */
+    public void setEmailTo(String address) {
+        String a = address == null ? "" : address.strip();
+        if (a.isEmpty()) {
+            state.deleteById(EMAIL_KEY);
+            return;
+        }
+        if (a.length() > 254 || !a.matches("[^@\\s,;<>]+@[^@\\s,;<>]+\\.[^@\\s,;<>]+")) {
+            throw new IllegalArgumentException("That doesn't look like an email address");
+        }
+        put(EMAIL_KEY, a);
     }
 
     /** The end of the log file with personal data removed, for sending by hand. */
@@ -269,7 +357,15 @@ public class ErrorReporter {
     // ---------------------------------------------------------------- helpers
 
     boolean isConfigured() {
+        return githubReady() || emailReady();
+    }
+
+    boolean githubReady() {
         return repo != null && repo.contains("/") && secrets.has(SecretName.ERROR_REPORT_TOKEN);
+    }
+
+    boolean emailReady() {
+        return emailTo().isPresent() && gmail.isConnected();
     }
 
     GitHubIssues client() {

@@ -266,6 +266,15 @@ public class GmailConnector implements ChannelConnector {
         return new SentMessage(sent.getId(), sent.getThreadId());
     }
 
+    /** A new plain-text email from the connected account (used for error reports), outside any CRM thread. */
+    public void sendPlain(String to, String subject, String body) throws Exception {
+        Draft d = new Draft();
+        d.toAddress = to;
+        d.subject = subject;
+        d.body = body;
+        gmail().users().messages().send("me", new Message().setRaw(MailText.rawMessage(d))).execute();
+    }
+
     /** Minimal "Name &lt;email&gt;" parser. */
     record Address(String name, String email) {
         static Address parse(String raw) {
