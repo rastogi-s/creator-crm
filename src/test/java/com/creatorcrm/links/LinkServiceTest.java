@@ -60,4 +60,18 @@ class LinkServiceTest {
         links.add("TikTok", "tiktok.com/@maya");
         assertThat(links.profileSection()).contains("# My links").contains("- TikTok: https://tiktok.com/@maya");
     }
+
+    @Test
+    void addsManyAtOnceSkippingOnesAlreadySaved() {
+        links.add("", "https://www.instagram.com/maya");
+        LinkService.Added r = links.addAll(java.util.List.of(
+                java.util.Map.entry("", "instagram.com/maya/"),
+                java.util.Map.entry("Shop", "https://shop.example/MAYA10"),
+                java.util.Map.entry("Shop again", "http://SHOP.example/MAYA10")));
+        assertThat(r.added()).isEqualTo(1);
+        assertThat(r.skipped()).isEqualTo(2);
+        assertThat(links.list()).extracting(l -> l.label).containsExactly("Instagram", "Shop");
+        assertThatThrownBy(() -> links.addAll(java.util.List.of(java.util.Map.entry("x", "javascript:alert(1)"))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

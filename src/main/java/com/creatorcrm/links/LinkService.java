@@ -50,6 +50,33 @@ public class LinkService {
         return links.save(l);
     }
 
+    public record Added(int added, int skipped) {}
+
+    /**
+     * Add many links at once (Linktree import, pasted list), in order. Links already saved are skipped,
+     * as is anything past the {@link #MAX_LINKS} limit; bad addresses fail the whole batch before anything is saved.
+     */
+    @Transactional
+    public Added addAll(List<Map.Entry<String, String>> labelAndUrl) {
+        List<CreatorLink> all = list();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (CreatorLink l : all) seen.add(sameLinkKey(l.url));
+        List<CreatorLink> fresh = new ArrayList<>();
+        int skipped = 0;
+        int order = all.stream().mapToInt(x -> x.sortOrder).max().orElse(0);
+        for (Map.Entry<String, String> in : labelAndUrl) {
+            CreatorLink l = new CreatorLink();
+            l.url = normalizeUrl(in.getValue());
+            l.label = labelOrDefault(in.getKey(), l.url);
+            if (!seen.add(sameLinkKey(l.url)) || all.size() + fresh.size() >= MAX_LINKS) { skipped++; continue; }
+            l.sortOrder = ++order;
+            l.createdAt = OffsetDateTime.now();
+            fresh.add(l);
+        }
+        links.saveAll(fresh);
+        return new Added(fresh.size(), skipped);
+    }
+
     @Transactional
     public CreatorLink update(Long id, String label, String url) {
         CreatorLink l = links.findById(id).orElseThrow();
@@ -84,6 +111,15 @@ public class LinkService {
         StringBuilder sb = new StringBuilder("# My links (use these exact URLs when a link is needed)\n");
         for (CreatorLink l : all) sb.append("- ").append(l.label).append(": ").append(l.url).append('\n');
         return sb.toString();
+    }
+
+    /** Two URLs count as the same link when they differ only by scheme, "www.", host case or a trailing slash. */
+    static String sameLinkKey(String url) {
+        String v = url.strip().replaceFirst("(?i)^https?://", "").replaceFirst("(?i)^www\\.", "");
+        int slash = v.indexOf('/');
+        String host = slash < 0 ? v : v.substring(0, slash);
+        String rest = slash < 0 ? "" : v.substring(slash);
+        return host.toLowerCase(Locale.ROOT) + rest.replaceFirst("/+$", "");
     }
 
     private static int indexOf(List<CreatorLink> all, Long id) {
