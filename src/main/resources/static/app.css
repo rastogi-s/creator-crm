@@ -170,6 +170,18 @@ button:disabled { opacity: .55; cursor: default; }
 .alert.info { background: var(--surface-2); color: var(--muted); }
 /* Its own row under the bar, so it never squeezes the tabs. */
 .topbar { flex-wrap: wrap; row-gap: .4rem; }
+.update-banner {
+  order: 9; flex: 0 0 100%; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  background: var(--accent-soft); color: var(--text); border-radius: 8px; padding: .45rem .75rem; font-size: .9rem;
+}
+.update-banner.error { background: var(--danger-soft); color: var(--danger); }
+a.btn { display: inline-block; text-decoration: none; }
+a.btn.small { padding: .25rem .55rem; font-size: .82rem; }
+a.btn:hover { background: var(--surface-2); }
+label.check { font-weight: 400; gap: .4rem; }
+label.check input { width: auto; }
+.feature .video { margin: .5rem 0 .75rem; }
+.feature video { width: 100%; max-width: 760px; border-radius: 8px; border: 1px solid var(--border); background: #000; display: block; }
 .status-row { order: 10; flex: 0 0 100%; display: flex; justify-content: flex-end; min-width: 0; }
 .sync-status {
   font-size: .8rem; color: var(--muted); background: var(--surface-2); padding: .2rem .6rem;

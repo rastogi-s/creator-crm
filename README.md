@@ -51,6 +51,12 @@ The app keeps running in the background with an icon in the system tray / menu b
 **Quit**. Opening it again just brings the dashboard back. Your data lives in `~/.creator-crm` (Windows:
 `C:\Users\<you>\.creator-crm`), and new versions install over old ones without touching it.
 
+**Updates.** From version 1.1.0 the app checks for new releases every few hours. When one is out, a banner offers
+**Update now**: on Windows that one click backs up your data (to `~/.creator-crm/backups`), installs the new version
+and reopens the app; on macOS and Linux it links to the download. After an update, **What's New** shows what changed,
+with a short video per feature, and **Help** keeps all the videos. Turn automatic checks off under Settings → Updates
+(or set `CRM_UPDATES_ENABLED=false`).
+
 **"Unknown publisher" warnings.** The installers aren't code-signed yet, so your computer may warn you once:
 - **Windows SmartScreen:** click **More info → Run anyway**.
 - **macOS:** if it says the app "can't be opened", go to **System Settings → Privacy & Security** and click
@@ -73,7 +79,7 @@ Needs JDK 21+.
 
 ```bash
 ./mvnw package                       # Windows: mvnw.cmd package
-java -jar target/creator-manager-1.0.0.jar
+java -jar target/creator-manager-1.1.0.jar
 ```
 
 Open <http://localhost:8080> and enter the one-time setup code printed in the console.
@@ -200,6 +206,15 @@ Tests cover the full deal lifecycle using a scripted fake model (inbound rates r
 → contract → content deadline → decline), the five-follow-up path ending in Cold, duplicate pitches, the
 pre-filter, encryption, header-injection safety, and the security rules (setup code, login, CSRF, MCP key,
 webhook signatures).
+
+**Releasing:** push a tag (`git tag v1.2.0 && git push origin v1.2.0`). The Release workflow builds the installers,
+records the walkthrough videos and publishes the release; installed apps offer it within a few hours. A tag like
+`v1.2.0-beta.1` becomes a pre-release that installed apps ignore, for trying a build first. Describe each version's
+features in `src/main/resources/whats-new.json` (it becomes the in-app What's New and the release notes) and add a
+video scenario for each one: see [walkthroughs/README.md](walkthroughs/README.md).
+
+**Demo mode** (`--spring.profiles.active=demo`, with `CRM_DATA_DIR` pointing at an empty temp folder) starts the
+app with made-up deals, a fake Claude and the login `demo` / `demo-password-123`.
 
 Adding a channel (Outlook, TikTok, …) means implementing `ChannelConnector` as a Spring bean. Adding an AI
 provider means implementing `LlmClient`.

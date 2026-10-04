@@ -1,0 +1,12 @@
+# Demo mode: made-up deals, a fixed login (demo / demo-password-123) and no real Claude, Gmail or Instagram.
+# Used to record the walkthrough videos. Run with a throwaway data folder:
+#   CRM_DATA_DIR=$(mktemp -d) java -jar target/creator-manager-*.jar --spring.profiles.active=demo
+crm:
+  data-dir: ${CRM_DATA_DIR:${java.io.tmpdir}/creator-crm-demo}
+  schedule:
+    sync-cron: "-"
+    morning-check-cron: "-"
+  updates:
+    check-cron: "-"
+    local-video-dir: ${CRM_DEMO_VIDEOS:}   # the recorder points this at its output, so later videos can show earlier ones
+    simulate-latest: ${CRM_DEMO_LATEST:next}   # "next" = one minor version above this build

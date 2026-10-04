@@ -13,7 +13,7 @@
 
     <groupId>com.creatorcrm</groupId>
     <artifactId>creator-manager</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <name>creator-manager</name>
     <description>Brand collaboration CRM for content creators: Gmail + Claude + follow-up engine + MCP</description>
 
@@ -109,6 +109,12 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!-- Lets the app know its own version (the in-app updater compares it with the latest release). -->
+                        <goals><goal>build-info</goal></goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

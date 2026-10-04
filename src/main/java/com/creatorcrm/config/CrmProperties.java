@@ -16,7 +16,8 @@ public record CrmProperties(
         Gmail gmail,
         Instagram instagram,
         Mcp mcp,
-        Schedule schedule) {
+        Schedule schedule,
+        Updates updates) {
 
     public record Defaults(String creatorName, List<Integer> followupCadenceDays, String classifierModel,
                            String classifierEffort, String writerModel, String writerEffort, String timezone) {}
@@ -30,4 +31,13 @@ public record CrmProperties(
     public record Mcp(boolean allowSend) {}
 
     public record Schedule(String syncCron, String morningCheckCron) {}
+
+    /**
+     * In-app updates: the app reads the latest GitHub release of {@code repo} and can install it (Windows).
+     *
+     * @param simulateLatest demo/screen recordings only: pretend this version ("next" = one minor up) is the latest, without the network
+     * @param localVideoDir  demo/screen recordings only: serve walkthrough videos from this folder instead of the release
+     */
+    public record Updates(boolean enabled, String repo, String apiBaseUrl, String downloadBaseUrl, String checkCron,
+                          String simulateLatest, String localVideoDir) {}
 }

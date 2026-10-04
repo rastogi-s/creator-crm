@@ -18,9 +18,11 @@
     <button class="tab" data-tab="drafts">Drafts <span id="drafts-count" class="badge accent hidden"></span></button>
     <button class="tab" data-tab="summary">Day summary</button>
     <button class="tab" data-tab="settings">Settings</button>
+    <button class="tab" data-tab="help">Help</button>
   </nav>
   <button id="sync-btn" class="small" title="Fetch new emails and DMs now">Sync now</button>
   <button id="logout-btn" class="small">Sign out</button>
+  <div id="update-banner" class="update-banner hidden" role="status" aria-live="polite"></div>
   <div id="sync-status-row" class="status-row hidden"><span id="sync-status" class="sync-status" role="status" aria-live="polite"></span></div>
 </header>
 
@@ -32,6 +34,8 @@
   <section id="view-drafts" class="view hidden"></section>
   <section id="view-summary" class="view hidden"></section>
   <section id="view-settings" class="view hidden"></section>
+  <section id="view-help" class="view hidden"></section>
+  <section id="view-whatsnew" class="view hidden"></section>
 </main>
 
 <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
