@@ -1,5 +1,31 @@
 [
   {
+    "version": "1.20.0",
+    "title": "A friendlier Day summary",
+    "features": [
+      {
+        "id": "day-summary",
+        "title": "Your day at a glance",
+        "body": "Day summary has a fresh look. At the top you see how many things you got done, what's still to do, new deals and what's lined up for tomorrow; press any of them to jump there. Each thing you did today shows the brand and the time. Things still waiting have Done and Open buttons right there, and if drafts are ready to send there's a button to review them.",
+        "video": "day-summary.webm",
+        "tryIt": "#summary"
+      }
+    ]
+  },
+  {
+    "version": "1.18.0",
+    "title": "Ask Claude to change a draft",
+    "features": [
+      {
+        "id": "ask-claude",
+        "title": "Ask Claude to change a draft",
+        "body": "Under every draft there's now an Ask Claude to change it box. Press Warmer, Shorter, More formal or Add my rates, or type what you want, like 'mention I'm free in March'. Claude rewrites the draft in your voice and keeps the facts and numbers. Nothing is sent: it waits for you to read it and press Send. Undo puts back the version from before. Each change costs about 3 cents of Claude credit.",
+        "video": "ask-claude.webm",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.17.0",
     "title": "Rate advisor",
     "features": [

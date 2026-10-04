@@ -1240,6 +1240,59 @@
 
   const draftsFilter = loadPrefs("drafts", { q: "", type: "all", order: "oldest" });
 
+  /**
+   * "Ask Claude to change this" under a draft: quick buttons or a typed request. Claude rewrites the text on screen
+   * and saves it; nothing is sent. Undo steps back through the earlier versions.
+   */
+  const quickChanges = [
+    ["Warmer", "Make it warmer and friendlier."],
+    ["Shorter", "Make it shorter. Keep the key points."],
+    ["More formal", "Make it more formal and professional."],
+    ["Add my rates", "Add my rates from my profile where they fit this message. If my profile has none for this, use placeholders."],
+  ];
+  function askClaude(d, subject, body) {
+    const history = [];
+    const ask = el("input", { class: "grow", placeholder: "Or say what to change, e.g. 'mention I'm free in March'", maxlength: "1000",
+      "aria-label": "What should Claude change?" });
+    const status = el("span", { class: "small muted" });
+    const undo = el("button", { class: "small hidden", title: "Put back the version before Claude's change", onclick: action(async () => {
+      const prev = history.pop();
+      if (!prev) return;
+      subject.value = prev.subject; body.value = prev.body;
+      undo.classList.toggle("hidden", !history.length);
+      await api("PUT", "/api/drafts/" + d.id, prev);
+    }, "Change undone") }, "Undo");
+    const buttons = [];
+    const run = async (request) => {
+      if (!request.trim()) { ask.focus(); return; }
+      buttons.forEach((b) => { b.disabled = true; });
+      status.textContent = "Claude is rewriting it…";
+      const before = { subject: subject.value, body: body.value };
+      try {
+        const r = await api("POST", "/api/drafts/" + d.id + "/revise", { subject: before.subject, body: before.body, request });
+        history.push(before);
+        subject.value = r.subject || ""; body.value = r.body;
+        undo.classList.remove("hidden");
+        ask.value = "";
+        status.textContent = "Changed. Read it over before you send.";
+      } catch (err) {
+        status.textContent = "";
+        toast(err.message, true);
+      } finally {
+        buttons.forEach((b) => { b.disabled = false; });
+      }
+    };
+    for (const [label, request] of quickChanges) buttons.push(el("button", { class: "small", onclick: () => run(request) }, label));
+    const go = el("button", { class: "small", onclick: () => run(ask.value) }, "Change");
+    buttons.push(go, ask);
+    ask.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(ask.value); } });
+    return el("div", { class: "ask-claude" },
+      el("div", { class: "small muted" }, "Ask Claude to change it"),
+      el("div", { class: "row" }, buttons.slice(0, quickChanges.length), undo),
+      el("div", { class: "row" }, ask, go),
+      status);
+  }
+
   async function renderDrafts(root) {
     const list = await api("GET", "/api/drafts");
     clear(root);
@@ -1294,6 +1347,7 @@
         d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
         el("label", {}, "Message"), body,
+        askClaude(d, subject, body),
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
         el("div", { class: "row" },
           blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
@@ -1330,18 +1384,99 @@
 
   // ---------- Day summary ----------
 
+  const DONE_ICONS = { TASK: "✔️", SENT: "📤", REPLY: "💬", MONEY: "💸", PITCH: "📣" };
+  const COMP_BADGES = { PAID: ["Paid", "badge ok"], GIFTED: ["Gifted", "badge accent"], AFFILIATE: ["Affiliate", "badge medium"] };
+
   async function renderSummary(root) {
     const s = await api("GET", "/api/summary/eod");
     clear(root);
-    root.appendChild(el("h1", {}, "End of day — " + new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })));
-    const list = (items, empty) => items.length ? el("ul", {}, items.map((x) => el("li", {}, x))) : emptyLine(empty);
-    const o = s.newOpportunities;
-    root.appendChild(el("div", { class: "grid" },
-      card("✅ Completed", list(s.completed, "Nothing recorded yet today.")),
-      card("⏳ Still pending", list(s.stillPending, "All clear.")),
-      card("💰 New opportunities", el("p", {}, o.total + " new · " + o.paid + " paid · " + o.gifted + " gifted · " + o.affiliate + " affiliate"),
-        list(o.items, "")),
-      card("➡️ Tomorrow's priorities", list(s.tomorrow, "Nothing planned yet."))));
+    const n = (count, one, many) => count + " " + (count === 1 ? one : many);
+    const goTo = (id) => () => document.getElementById(id).scrollIntoView({ behavior: "smooth", block: "start" });
+    const waiting = s.pending.length + s.followUps.length;
+
+    const outlook = [];
+    if (waiting) outlook.push(n(waiting, "thing is", "things are") + " still waiting for you");
+    if (s.tomorrowItems.length) outlook.push(n(s.tomorrowItems.length, "is", "are") + " lined up for tomorrow");
+    const sub = outlook.length ? outlook.join(", and ").replace(/^./, (c) => c.toUpperCase()) + "."
+      : "Nothing is waiting on you. Enjoy your evening!";
+
+    root.appendChild(el("div", { class: "card eod-hero" },
+      el("div", { class: "eod-date" }, new Date(s.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })),
+      el("h1", {}, s.headline),
+      el("p", { class: "muted" }, sub),
+      el("div", { class: "eod-stats" },
+        eodStat("✅", s.done.length, "Done today", "ok", goTo("eod-done")),
+        eodStat("⏳", waiting, "Still to do", waiting ? "warn" : "ok", goTo("eod-waiting")),
+        eodStat("💰", s.newDeals.length, s.newDeals.length === 1 ? "New deal" : "New deals", "accent", goTo("eod-new")),
+        eodStat("🌅", s.tomorrowItems.length, "For tomorrow", "plain", goTo("eod-tomorrow"))),
+      s.draftsWaiting ? el("div", { class: "eod-nudge" },
+        el("span", {}, "✉️ " + n(s.draftsWaiting, "draft is", "drafts are") + " ready for you to read and send."),
+        el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review drafts")) : null));
+
+    const doneCard = card("✅ What you got done",
+      s.done.length ? showMore(s.done, 6, (items) => el("ul", { class: "list eod-done" }, items.map((d) => el("li", { class: "item" },
+        el("span", { class: "eod-icon", "aria-hidden": "true" }, DONE_ICONS[d.kind] || "✔️"),
+        el("div", { class: "body" },
+          el("div", { class: "title" }, d.text),
+          el("div", { class: "detail" }, d.brand && !d.text.includes(d.brand) ? d.brand + " · " : "",
+            new Date(d.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }))),
+        d.opportunityId ? el("div", { class: "actions" }, el("button", { class: "small", onclick: () => openDeal(d.opportunityId) }, "Open")) : null))))
+        : emptyLine("Nothing ticked off yet. When you finish a task, send a message or a brand writes back, it shows up here."));
+    doneCard.id = "eod-done";
+
+    const tomorrowCard = card("🌅 Lined up for tomorrow",
+      s.tomorrowItems.length ? itemList(s.tomorrowItems, "", false)
+        : emptyLine("Nothing is due tomorrow yet." + (waiting ? " A good start is whatever is still waiting below." : "")));
+    tomorrowCard.id = "eod-tomorrow";
+    root.appendChild(el("div", { class: "eod-grid" }, doneCard, tomorrowCard));
+
+    const waitingCard = card("⏳ Still waiting on you");
+    waitingCard.id = "eod-waiting";
+    if (!waiting) waitingCard.appendChild(emptyLine("All clear. Nothing is waiting on you. 🎉"));
+    if (s.pending.length) {
+      waitingCard.appendChild(el("p", { class: "small muted" }, "Most important first. Press Done when you've handled one."));
+      waitingCard.appendChild(showMore(s.pending, 5, (items) => itemList(items, "", false)));
+    }
+    if (s.followUps.length) {
+      waitingCard.appendChild(el("h4", { class: "eod-sub" }, "📌 Follow-ups to send"));
+      waitingCard.appendChild(showMore(s.followUps, 5, followUpList));
+    }
+    root.appendChild(waitingCard);
+
+    const newCard = card("💰 New deals today",
+      s.newDeals.length ? showMore(s.newDeals, 6, (items) => el("ul", { class: "list" }, items.map((d) => {
+        const [label, cls] = COMP_BADGES[d.compensation] || ["Not sure yet", "badge"];
+        return el("li", { class: "item" },
+          el("div", { class: "body" },
+            el("div", { class: "title" }, d.brand),
+            el("div", { class: "detail" }, el("span", { class: cls }, label), " ",
+              [d.type === label ? null : d.type, d.budget].filter(Boolean).join(" · "))),
+          el("div", { class: "actions" }, el("button", { class: "small", onclick: () => openDeal(d.opportunityId) }, "Open")));
+      })))
+        : emptyLine("No new brands reached out today."));
+    newCard.id = "eod-new";
+    root.appendChild(newCard);
+  }
+
+  function eodStat(icon, value, label, tone, onclick) {
+    return el("button", { class: "eod-stat " + tone, onclick },
+      el("span", { class: "eod-stat-icon", "aria-hidden": "true" }, icon),
+      el("span", { class: "eod-stat-v" }, String(value)),
+      el("span", { class: "eod-stat-l" }, label));
+  }
+
+  /** Render the first few items, with a button that shows the rest. */
+  function showMore(items, limit, render) {
+    const box = el("div", {});
+    const draw = (all) => {
+      clear(box);
+      box.appendChild(render(all ? items : items.slice(0, limit)));
+      if (!all && items.length > limit) {
+        box.appendChild(el("button", { class: "small eod-more", onclick: () => draw(true) }, "Show " + (items.length - limit) + " more"));
+      }
+    };
+    draw(false);
+    return box;
   }
 
   // ---------- Settings ----------
@@ -1706,7 +1841,7 @@
     const sp = await api("GET", "/api/claude-spend").catch(() => null);
     if (!sp) return el("div");
     showCreditBanner(sp);
-    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", RESEARCH: "Finding brands" };
+    const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands" };
     const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
       value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
     const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

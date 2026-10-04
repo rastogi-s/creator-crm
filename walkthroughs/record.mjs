@@ -182,6 +182,55 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "day-summary"(page) {
+    const { pause, say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await page.locator("#view-today h1").waitFor();
+    await pause(2500);
+    await page.locator("#view-today button:text-is('Done')").first().click();
+    await pause(3800); // let the toast fade before filming
+    await page.goto(BASE + "/#summary");
+    await page.locator("#view-summary .eod-hero").waitFor();
+    await say("Day summary now shows your day at a glance.", 3400);
+    await point(page.locator("#view-summary .eod-stats"));
+    await say("What you got done, what's still waiting, new deals and tomorrow. Press a number to jump there.", 4400);
+    await point(page.locator("#eod-done"));
+    await say("Everything you did today, with the brand and the time.", 3600);
+    await click(page.locator(".eod-stat", { hasText: "Still to do" }));
+    await pause(900);
+    await point(page.locator("#eod-waiting button:text-is('Done')").first());
+    await say("Things still waiting on you, most important first. Press Done when you've handled one.", 4400);
+    await click(page.locator(".eod-stat", { hasText: "For tomorrow" }));
+    await pause(900);
+    await say("And what's lined up for tomorrow, so you can close the laptop knowing where to start.", 4400);
+    await say("", 600);
+  },
+  async "ask-claude"(page) {
+    const { pause, say, point, click } = helpers(page);
+    await page.goto(BASE + "/#drafts");
+    await page.locator("#view-drafts .card h3").first().waitFor();
+    await pause(2500); // let the first refresh settle so the card isn't replaced mid-shot
+    const draft = page.locator("#view-drafts .card", { hasText: "Glowberry Skin — Reply" }).first();
+    const box = draft.locator(".ask-claude");
+    await point(box);
+    await say("Under every draft you can now ask Claude to change it.", 3400);
+    await click(box.getByRole("button", { name: "Warmer" }));
+    await box.getByText("Changed.").waitFor();
+    await point(draft.locator("textarea"));
+    await say("Claude rewrites it in your voice and keeps the facts and numbers.", 4000);
+    await point(box.getByRole("button", { name: "Undo" }));
+    await say("Not quite right? Undo puts back the version from before.", 3600);
+    await click(box.getByRole("button", { name: "Undo" }));
+    const ask = box.getByRole("textbox");
+    await click(ask);
+    await ask.pressSequentially("mention I'm free to film in March", { delay: 60 });
+    await say("Or type exactly what you want changed.", 2800);
+    await click(box.getByRole("button", { name: "Change" }));
+    await box.getByText("Changed.").waitFor();
+    await say("Nothing is sent. The draft waits here until you read it and press Send.", 4200);
+    await say("", 600);
+  },
+
   async "search"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#pipeline");

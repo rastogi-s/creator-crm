@@ -91,6 +91,9 @@ public class CrmController {
 
     public record DraftEdit(@Size(max = 1000) String subject, @Size(max = 20000) String body) {}
 
+    public record DraftRevision(@Size(max = 1000) String subject, @Size(max = 20000) String body,
+                                @NotBlank @Size(max = 1000) String request) {}
+
     private final DigestService digest;
     private final OpportunityRepo opportunities;
     private final BrandRepo brands;
@@ -264,6 +267,12 @@ public class CrmController {
     @PutMapping("/drafts/{id}")
     public Draft editDraft(@PathVariable Long id, @Valid @RequestBody DraftEdit e) {
         return draftService.edit(id, e.subject(), e.body());
+    }
+
+    /** Claude rewrites the draft as asked and saves it; it still waits for Send. */
+    @PostMapping("/drafts/{id}/revise")
+    public Draft reviseDraft(@PathVariable Long id, @Valid @RequestBody DraftRevision r) {
+        return draftService.revise(id, r.subject(), r.body(), r.request());
     }
 
     /** The only way a message leaves the app: an explicit, CSRF-protected click by the signed-in creator. */
