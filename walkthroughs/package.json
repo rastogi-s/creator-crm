@@ -1,0 +1,12 @@
+{
+  "name": "creator-crm-walkthroughs",
+  "private": true,
+  "description": "Records the feature walkthrough videos shown in the app's What's New and Help pages.",
+  "type": "module",
+  "scripts": {
+    "record": "node record.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}

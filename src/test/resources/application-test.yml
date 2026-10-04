@@ -9,3 +9,6 @@ crm:
   schedule:
     sync-cron: "-"
     morning-digest-cron: "-"
+  updates:
+    enabled: false
+    check-cron: "-"

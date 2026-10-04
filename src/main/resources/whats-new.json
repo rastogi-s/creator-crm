@@ -1,0 +1,22 @@
+[
+  {
+    "version": "1.1.0",
+    "title": "One-click updates and walkthrough videos",
+    "features": [
+      {
+        "id": "updates",
+        "title": "Updates install themselves",
+        "body": "When a new version is out, a banner at the top says what's in it. Click Update now: Creator CRM backs up your data, installs the new version and opens again by itself. Nothing installs without your click.",
+        "video": "updates.webm",
+        "tryIt": "#settings"
+      },
+      {
+        "id": "whats-new",
+        "title": "What's New and Help videos",
+        "body": "After every update this page shows what changed, with a short video for each new feature. You can rewatch all of them any time under Help.",
+        "video": "whats-new.webm",
+        "tryIt": "#help"
+      }
+    ]
+  }
+]

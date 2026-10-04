@@ -95,7 +95,8 @@
   // ---------- routing ----------
 
   const views = { today: renderToday, pipeline: renderPipeline, outreach: renderOutreach,
-                  drafts: renderDrafts, summary: renderSummary, settings: renderSettings };
+                  drafts: renderDrafts, summary: renderSummary, settings: renderSettings,
+                  help: renderHelp, whatsnew: renderWhatsNew };
   let statuses = {};
 
   function currentTab() {
@@ -427,6 +428,7 @@
 
   async function renderSettings(root) {
     const s = await api("GET", "/api/settings");
+    updateStatus = await api("GET", "/api/updates").catch(() => updateStatus);
     const c = s.credentials;
     const p = s.preferences;
     clear(root);
@@ -555,6 +557,7 @@
       keyOut,
       el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
 
+    root.appendChild(updatesCard(root));
     root.appendChild(backupCard(root));
 
     // Password
@@ -671,6 +674,164 @@
       text !== summary ? el("details", {}, el("summary", {}, "Details"), el("pre", {}, text)) : null);
   }
 
+
+  // ---------- updates, What's New, Help ----------
+  // The app checks GitHub for a new release; on the Windows app "Update now" backs up, installs and reopens.
+
+  let updateStatus = null;
+  let updateTimer = null;
+
+  function dismissedVersion() {
+    try { return localStorage.getItem("crm.updateLater"); } catch (e) { return null; }
+  }
+
+  async function refreshUpdate() {
+    try {
+      updateStatus = await api("GET", "/api/updates");
+    } catch (e) { return; }
+    showUpdateBanner();
+    if (updateStatus.installing) watchInstall();
+  }
+
+  function showUpdateBanner() {
+    const b = clear(document.getElementById("update-banner"));
+    const s = updateStatus;
+    const show = s && (s.installing || s.installState || (s.updateAvailable && dismissedVersion() !== s.latestVersion));
+    b.classList.toggle("hidden", !show);
+    b.classList.toggle("error", Boolean(s && !s.installing && /failed/i.test(s.installState || "")));
+    if (!show) return;
+    if (s.installing || !s.updateAvailable) {
+      b.appendChild(el("span", {}, s.installState || "Updating…"));
+      return;
+    }
+    b.appendChild(el("span", {}, el("strong", {}, "Version " + s.latestVersion + " is ready. "),
+      s.installState || (s.releaseName || "").replace(/^Creator CRM\s+[\d.]+\s*[:·-]?\s*/, "")));
+    b.appendChild(el("span", { class: "spacer" }));
+    b.appendChild(s.canInstall
+      ? el("button", { class: "primary small", onclick: installUpdate }, "Update now")
+      : el("a", { class: "btn small", href: s.releaseUrl, target: "_blank", rel: "noopener noreferrer" }, "Download"));
+    b.appendChild(el("button", { class: "small", onclick: () => {
+      try { localStorage.setItem("crm.updateLater", s.latestVersion); } catch (e) { /* private window */ }
+      showUpdateBanner();
+    } }, "Later"));
+  }
+
+  const installUpdate = action(async () => {
+    const s = updateStatus;
+    if (!confirm("Creator CRM will back up your data, install version " + s.latestVersion
+      + " and open again by itself. It takes about a minute, and you may need to sign in again. Continue?")) return;
+    updateStatus = await api("POST", "/api/updates/install");
+    showUpdateBanner();
+    watchInstall();
+  });
+
+  // While installing: follow progress, then wait for the new version to come up and reload into it.
+  function watchInstall() {
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/updates", { credentials: "same-origin" });
+        if (r.status === 401) { location.replace("/login.html"); return; }
+        updateStatus = await r.json();
+        showUpdateBanner();
+        if (updateStatus.installing) watchInstall();
+      } catch (e) {
+        updateStatus = Object.assign({}, updateStatus, { installState: "Installing… this page reloads by itself when Creator CRM is back." });
+        showUpdateBanner();
+        waitForRestart();
+      }
+    }, 2000);
+  }
+
+  function waitForRestart() {
+    clearTimeout(updateTimer);
+    updateTimer = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/setup/status", { cache: "no-store" });
+        if (r.ok) { location.hash = "#whatsnew"; location.reload(); return; }
+      } catch (e) { /* still installing */ }
+      waitForRestart();
+    }, 3000);
+  }
+
+  function updatesCard(root) {
+    const s = updateStatus || {};
+    const line = !s.enabled ? "Update checks are turned off for this install."
+      : s.updateAvailable ? "Version " + s.latestVersion + " is available."
+      : s.checkError ? s.checkError
+      : s.checkedAt ? "You're up to date (checked " + fmtDateTime(s.checkedAt) + ")."
+      : "Not checked yet.";
+    const auto = el("input", { type: "checkbox", checked: s.autoCheck !== false, onchange: action(async (e) => {
+      updateStatus = await api("PUT", "/api/updates/auto-check", { enabled: e.target.checked });
+    }) });
+    return card("Updates",
+      el("p", {}, "You're on version " + (s.currentVersion || "?") + ". ", el("span", { class: "muted" }, line)),
+      s.installHint ? el("p", { class: "small muted" }, s.installHint) : null,
+      el("div", { class: "row" },
+        el("button", { class: "small", disabled: !s.enabled, onclick: action(async () => {
+          updateStatus = await api("POST", "/api/updates/check");
+          showUpdateBanner();
+          renderSettings(root);
+        }) }, "Check now"),
+        s.updateAvailable && s.canInstall ? el("button", { class: "primary small", onclick: installUpdate }, "Update now") : null,
+        s.updateAvailable && !s.canInstall && s.releaseUrl
+          ? el("a", { class: "btn small", href: s.releaseUrl, target: "_blank", rel: "noopener noreferrer" }, "Download") : null,
+        el("a", { class: "btn small", href: "#whatsnew" }, "What's new")),
+      el("label", { class: "row check" }, auto, "Check for updates automatically (every few hours)"),
+      el("p", { class: "small muted" }, "Nothing is installed without your click. Before installing, a copy of your data is saved in the "
+        + "backups folder next to your data."));
+  }
+
+  function videoPlayer(version, file) {
+    const fallback = el("p", { class: "small muted hidden" }, "The video couldn't load. It plays once Creator CRM can reach the internet.");
+    const v = el("video", { controls: true, preload: "metadata", playsinline: true, src: "/api/videos/" + version + "/" + file });
+    v.addEventListener("error", () => { v.classList.add("hidden"); fallback.classList.remove("hidden"); });
+    return el("div", { class: "video" }, v, fallback);
+  }
+
+  function featureCard(entry, f) {
+    return el("div", { class: "card feature" },
+      el("h3", {}, f.title),
+      el("p", {}, f.body),
+      f.video ? videoPlayer(entry.version, f.video) : null,
+      f.tryIt ? el("p", {}, el("a", { class: "btn small", href: f.tryIt }, "Try it")) : null);
+  }
+
+  async function renderWhatsNew(root) {
+    const w = await api("GET", "/api/whats-new");
+    const entries = w.unseen.length ? w.unseen : w.all.slice(0, 1);
+    clear(root);
+    root.appendChild(el("h1", {}, "What's new in Creator CRM " + w.currentVersion.replace(/-.*$/, "")));
+    if (!entries.length) root.appendChild(emptyLine("Nothing new in this version."));
+    for (const e of entries) {
+      if (entries.length > 1 || e.title) root.appendChild(el("h2", {}, e.title || "Version " + e.version));
+      e.features.forEach((f) => root.appendChild(featureCard(e, f)));
+    }
+    root.appendChild(el("p", { class: "row" }, el("a", { class: "btn small", href: "#today" }, "Back to Today"),
+      el("a", { href: "#help" }, "All walkthrough videos")));
+    if (w.unseen.length) api("POST", "/api/whats-new/seen").catch(() => {});
+  }
+
+  async function renderHelp(root) {
+    const w = await api("GET", "/api/whats-new");
+    clear(root);
+    root.appendChild(el("h1", {}, "Help"));
+    root.appendChild(el("p", { class: "muted" }, "Short videos of every feature, newest first. Each one has a Try it button that takes you there."));
+    if (!w.all.length) root.appendChild(emptyLine("No walkthroughs yet."));
+    for (const e of w.all) {
+      root.appendChild(el("h2", {}, (e.title || "Version " + e.version) + " ", el("span", { class: "badge" }, e.version)));
+      e.features.forEach((f) => root.appendChild(featureCard(e, f)));
+    }
+  }
+
+  // After an update, open What's New once.
+  async function maybeShowWhatsNew() {
+    try {
+      const w = await api("GET", "/api/whats-new");
+      if (w.unseen.length && !location.hash.replace(/^#/, "")) location.hash = "#whatsnew";
+    } catch (e) { /* not important */ }
+  }
+
   // ---------- boot ----------
 
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => { location.hash = "#" + b.dataset.tab; }));
@@ -742,5 +903,7 @@
   window.addEventListener("hashchange", route);
   pollStatus();
 
-  api("GET", "/api/statuses").then((s) => { statuses = s; route(); });
+  refreshUpdate();
+  setInterval(refreshUpdate, 30 * 60 * 1000);
+  maybeShowWhatsNew().then(() => api("GET", "/api/statuses")).then((s) => { statuses = s; route(); });
 })();
