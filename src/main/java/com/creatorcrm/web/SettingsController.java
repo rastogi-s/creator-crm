@@ -4,6 +4,8 @@ import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.channels.gmail.GmailOAuthController;
+import com.creatorcrm.channels.instagram.FacebookConnection;
+import com.creatorcrm.channels.instagram.FacebookOAuthController;
 import com.creatorcrm.channels.instagram.InstagramConnector;
 import com.creatorcrm.channels.instagram.InstagramOAuthController;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
@@ -49,7 +51,7 @@ public class SettingsController {
     private static final Set<SecretName> USER_ENTERED = EnumSet.of(
             SecretName.ANTHROPIC_API_KEY, SecretName.GOOGLE_CLIENT_ID, SecretName.GOOGLE_CLIENT_SECRET,
             SecretName.INSTAGRAM_APP_ID, SecretName.INSTAGRAM_APP_SECRET, SecretName.INSTAGRAM_ACCESS_TOKEN,
-            SecretName.ERROR_REPORT_TOKEN);
+            SecretName.FACEBOOK_APP_ID, SecretName.FACEBOOK_APP_SECRET, SecretName.ERROR_REPORT_TOKEN);
 
     public record PasswordChange(@NotBlank String currentPassword, @NotBlank @Size(max = 200) String newPassword) {}
 
@@ -68,6 +70,8 @@ public class SettingsController {
     private final CrmProperties props;
     private final com.creatorcrm.security.SessionEpoch sessions;
     private final InstagramStatsService instagramStats;
+    private final FacebookOAuthController facebookOAuth;
+    private final FacebookConnection facebook;
 
     public SettingsController(SettingsService settings, SecretStore secrets, CryptoService crypto,
                               List<ChannelConnector> connectors, InstagramConnector instagram,
@@ -75,7 +79,10 @@ public class SettingsController {
                               IngestionService ingestion, MessageRepo messages, AppUserRepo users,
                               PasswordEncoder encoder, CrmProperties props,
                               com.creatorcrm.security.SessionEpoch sessions, LlmClient llm,
-                              InstagramStatsService instagramStats) {
+                              InstagramStatsService instagramStats, FacebookOAuthController facebookOAuth,
+                              FacebookConnection facebook) {
+        this.facebookOAuth = facebookOAuth;
+        this.facebook = facebook;
         this.sessions = sessions;
         this.instagramStats = instagramStats;
         this.llm = llm;
@@ -112,6 +119,8 @@ public class SettingsController {
         out.put("instagramTokenExpiresAt", secrets.get(SecretName.INSTAGRAM_TOKEN_EXPIRES_AT).orElse(null));
         out.put("googleRedirectUri", gmailOAuth.redirectUri());
         out.put("instagramRedirectUri", instagramOAuth.redirectUri());
+        out.put("facebookRedirectUri", facebookOAuth.redirectUri());
+        out.put("facebook", Map.of("connected", facebook.isConnected(), "page", facebook.pageName()));
         out.put("instagramWebhookUrl", props.publicBaseUrl().replaceAll("/+$", "") + "/webhooks/instagram");
         out.put("mcpUrl", props.publicBaseUrl().replaceAll("/+$", "") + "/mcp");
         out.put("mcpAllowSend", props.mcp().allowSend());

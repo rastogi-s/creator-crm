@@ -27,7 +27,8 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Controller
 public class InstagramOAuthController {
     private static final Logger log = LoggerFactory.getLogger(InstagramOAuthController.class);
-    static final String SCOPES = "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_insights";
+    static final String SCOPES = "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_insights,"
+            + "instagram_business_manage_comments";
 
     private final SecretStore secrets;
     private final OAuthState oauthState;

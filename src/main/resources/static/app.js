@@ -187,10 +187,15 @@
       "instagram=connected": "Instagram connected.", "instagram=denied": "Instagram access was not granted.",
       "instagram=failed": "Instagram connection failed. Check the app ID/secret and redirect URI.",
       "instagram=state-mismatch": "Instagram connection expired. Please try again.",
+      "facebook=connected": "Facebook connected. You can now look up brands on Instagram.",
+      "facebook=denied": "Facebook access was not granted.",
+      "facebook=failed": "Facebook connection failed. Check the app ID/secret and redirect URI.",
+      "facebook=no-page": "No Facebook Page with a linked Instagram account was found. Link your Instagram to a Facebook Page and try again.",
+      "facebook=state-mismatch": "Facebook connection expired. Please try again.",
     };
     for (const [k, v] of q.entries()) {
       const msg = notes[k + "=" + v];
-      if (msg) toast(msg, /failed|denied|no-refresh|mismatch/.test(v));
+      if (msg) toast(msg, /failed|denied|no-refresh|mismatch|no-page/.test(v));
     }
     try {
       await views[tab](document.getElementById("view-" + tab));
@@ -787,11 +792,13 @@
   const outreachFilter = loadPrefs("outreach", { q: "", response: "all", status: "", hideClosed: false, sort: { by: "pitchedAt", dir: "desc" } });
 
   async function renderOutreach(root) {
-    const [rows, leads] = await Promise.all([api("GET", "/api/pitches"), api("GET", "/api/leads")]);
+    const [rows, leads, ig] = await Promise.all([api("GET", "/api/pitches"), api("GET", "/api/leads"),
+      api("GET", "/api/leads/instagram").catch(() => null)]);
     clear(root);
     root.appendChild(el("h1", {}, "Outreach"));
     root.appendChild(el("p", { class: "muted" }, "Every brand you've pitched, with automatic follow-up dates. Pitches you send from Gmail are detected automatically; log the rest here."));
-    root.appendChild(findBrandsCard(root, leads));
+    if (ig && ig.instagramConnected) root.appendChild(engagingBrandsCard(root, ig));
+    root.appendChild(findBrandsCard(root, leads, ig));
 
     const f = {
       brand: el("input", { required: true, maxlength: "200" }), contactName: el("input", { maxlength: "200" }),
@@ -873,7 +880,43 @@
     draw();
   }
 
-  function findBrandsCard(root, leads) {
+  const compactNum = (n) => Number(n).toLocaleString(undefined, { notation: "compact", maximumFractionDigits: 1 });
+
+  // Accounts that tagged, mentioned or commented on her: the warmest brands to pitch.
+  function engagingBrandsCard(root, ig) {
+    const kinds = { TAG: "tagged you", MENTION: "mentioned you", COMMENT: "commented" };
+    const check = action(async () => {
+      const r = await api("POST", "/api/leads/instagram/check");
+      toast(r.accounts.length ? "Checked your recent posts" : "Checked your recent posts; no brands yet");
+      renderOutreach(root);
+    });
+    const row = (a) => el("div", { class: "item" },
+      el("div", { class: "body" },
+        el("div", { class: "row" },
+          el("a", { href: "https://www.instagram.com/" + encodeURIComponent(a.username) + "/", target: "_blank", rel: "noopener noreferrer" }, el("strong", {}, "@" + a.username)),
+          a.mentions ? el("span", { class: "badge" }, "Tagged or mentioned you" + (a.mentions > 1 ? " ×" + a.mentions : "")) : null,
+          a.comments ? el("span", { class: "badge" }, a.comments + " comment" + (a.comments === 1 ? "" : "s")) : null,
+          a.isBusiness ? el("span", { class: "badge" }, "Business account" + (a.followers != null ? " · " + compactNum(a.followers) + " followers" : "")) : null),
+        a.lastText ? el("div", { class: "detail" }, "Latest (" + kinds[a.lastKind] + ", " + fmtDate(a.lastSeenAt) + "): “" + a.lastText + "”") : null,
+        a.lastPermalink && /^https:\/\/(www\.)?instagram\.com\//.test(a.lastPermalink)
+          ? el("a", { href: a.lastPermalink, target: "_blank", rel: "noopener noreferrer", class: "small" }, "Open post") : null),
+      el("div", { class: "actions" },
+        el("button", { class: "small primary", onclick: action(async () => {
+          await api("POST", "/api/leads/instagram/" + a.id + "/lead"); renderOutreach(root);
+        }, "Added to your brand leads below") }, "Add as lead"),
+        el("button", { class: "small", onclick: action(async () => {
+          await api("POST", "/api/leads/instagram/" + a.id + "/dismiss"); renderOutreach(root);
+        }) }, "Not a brand")));
+    return card("Brands engaging with you on Instagram",
+      el("p", { class: "small muted" }, "Accounts that tagged you in a post, @mentioned you or commented on your recent posts. Brands that already know you are the easiest to pitch. "
+        + (ig.facebookConnected ? "Personal accounts (fans) are hidden automatically." : "Connect Facebook on the Settings page to hide fans automatically and see posts you're tagged in.")
+        + " Checked with every sync."),
+      ig.error ? el("div", { class: "alert error small" }, ig.error) : null,
+      ig.accounts.length ? el("div", {}, ig.accounts.map(row)) : emptyLine("No brands have tagged, mentioned or commented on you yet."),
+      el("div", { class: "row" }, el("button", { class: "small", onclick: check }, "Check now")));
+  }
+
+  function findBrandsCard(root, leads, ig) {
     const query = el("input", { placeholder: "e.g. clean skincare brands like Glossier that work with UGC creators", maxlength: "300" });
     const count = el("select", { class: "inline" }, [3, 5, 10].map((n) => el("option", { value: n }, n + " brands")));
     count.value = "5";
@@ -905,15 +948,30 @@
       } finally { status.textContent = ""; }
     });
     query.addEventListener("keydown", (e) => { if (e.key === "Enter") search(e); });
+    // Look up a brand's Instagram account by handle (needs the Facebook connection).
+    const handle = el("input", { placeholder: "@brandhandle", maxlength: "100", "aria-label": "Brand's Instagram handle" });
+    const lookup = action(async () => {
+      const h = handle.value.trim().replace(/^@/, "");
+      if (!h) throw new Error("Type the brand's Instagram handle");
+      const l = await api("POST", "/api/leads/lookup", { handle: h });
+      toast(l.name + " added to your brand leads");
+      renderOutreach(root);
+    });
+    handle.addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(e); });
+    const lookupRow = ig && ig.facebookConnected
+      ? el("div", { class: "row" }, el("span", { class: "small muted" }, "Know a brand already?"), el("div", { class: "spacer" }, handle),
+        el("button", { class: "small", onclick: lookup }, "Look up on Instagram"))
+      : el("p", { class: "small muted" }, "Tip: connect Facebook on the Settings page to look up any brand's Instagram (followers, bio, creators they work with) and add it here.");
     return card("Find brands to pitch",
       el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
       el("div", { class: "row" }, el("div", { class: "spacer" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
       el("div", { class: "row" }, el("span", { class: "small muted" }, "Search depth:"), depth),
       status,
-      leads.length ? el("div", {}, leads.map((l) => leadItem(root, l))) : null);
+      lookupRow,
+      leads.length ? el("div", {}, leads.map((l) => leadItem(root, l, ig && ig.facebookConnected))) : null);
   }
 
-  function leadItem(root, l) {
+  function leadItem(root, l, canLookUp) {
     const safeUrl = (u) => u && /^https?:\/\//i.test(u) ? u : null;
     const email = el("input", { type: "email", placeholder: "Contact email", value: l.contactEmail || "", maxlength: "320" });
     const ig = el("input", { placeholder: "Instagram handle", value: l.instagram || "", maxlength: "100" });
@@ -929,8 +987,12 @@
       el("div", { class: "body" },
         el("div", { class: "row" }, el("strong", {}, l.name),
           safeUrl(l.website) ? el("a", { href: l.website, target: "_blank", rel: "noopener noreferrer", class: "small" }, l.website.replace(/^https?:\/\//, "")) : null,
-          l.instagram ? el("span", { class: "badge" }, "@" + l.instagram) : null),
+          l.instagram ? el("span", { class: "badge" }, "@" + l.instagram) : null,
+          l.source === "INSTAGRAM" ? el("span", { class: "badge" }, "Engaged with you") : null,
+          l.source === "LOOKUP" ? el("span", { class: "badge" }, "Looked up") : null),
         l.fitReason ? el("div", { class: "detail" }, l.fitReason) : null,
+        l.igCheckedAt ? el("div", { class: "detail" }, "📸 " + [l.igFollowers != null ? compactNum(l.igFollowers) + " followers" : null,
+          l.igBio, l.igPartners ? "Works with " + l.igPartners.split(",").map((h) => "@" + h).join(", ") : null].filter(Boolean).join(" · ")) : null,
         l.pitchAngle ? el("div", { class: "detail" }, "💡 " + l.pitchAngle) : null,
         el("div", { class: "small" }, contact),
         contactEdit),
@@ -940,6 +1002,9 @@
           location.hash = "#drafts"; route();
         }, "Pitch drafted. Review it in Drafts") }, "Draft pitch"),
         el("button", { class: "small", onclick: () => contactEdit.classList.toggle("hidden") }, "Edit contact"),
+        canLookUp && l.instagram ? el("button", { class: "small", onclick: action(async () => {
+          await api("POST", "/api/leads/" + l.id + "/instagram"); renderOutreach(root);
+        }, "Instagram details updated") }, l.igCheckedAt ? "Refresh Instagram" : "Check Instagram") : null,
         el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/api/leads/" + l.id + "/dismiss"); renderOutreach(root); }) }, "Dismiss")));
   }
 
@@ -1325,7 +1390,7 @@
     const webhookOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: channel.INSTAGRAM.connected ? "done" : "" },
       el("h3", {}, "Connect Instagram (optional)"),
-      el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions (add instagram_business_manage_insights to show your reach). Add yourself as a tester; App Review is only needed if other people's accounts will use your app."),
+      el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions (add instagram_business_manage_insights to show your reach, and instagram_business_manage_comments so brands commenting on your posts show up on Outreach). Add yourself as a tester; App Review is only needed if other people's accounts will use your app. Added a permission? Press Reconnect Instagram once."),
       el("p", { class: "small muted" }, "OAuth redirect URI (Meta requires https — deploy the app or use a tunnel):"),
       el("div", { class: "code" }, s.instagramRedirectUri),
       igBox,
@@ -1340,7 +1405,7 @@
       channelStatus(channel.INSTAGRAM),
       channel.INSTAGRAM.connected ? instagramStatsLine(s.instagramStats, root) : null,
       s.instagramTokenExpiresAt ? el("p", { class: "small muted" }, "Token renews automatically; current expiry " + fmtDate(s.instagramTokenExpiresAt) + ".") : null,
-      el("p", { class: "small muted" }, "Real-time DMs (optional): in the Meta dashboard set the webhook callback URL to the address below, subscribe to “messages”, and use a verify token generated here. Without webhooks, DMs are fetched on each sync."),
+      el("p", { class: "small muted" }, "Real-time DMs (optional): in the Meta dashboard set the webhook callback URL to the address below, subscribe to “messages” (and “comments” and “mentions” for brands engaging with you), and use a verify token generated here. Without webhooks, DMs and comments are fetched on each sync."),
       el("div", { class: "code" }, s.instagramWebhookUrl),
       el("div", { class: "row" }, el("button", { class: "small", onclick: action(async () => {
         const r = await api("POST", "/api/settings/instagram-webhook-token");
@@ -1348,6 +1413,23 @@
         webhookOut.classList.remove("hidden");
       }) }, c.INSTAGRAM_WEBHOOK_VERIFY_TOKEN ? "Regenerate verify token" : "Generate verify token")),
       webhookOut));
+
+    // 3b. Facebook (optional, for brand lookups)
+    const fb = s.facebook || {};
+    const fbBox = el("div", {}, secretField("FACEBOOK_APP_ID", "Meta app ID (Facebook Login)"), secretField("FACEBOOK_APP_SECRET", "Meta app secret"));
+    steps.appendChild(el("li", { class: fb.connected ? "done" : "" },
+      el("h3", {}, "Connect Facebook for brand lookups (optional)"),
+      el("p", { class: "small muted" }, "Lets Outreach look up any brand's Instagram account by handle (followers, bio, the creators it tags in sponsored posts, an email in its bio), hide fans among accounts engaging with you, and see posts you're tagged in. Your DMs and stats keep using the Instagram connection above."),
+      el("p", { class: "small muted" }, "Needs your Instagram account linked to a Facebook Page you manage (Instagram → Settings → Accounts Center), and the “Instagram API with Facebook Login” use case in your Meta app with instagram_basic, instagram_manage_comments, instagram_manage_insights, pages_show_list, pages_read_engagement and business_management. While the app is in development mode, give your Facebook account a role on it. Redirect URI:"),
+      el("div", { class: "code" }, s.facebookRedirectUri),
+      fbBox,
+      el("div", { class: "row" },
+        el("button", { class: "small", onclick: saveSecrets(fbBox) }, "Save app"),
+        c.FACEBOOK_APP_ID && c.FACEBOOK_APP_SECRET ? el("button", { class: "primary small", onclick: action(async () => {
+          const r = await api("POST", "/oauth/facebook/start"); location.href = r.url;
+        }) }, fb.connected ? "Reconnect Facebook" : "Connect Facebook") : null,
+        fb.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/facebook/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
+      fb.connected ? el("p", { class: "small" }, "✅ Connected through the Facebook Page “" + fb.page + "”.") : null));
 
     // 4. Profile
     const pf = {

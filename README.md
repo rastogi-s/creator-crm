@@ -26,6 +26,10 @@ message before anything is sent.
   connected account once a day, so rate replies and pitches quote real figures.
 - **Links page**: your Instagram, TikTok, YouTube, website and portfolio in one list you can add to any time.
   Drafts use these exact links instead of placeholders.
+- **Brands from Instagram**: Outreach lists accounts that tagged, @mentioned or commented on you (warm leads you
+  can turn into pitches). With the optional Facebook connection you can also look up any brand's Instagram by
+  handle (followers, bio, an email in the bio, creators it tags in sponsored posts), web-researched leads get
+  the same details, and fans are hidden. Official API only; nothing is scraped.
 - **Outreach database**: brands you've pitched, with follow-up #1–#5 dates, and duplicate-pitch protection.
 - **Find brands to pitch**: describe the brands you want ("clean skincare brands like Glossier that work with
   UGC creators") and Claude searches the web for ones that fit your profile, finds their published
@@ -116,14 +120,21 @@ Every credential you enter is **your own** and is stored encrypted (AES-256-GCM)
    1. At [developers.facebook.com](https://developers.facebook.com), create an app and add the **Instagram**
       product using **"API setup with Instagram login"**.
    2. Request `instagram_business_basic` and `instagram_business_manage_messages` (plus
-      `instagram_business_manage_insights` if you want your 28-day reach shown), and add your own account
+      `instagram_business_manage_insights` if you want your 28-day reach shown, and
+      `instagram_business_manage_comments` so brands commenting on your posts show up on Outreach), and add your own account
       as an Instagram tester. **App Review is not needed** while only accounts with a role on the app use it.
    3. Either paste an access token generated in the dashboard (works on localhost), or save the app ID and
       secret and click **Connect Instagram**. Meta requires an **https** redirect URI for this, so it needs a
       deployed URL or a tunnel.
    4. Optional, for real-time DMs: set the webhook callback to `<your https URL>/webhooks/instagram`,
-      generate a verify token in Settings, and subscribe to `messages`. Without webhooks, DMs are fetched on
-      every sync (every 30 minutes).
+      generate a verify token in Settings, and subscribe to `messages` (plus `comments` and `mentions`). Without
+      webhooks, DMs and comments are fetched on every sync (every 30 minutes).
+   5. Optional, for brand lookups: link your Instagram account to a Facebook Page you manage, add the
+      **"Instagram API with Facebook Login"** use case to the same Meta app with `instagram_basic`,
+      `instagram_manage_comments`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement` and
+      `business_management`, set its redirect URI to the one shown in Settings, give your Facebook account a
+      role on the app, then save the Meta app ID and secret in Settings and click **Connect Facebook**. Only
+      lookups use this connection; DMs and stats stay on the Instagram one.
 
    Meta only allows **replies within 24 hours** of the brand's last message. Outside that window (cold
    pitches, most follow-ups) the app shows **Copy** and **I sent it myself** instead of **Send**.

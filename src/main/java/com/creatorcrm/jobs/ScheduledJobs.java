@@ -13,6 +13,7 @@ import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.invoices.PaymentReminders;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.llm.LlmClient;
+import com.creatorcrm.outreach.InstagramEngagementService;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.FollowUpRepo;
@@ -43,11 +44,14 @@ public class ScheduledJobs {
     private final InstagramStatsService instagramStats;
     private final PaymentReminders paymentReminders;
     private final WinBack winBack;
+    private final InstagramEngagementService instagramEngagement;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
-                         PaymentReminders paymentReminders, WinBack winBack) {
+                         PaymentReminders paymentReminders, WinBack winBack,
+                         InstagramEngagementService instagramEngagement) {
+        this.instagramEngagement = instagramEngagement;
         this.paymentReminders = paymentReminders;
         this.winBack = winBack;
         this.ingestion = ingestion;
@@ -66,6 +70,8 @@ public class ScheduledJobs {
     public void sync() {
         if (!setup.isSetupComplete()) return;
         log.info("Sync: {}", ingestion.syncAll());
+        int engaged = instagramEngagement.poll();
+        if (engaged > 0) log.info("Instagram: {} new comments, tags or mentions", engaged);
     }
 
     /** While older email is being analyzed in a half-price batch, check for its results every few minutes. */

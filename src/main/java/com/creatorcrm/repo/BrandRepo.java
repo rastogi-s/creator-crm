@@ -8,4 +8,6 @@ public interface BrandRepo extends JpaRepository<Brand, Long> {
     Optional<Brand> findByNameKey(String nameKey);
 
     Optional<Brand> findFirstByContactEmailIgnoreCase(String email);
+
+    Optional<Brand> findFirstByInstagramIgnoreCase(String instagram);
 }
