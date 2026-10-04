@@ -56,8 +56,8 @@ class InstagramEngagementIntegrationTest {
                 {"data":[{"id":"m1","permalink":"https://www.instagram.com/p/abc/","comments_count":3},
                          {"id":"m2","permalink":"https://www.instagram.com/p/def/","comments_count":0}]}"""));
         when(api.get(anyString(), eq("/m1/comments"), any())).thenReturn(json("""
-                {"data":[{"id":"c1","username":"GlowCo","text":"Love this! DM us 💌","timestamp":"2026-10-01T10:00:00+0000"},
-                         {"id":"c2","username":"glowco","text":"So pretty","timestamp":"2026-10-02T10:00:00+0000"},
+                {"data":[{"id":"c1","username":"LumiGlowTest","text":"Love this! DM us 💌","timestamp":"2026-10-01T10:00:00+0000"},
+                         {"id":"c2","username":"lumiglowtest","text":"So pretty","timestamp":"2026-10-02T10:00:00+0000"},
                          {"id":"c3","username":"maya","text":"thank you!","timestamp":"2026-10-02T11:00:00+0000"},
                          {"id":"c4","username":"bestie22","text":"obsessed","timestamp":"2026-10-03T09:00:00+0000"}]}"""));
         when(api.get(anyString(), eq("/me/tags"), any())).thenThrow(new InstagramApi.InstagramApiException(400, "Unsupported"));
@@ -76,10 +76,10 @@ class InstagramEngagementIntegrationTest {
         secrets.put(SecretName.FACEBOOK_IG_USER_ID, "901");
         when(api.getFacebook(anyString(), eq("/901/tags"), any())).thenReturn(json("""
                 {"data":[{"id":"t1","username":"sunbloom","caption":"Our fave creator @maya","permalink":"https://www.instagram.com/p/xyz/","timestamp":"2026-10-03T12:00:00+0000"}]}"""));
-        when(api.getFacebook(anyString(), eq("/901"), argThat(q -> q != null && q.getOrDefault("fields", "").contains("username(glowco)"))))
+        when(api.getFacebook(anyString(), eq("/901"), argThat(q -> q != null && q.getOrDefault("fields", "").contains("username(lumiglowtest)"))))
                 .thenReturn(json("""
-                        {"business_discovery":{"username":"glowco","name":"Glow Co","biography":"Clean skincare. Collabs: hello@glowco.com",
-                         "website":"https://glowco.com","followers_count":52000,"media_count":300,
+                        {"business_discovery":{"username":"lumiglowtest","name":"Lumi Glow Test","biography":"Clean skincare. Collabs: hello@lumiglowtest.com",
+                         "website":"https://lumiglowtest.com","followers_count":52000,"media_count":300,
                          "media":{"data":[{"caption":"With @lena_skin #ad"},{"caption":"New drop"}]}}}"""));
         when(api.getFacebook(anyString(), eq("/901"), argThat(q -> q != null && q.getOrDefault("fields", "").contains("username(sunbloom)"))))
                 .thenReturn(json("""
@@ -93,13 +93,13 @@ class InstagramEngagementIntegrationTest {
         assertThat(engagement.poll()).isEqualTo(3);
         assertThat(engagement.poll()).isZero(); // same comments again
 
-        InstagramEngagement glow = engagements.findByUsername("glowco").orElseThrow();
+        InstagramEngagement glow = engagements.findByUsername("lumiglowtest").orElseThrow();
         assertThat(glow.comments).isEqualTo(2);
         assertThat(glow.lastText).isEqualTo("So pretty");
         assertThat(glow.lastPermalink).isEqualTo("https://www.instagram.com/p/abc/");
         assertThat(engagements.findByUsername("maya")).isEmpty();
         // Without the Facebook connection nobody can be checked, so everyone is listed.
-        assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).containsExactlyInAnyOrder("glowco", "bestie22");
+        assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).containsExactlyInAnyOrder("lumiglowtest", "bestie22");
         assertThat(engagement.lastError()).isEmpty();
     }
 
@@ -115,41 +115,41 @@ class InstagramEngagementIntegrationTest {
         connectFacebook();
         engagement.poll();
 
-        assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).containsExactly("sunbloom", "glowco");
+        assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).containsExactly("sunbloom", "lumiglowtest");
         assertThat(engagements.findByUsername("bestie22").orElseThrow().isBusiness).isFalse();
-        assertThat(engagements.findByUsername("glowco").orElseThrow().followers).isEqualTo(52000);
+        assertThat(engagements.findByUsername("lumiglowtest").orElseThrow().followers).isEqualTo(52000);
     }
 
     @Test
     void engagingAccountBecomesAnEnrichedLead() throws Exception {
         connectFacebook();
         engagement.poll();
-        Long id = engagements.findByUsername("glowco").orElseThrow().id;
+        Long id = engagements.findByUsername("lumiglowtest").orElseThrow().id;
 
         BrandLead lead = engagement.makeLead(id);
 
-        assertThat(lead.name).isEqualTo("Glow Co");
+        assertThat(lead.name).isEqualTo("Lumi Glow Test");
         assertThat(lead.source).isEqualTo(BrandLead.Source.INSTAGRAM);
-        assertThat(lead.instagram).isEqualTo("glowco");
+        assertThat(lead.instagram).isEqualTo("lumiglowtest");
         assertThat(lead.fitReason).startsWith("Commented on your posts 2 times.");
-        assertThat(lead.contactEmail).isEqualTo("hello@glowco.com");
-        assertThat(lead.contactSourceUrl).isEqualTo("https://www.instagram.com/glowco/");
-        assertThat(lead.website).isEqualTo("https://glowco.com");
+        assertThat(lead.contactEmail).isEqualTo("hello@lumiglowtest.com");
+        assertThat(lead.contactSourceUrl).isEqualTo("https://www.instagram.com/lumiglowtest/");
+        assertThat(lead.website).isEqualTo("https://lumiglowtest.com");
         assertThat(lead.igPartners).isEqualTo("lena_skin");
         assertThat(BrandDiscoveryService.pitchInstructions(lead)).contains("already engaged").contains("@lena_skin");
-        assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).doesNotContain("glowco");
+        assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).doesNotContain("lumiglowtest");
         leads.deleteById(lead.id);
     }
 
     @Test
     void lookUpABrandByHandle() throws Exception {
-        assertThatThrownBy(() -> discovery.lookupHandle("glowco")).hasMessageContaining("Connect Facebook");
+        assertThatThrownBy(() -> discovery.lookupHandle("lumiglowtest")).hasMessageContaining("Connect Facebook");
         connectFacebook();
 
-        BrandLead lead = discovery.lookupHandle("@GlowCo");
+        BrandLead lead = discovery.lookupHandle("@LumiGlowTest");
         assertThat(lead.source).isEqualTo(BrandLead.Source.LOOKUP);
         assertThat(lead.igFollowers).isEqualTo(52000);
-        assertThat(discovery.lookupHandle("glowco").id).isEqualTo(lead.id); // no duplicate lead
+        assertThat(discovery.lookupHandle("lumiglowtest").id).isEqualTo(lead.id); // no duplicate lead
         assertThatThrownBy(() -> discovery.lookupHandle("bestie22")).hasMessageContaining("isn't a business or creator account");
         leads.deleteById(lead.id);
     }
@@ -157,16 +157,16 @@ class InstagramEngagementIntegrationTest {
     @Test
     void brandsSheAlreadyWorksWithAreNotOfferedAgain() {
         Brand b = new Brand();
-        b.name = "Glow Cosmetics Ltd"; // came in by email under another name
+        b.name = "Lumi Cosmetics Ltd"; // came in by email under another name
         b.nameKey = Brand.key(b.name);
-        b.instagram = "GlowCo";
+        b.instagram = "LumiGlowTest";
         b.createdAt = OffsetDateTime.now();
         b = brands.save(b);
         try {
             engagement.poll();
             assertThat(engagement.open()).extracting(InstagramEngagementService.Row::username).containsExactly("bestie22");
-            Long id = engagements.findByUsername("glowco").orElseThrow().id;
-            assertThatThrownBy(() -> engagement.makeLead(id)).hasMessageContaining("already one of your brands (Glow Cosmetics Ltd)");
+            Long id = engagements.findByUsername("lumiglowtest").orElseThrow().id;
+            assertThatThrownBy(() -> engagement.makeLead(id)).hasMessageContaining("already one of your brands (Lumi Cosmetics Ltd)");
         } finally {
             brands.deleteById(b.id);
         }
