@@ -1,5 +1,24 @@
 [
   {
+    "version": "1.15.0",
+    "title": "Lead scores and batch decline",
+    "features": [
+      {
+        "id": "lead-scoring",
+        "title": "See which leads are worth your time",
+        "body": "Every new lead now shows High value, Medium or Low value on Today and in Pipeline. The score comes from what the brand offered: paid or gifted, the budget compared with your usual deal, whether a budget was mentioned, and whether they've paid you before. Hover over it to see why. Nothing extra is sent to Claude.",
+        "video": "lead-scoring.webm",
+        "tryIt": "#pipeline"
+      },
+      {
+        "id": "batch-decline",
+        "title": "Say no to several leads at once",
+        "body": "In Pipeline, pick Low-value leads, tick the ones that aren't a fit and press Decline selected. A short, polite no-thanks is written for each. In Drafts, read them and press Approve all declines to send them together. Each deal closes as declined.",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.14.0",
     "title": "Search and filters",
     "features": [

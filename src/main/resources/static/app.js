@@ -264,6 +264,14 @@
     return c;
   }
 
+  // Lead score from LeadScoring: High / Medium / Low, with the reasons on hover.
+  function leadBadge(level, why) {
+    if (!level) return null;
+    const cls = level === "HIGH" ? "badge ok" : level === "MEDIUM" ? "badge medium" : "badge";
+    const text = level === "HIGH" ? "High value" : level === "MEDIUM" ? "Medium" : "Low value";
+    return el("span", { class: cls + " lead", title: why || "" }, text);
+  }
+
   function stat(v, l) { return el("div", { class: "stat" }, el("div", { class: "v" }, String(v)), el("div", { class: "l" }, l)); }
 
   function statButton(v, l, title, onclick) {
@@ -279,6 +287,7 @@
         el("div", { class: "detail" },
           it.overdueDays > 0 ? el("span", { class: "badge overdue" }, "Overdue " + it.overdueDays + "d") : null, " ",
           it.priority === "HIGH" && !it.overdueDays ? el("span", { class: "badge high" }, "High") : null, " ",
+          it.lead ? leadBadge(it.lead, it.leadWhy) : null, it.lead ? " " : null,
           it.detail)),
       el("div", { class: "actions" },
         it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
@@ -310,7 +319,7 @@
 
   // ---------- Pipeline ----------
 
-  const PIPELINE_DEFAULTS = { q: "", status: "", comp: "", closed: false, sort: { by: "updatedAt", dir: "desc" } };
+  const PIPELINE_DEFAULTS = { q: "", status: "", comp: "", lead: "", closed: false, sort: { by: "updatedAt", dir: "desc" } };
   let pipelineFilter = loadPrefs("pipeline", PIPELINE_DEFAULTS);
 
   async function renderPipeline(root) {
@@ -327,13 +336,27 @@
         .map(([v, l]) => el("option", { value: v, selected: f.comp === v }, l)));
     const closedBox = el("input", { type: "checkbox", checked: f.closed,
       onchange: (e) => { f.closed = e.target.checked; save(); renderPipeline(root); } });
+    const leadSelect = el("select", { id: "lead-filter", "aria-label": "Leads", onchange: (e) => { f.lead = e.target.value; save(); draw(); } },
+      [["", "All deals"], ["LEADS", "Leads only"], ["LOW", "Low-value leads"]].map(([v, t]) => el("option", { value: v, selected: f.lead === v }, t)));
     const search = searchBox(f.q, "Search brand, contact, campaign…", (v) => { f.q = v; save(); draw(); });
     root.appendChild(el("div", { class: "row" }, el("h1", {}, "Pipeline"), el("div", { class: "spacer" }),
       el("label", { class: "check" }, closedBox, "Show closed")));
-    root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), statusSelect, compSelect));
+    root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), leadSelect, statusSelect, compSelect));
     const chips = el("div", { class: "row card" });
     const list = el("div", {});
     root.append(chips, list);
+
+    // Batch decline: tick leads, then write a polite decline draft for each. Ticks survive filtering and sorting.
+    const picked = new Set();
+    const declineBtn = el("button", { class: "small", disabled: true, onclick: action(async () => {
+      const n = picked.size;
+      if (!confirm("Write a polite decline for " + n + (n === 1 ? " lead" : " leads") + "? They'll wait in Drafts for you to read and send.")) return;
+      const r = await api("POST", "/api/opportunities/decline", { ids: [...picked] });
+      toast(r.done + (r.done === 1 ? " decline" : " declines") + " drafted" + (r.skipped.length ? ". Skipped: " + r.skipped.join("; ") : ""), r.skipped.length > 0);
+      location.hash = "#drafts";
+    }) }, "Decline selected");
+    const sync = () => { declineBtn.disabled = picked.size === 0; declineBtn.textContent = picked.size ? "Decline selected (" + picked.size + ")" : "Decline selected"; };
+    const leadRank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
 
     function draw() {
       // Status chips count every deal; clicking one filters to it, clicking again shows all.
@@ -347,21 +370,41 @@
       clear(list);
       if (!rows.length) { list.appendChild(card(null, emptyLine("No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch."))); return; }
       const shown = sortRows(rows.filter((r) => (!f.status || r.status === f.status) && (!f.comp || r.compensation === f.comp)
+        && (f.lead !== "LEADS" || r.lead) && (f.lead !== "LOW" || r.lead === "LOW")
         && matchesQuery(f.q, r.brand, r.contact, r.campaign, r.statusLabel, pretty(r.type), pretty(r.compensation), r.budget, r.deliverables, r.nextStep)),
       f.sort, {
-        brand: (r) => r.brand, status: (r) => statusOrder.indexOf(r.status), nextFollowUp: (r) => r.nextFollowUp,
+        brand: (r) => r.brand, lead: (r) => leadRank[r.lead], status: (r) => statusOrder.indexOf(r.status), nextFollowUp: (r) => r.nextFollowUp,
         openTasks: (r) => r.openTasks, updatedAt: (r) => r.updatedAt,
       });
-      const clearAll = () => { Object.assign(f, { q: "", status: "", comp: "" }); search.value = ""; statusSelect.value = ""; compSelect.value = ""; save(); draw(); };
+      const clearAll = () => { Object.assign(f, { q: "", status: "", comp: "", lead: "" }); search.value = ""; statusSelect.value = ""; compSelect.value = ""; leadSelect.value = ""; save(); draw(); };
       const line = shownLine(shown.length, rows.length, "deals", clearAll);
       if (line) list.appendChild(line);
-      if (!shown.length) { list.appendChild(card(null, emptyLine("No deals match. Try fewer words or another filter."))); return; }
+      if (!shown.length) { list.appendChild(card(null, emptyLine(f.lead ? "No leads match this filter." : "No deals match. Try fewer words or another filter."))); return; }
+      const leadRows = shown.filter((r) => r.lead);
+      const pickAll = el("input", { type: "checkbox", title: "Select all leads shown", "aria-label": "Select all leads shown",
+        checked: leadRows.length > 0 && leadRows.every((r) => picked.has(r.id)), onchange: (e) => {
+          leadRows.forEach((r) => (e.target.checked ? picked.add(r.id) : picked.delete(r.id)));
+          list.querySelectorAll("input.pick").forEach((b) => { b.checked = e.target.checked; });
+          sync();
+        } });
+      if (leadRows.length) {
+        list.appendChild(el("div", { class: "row card", id: "decline-bar" },
+          el("span", { class: "small muted" }, "Not a fit? Tick the leads you'd like to turn down and press Decline selected. "
+            + "A short, polite no-thanks is written for each; nothing is sent until you approve it."),
+          el("div", { class: "spacer" }), declineBtn));
+      }
       list.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
-        sortableHead([["Brand", "brand"], ["Status", "status"], ["Deal", null], ["Budget", null],
+        sortableHead([[leadRows.length ? pickAll : "", null], ["Brand", "brand"], ["Lead", "lead", "desc"], ["Status", "status"], ["Deal", null], ["Budget", null],
           ["Next follow-up", "nextFollowUp", "asc"], ["Open tasks", "openTasks", "desc"], ["Updated", "updatedAt", "desc"]],
         f.sort, (s) => { f.sort = s; save(); draw(); }),
         el("tbody", {}, shown.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.id) },
+          el("td", { onclick: (e) => e.stopPropagation() }, r.lead ? el("input", { type: "checkbox", class: "pick", checked: picked.has(r.id),
+            "aria-label": "Pick " + r.brand, onchange: (e) => {
+              if (e.target.checked) picked.add(r.id); else picked.delete(r.id);
+              sync();
+            } }) : null),
           el("td", {}, el("strong", {}, r.brand), r.campaign ? el("div", { class: "small muted" }, r.campaign) : null),
+          el("td", {}, leadBadge(r.lead, r.leadWhy) || el("span", { class: "muted" }, "—")),
           el("td", {}, r.statusLabel),
           el("td", {}, pretty(r.type) + " · " + pretty(r.compensation)),
           el("td", {}, r.budget || "—"),
@@ -604,7 +647,7 @@
       Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: o.status === k }, v)));
     drawer.appendChild(card(null,
       el("label", {}, "Status"), statusSel,
-      facts([["Type", pretty(o.type)], ["Compensation", pretty(o.compensation)], ["Budget", o.budgetText],
+      facts([["Lead", d.summary.lead && (pretty(d.summary.lead) + (d.summary.leadWhy ? ": " + d.summary.leadWhy : ""))], ["Type", pretty(o.type)], ["Compensation", pretty(o.compensation)], ["Budget", o.budgetText],
              ["Deliverables", o.deliverables], ["Usage rights", o.usageRights], ["Campaign", o.campaign],
              ["Still unknown", o.missingInfo], ["Next step", o.nextStep], ["Origin", pretty(o.origin)],
              ["Contact", d.brand && [d.brand.contactName, d.brand.contactEmail, d.brand.instagram && "@" + d.brand.instagram].filter(Boolean).join(" · ")]])));
@@ -1094,6 +1137,18 @@
     root.appendChild(el("h1", {}, "Drafts awaiting approval"));
     root.appendChild(el("p", { class: "muted" }, "Nothing is sent until you press Send. Edit freely first."));
     if (!list.length) { root.appendChild(card(null, emptyLine("No drafts waiting."))); return; }
+    const declines = list.filter((x) => x.draft.type === "DECLINE");
+    if (declines.length > 1) {
+      root.appendChild(el("div", { class: "row card", id: "send-declines" },
+        el("span", {}, declines.length + " polite declines are ready below. Read them, then send them all at once."),
+        el("div", { class: "spacer" }),
+        el("button", { class: "primary small", onclick: action(async () => {
+          if (!confirm("Send all " + declines.length + " declines now? Each deal is closed as declined.")) return;
+          const r = await api("POST", "/api/drafts/send-declines");
+          toast(r.done + " sent" + (r.skipped.length ? ". Not sent: " + r.skipped.join("; ") : ""), r.skipped.length > 0);
+          route();
+        }) }, "Approve all declines")));
+    }
     // Filtering hides cards and sorting moves them, so text typed into a draft is never lost.
     const df = draftsFilter;
     const save = () => savePrefs("drafts", df);

@@ -28,6 +28,7 @@ import com.creatorcrm.repo.FollowUpRepo;
 import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.repo.TaskRepo;
+import com.creatorcrm.scoring.LeadScoring;
 import com.creatorcrm.settings.SettingsService;
 import com.creatorcrm.workflow.FollowUpEngine;
 import com.creatorcrm.workflow.OutreachService;
@@ -66,7 +67,8 @@ public class CrmController {
     public record OpportunityView(Long id, String brand, String status, String statusLabel, String type,
                                   String compensation, String budget, String deliverables, String nextStep,
                                   String origin, LocalDate nextFollowUp, Integer nextFollowUpNumber,
-                                  long openTasks, OffsetDateTime updatedAt, String campaign, String contact) {}
+                                  long openTasks, OffsetDateTime updatedAt, String campaign, String contact,
+                                  String lead, String leadWhy) {}
 
     public record OpportunityDetail(OpportunityView summary, Opportunity opportunity, Brand brand, List<Task> tasks,
                                     List<FollowUp> followUps, List<Deadline> deadlines, List<MessageView> messages,
@@ -106,13 +108,15 @@ public class CrmController {
     private final ScheduledJobs jobs;
     private final SettingsService settings;
     private final TaskExecutor executor;
+    private final LeadScoring scoring;
 
     public CrmController(DigestService digest, OpportunityRepo opportunities, BrandRepo brands, TaskRepo tasks,
                          FollowUpRepo followUpRepo, DeadlineRepo deadlines, MessageRepo messages, DraftRepo drafts,
                          ActivityRepo activity, WorkflowEngine workflow, FollowUpEngine followUps,
                          DraftService draftService, OutreachService outreach, IngestionService ingestion,
                          ScheduledJobs jobs, SettingsService settings,
-                         @Qualifier("applicationTaskExecutor") TaskExecutor executor) {
+                         @Qualifier("applicationTaskExecutor") TaskExecutor executor, LeadScoring scoring) {
+        this.scoring = scoring;
         this.digest = digest;
         this.opportunities = opportunities;
         this.brands = brands;
@@ -155,10 +159,12 @@ public class CrmController {
 
     @GetMapping("/pipeline")
     public List<OpportunityView> pipeline(@RequestParam(defaultValue = "false") boolean includeClosed) {
-        return opportunities.findAll().stream()
+        List<Opportunity> all = opportunities.findAll();
+        Map<Long, LeadScoring.Score> leads = scoring.scores(all);
+        return all.stream()
                 .filter(o -> includeClosed || o.status.isOpen())
                 .sorted((a, b) -> b.updatedAt.compareTo(a.updatedAt))
-                .map(this::view).toList();
+                .map(o -> view(o, leads.get(o.id))).toList();
     }
 
     @GetMapping("/opportunities/{id}")
@@ -326,13 +332,18 @@ public class CrmController {
     }
 
     private OpportunityView view(Opportunity o) {
+        return view(o, LeadScoring.isLead(o) ? scoring.score(o, scoring.context()) : null);
+    }
+
+    private OpportunityView view(Opportunity o, LeadScoring.Score lead) {
         FollowUp next = followUps.scheduled(o.id).orElse(null);
         Brand b = brands.findById(o.brandId).orElse(null);
         return new OpportunityView(o.id, b == null ? "Brand" : b.name, o.status.name(), o.status.label, o.type.name(),
                 o.compensation.name(), o.budgetText, o.deliverables, o.nextStep, o.origin.name(),
                 next == null ? null : next.scheduledDate, next == null ? null : next.number,
                 tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN).size(), o.updatedAt, o.campaign,
-                b == null ? null : contactLine(b.contactName, b.contactEmail, b.instagram == null || b.instagram.isBlank() ? null : "@" + b.instagram));
+                b == null ? null : contactLine(b.contactName, b.contactEmail, b.instagram == null || b.instagram.isBlank() ? null : "@" + b.instagram),
+                lead == null ? null : lead.level().name(), lead == null ? null : lead.summary());
     }
 
     /** "Noor · noor@brand.com · @brand", for searching and showing who the deal is with. */

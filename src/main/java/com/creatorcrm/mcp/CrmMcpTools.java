@@ -23,6 +23,7 @@ import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.outreach.BrandDiscoveryService;
 import com.creatorcrm.rebook.WinBack;
+import com.creatorcrm.scoring.LeadScoring;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.Untrusted;
 import com.creatorcrm.repo.DraftRepo;
@@ -64,14 +65,16 @@ public class CrmMcpTools {
     private final CrmProperties props;
     private final InvoiceService invoices;
     private final WinBack winBack;
+    private final LeadScoring scoring;
     private final BrandDiscoveryService discovery;
     private final InstagramStatsService instagram;
 
     public CrmMcpTools(DigestService digest, OpportunityRepo opportunities, TaskRepo tasks, MessageRepo messages,
                        DraftRepo drafts, WorkflowEngine workflow, FollowUpEngine followUps, DraftService draftService,
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
-                       CrmProperties props, InvoiceService invoices, WinBack winBack,
+                       CrmProperties props, InvoiceService invoices, WinBack winBack, LeadScoring scoring,
                        BrandDiscoveryService discovery, InstagramStatsService instagram) {
+        this.scoring = scoring;
         this.invoices = invoices;
         this.winBack = winBack;
         this.discovery = discovery;
@@ -144,6 +147,18 @@ public class CrmMcpTools {
         return unpaid.stream().map(i -> "[invoice " + i.id() + ", opp " + i.opportunityId() + "] " + i.brand() + " — " + i.number() + " " + i.amountText()
                 + ", due " + i.dueDate() + (i.daysOverdue() > 0 ? " (overdue by " + i.daysOverdue() + " days)" : "")
                 + (i.remindersSent() > 0 ? ", " + i.remindersSent() + " reminder(s) sent" : ""))
+                .collect(Collectors.joining("\n"));
+    }
+
+    @McpTool(name = "list_leads", description = "Open incoming leads with a High, Medium or Low score and the reasons (paid or gifted, budget against the creator's usual deal, type, missing budget, paid before). Best first.")
+    public String leads() {
+        List<Opportunity> open = opportunities.findAll();
+        var scores = scoring.scores(open);
+        if (scores.isEmpty()) return "No open leads.";
+        return open.stream().filter(o -> scores.containsKey(o.id))
+                .sorted((a, b) -> Integer.compare(scores.get(b.id).points(), scores.get(a.id).points()))
+                .map(o -> "[opp " + o.id + "] " + workflow.brandName(o) + " — " + scores.get(o.id).level() + " ("
+                        + scores.get(o.id).summary() + ")" + (o.budgetText == null || o.budgetText.isBlank() ? "" : ", " + o.budgetText))
                 .collect(Collectors.joining("\n"));
     }
 
