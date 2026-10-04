@@ -126,6 +126,36 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "campaign-results"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Petal & Pine" });
+    await row.waitFor();
+    await say("Your Petal & Pine candle post went up three weeks ago.", 3400);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#results");
+    await box.waitFor();
+    await box.scrollIntoViewIfNeeded();
+    await point(box.locator("a", { hasText: "View post" }));
+    await say("When a deal is marked Posted, the app finds your post on Instagram. Or paste its link here.", 4600);
+    await point(box.locator(".grid.numbers"));
+    await say("A week later it reads the post's reach, views, likes, comments, saves and shares.", 4400);
+    await say("For a TikTok or a Story, just type the numbers in.", 3200);
+    await point(box.getByRole("button", { name: "Preview PDF" }));
+    await say("They go on a one-page results PDF for the brand.", 3400);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await click(page.locator(".tab[data-tab=drafts]"));
+    const recap = page.locator(".card", { hasText: "Results recap" }).first();
+    await recap.waitFor();
+    await recap.scrollIntoViewIfNeeded();
+    await point(recap.locator("textarea"));
+    await say("And a thank-you email is drafted with the PDF attached, plus an idea for working together again.", 4800);
+    await point(recap.locator("a", { hasText: "Results PDF" }));
+    await say("Like every draft, nothing is sent until you check it and press Send.", 3800);
+    await say("", 600);
+  },
+
   async "task-briefs"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

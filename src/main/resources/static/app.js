@@ -671,6 +671,43 @@
 
   // ---------- Deal drawer ----------
 
+  function resultsCard(id, r, refresh) {
+    const base = "/api/opportunities/" + id + "/results";
+    const url = el("input", { type: "url", placeholder: "https://www.instagram.com/reel/…", value: (r && r.postUrl) || "", "aria-label": "Post link" });
+    const fields = [["reach", "Accounts reached"], ["views", "Views"], ["likes", "Likes"], ["comments", "Comments"], ["saves", "Saves"], ["shares", "Shares"]];
+    const inputs = {};
+    for (const [k] of fields) inputs[k] = el("input", { type: "number", min: "0", step: "1", value: r && r[k] != null ? String(r[k]) : "" });
+    const has = r && fields.some(([k]) => r[k] != null);
+    const status = [];
+    if (r && r.postedAt) status.push("Posted " + fmtDate(r.postedAt) + (r.postUrl ? " · " : ""));
+    const lines = [];
+    if (r && r.error) lines.push(el("p", { class: "small warn" }, r.error));
+    else if (r && r.numbersDue) lines.push(el("p", { class: "small muted" }, "Instagram numbers arrive " + fmtDate(r.numbersDue) + ", a week after posting. A recap email to the brand is drafted then for you to check."));
+    else if (r && r.source === "INSTAGRAM" && r.fetchedAt) lines.push(el("p", { class: "small muted" }, "From Instagram Insights, " + fmtDate(r.fetchedAt) + "."));
+    else if (!r) lines.push(el("p", { class: "small muted" }, "Once it's live, link the post. Instagram posts get their numbers a week later; for TikTok or Stories, type them in."));
+    return el("div", { class: "card", id: "results" }, el("h2", {}, "Campaign results"),
+      r && r.postUrl ? el("p", { class: "small" }, status, el("a", { href: r.postUrl, target: "_blank", rel: "noopener" }, "View post")) : null,
+      el("div", { class: "row" }, url,
+        el("button", { class: "small", onclick: action(async () => { await api("POST", base + "/link", { url: url.value }); refresh(); }, "Post linked") }, "Save link"),
+        !r || !r.mediaId ? el("button", { class: "small", onclick: action(async () => { await api("POST", base + "/find"); refresh(); }, "Found your post") }, "Find my post") : null),
+      lines,
+      el("div", { class: "grid numbers" }, fields.map(([k, label]) => el("div", {}, el("label", {}, label), inputs[k]))),
+      r && r.engagementRate != null ? el("p", { class: "small" }, "Engagement rate: " + r.engagementRate + "% (likes, comments, saves and shares over accounts reached)") : null,
+      el("div", { class: "row" },
+        el("button", { class: "small", onclick: action(async () => {
+          const body = {};
+          for (const [k] of fields) body[k] = inputs[k].value === "" ? null : Number(inputs[k].value);
+          await api("PUT", base + "/numbers", body); refresh();
+        }, "Numbers saved") }, "Save numbers"),
+        r && r.mediaId ? el("button", { class: "small", onclick: action(async () => { await api("POST", base + "/fetch"); refresh(); }, "Numbers updated from Instagram") }, "Get numbers now") : null,
+        has ? el("button", { class: "small", onclick: () => window.open(base + "/pdf", "_blank", "noopener") }, "Preview PDF") : null,
+        has ? el("button", { class: "primary small", onclick: action(async () => {
+          await api("POST", base + "/recap");
+          closeDrawer(); location.hash = "#drafts"; route();
+        }, "Recap email is in Drafts. Check it, then press Send.") }, r.recapDraftedAt ? "Draft recap again" : "Draft recap email") : null),
+      el("p", { class: "small muted" }, "The recap thanks the brand, shares these numbers with a one-page PDF attached, and suggests working together again. It waits in Drafts until you send it."));
+  }
+
   function closeDrawer() {
     document.getElementById("drawer").classList.add("hidden");
     document.getElementById("drawer-backdrop").classList.add("hidden");
@@ -839,6 +876,12 @@
         await api("POST", "/api/tasks", { opportunityId: id, description: taskInput.value, dueDate: taskDue.value || null });
         refresh();
       }, "Task added") }, "Add"))));
+
+    // Campaign results: the post, its numbers, the results PDF and the recap email
+    const result = await api("GET", "/api/opportunities/" + id + "/results");
+    if (result || ["SCHEDULED_TO_POST", "POSTED", "PAYMENT_PENDING"].includes(o.status)) {
+      drawer.appendChild(resultsCard(id, result, refresh));
+    }
 
     // Exclusivity: another brand's exclusive window (or date) clashes with this deal's
     const clashes = await api("GET", "/api/opportunities/" + id + "/exclusivity");
@@ -1428,6 +1471,7 @@
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
         el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
         d.invoiceId ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
+        d.resultId && d.channel === "EMAIL" ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/opportunities/" + d.opportunityId + "/results/pdf", target: "_blank", rel: "noopener" }, "Results PDF"), " is attached") : null,
         d.type === "PAYMENT_REMINDER" ? el("div", { class: "small muted" }, "Payment reminders always wait for you here, even when follow-ups are sent automatically.") : null,
         d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,

@@ -3,6 +3,7 @@ package com.creatorcrm.drafts;
 import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Attachment;
+import com.creatorcrm.domain.CampaignResult;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Draft;
@@ -18,6 +19,8 @@ import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.domain.Invoice;
 import com.creatorcrm.invoices.InvoicePdf;
+import com.creatorcrm.repo.CampaignResultRepo;
+import com.creatorcrm.results.ResultsPdf;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
@@ -69,12 +72,17 @@ public class DraftService {
     private final SettingsService settings;
     private final LearningService learning;
     private final InvoiceRepo invoices;
+    private final CampaignResultRepo results;
+    private final ResultsPdf resultsPdf;
     private final InvoicePdf invoicePdf;
 
     public DraftService(LlmClient llm, List<ChannelConnector> connectors, DraftRepo drafts,
                         OpportunityRepo opportunities, ConversationRepo conversations, MessageRepo messages,
                         BrandRepo brands, ActivityRepo activity, WorkflowEngine workflow, SettingsService settings,
-                        LearningService learning, InvoiceRepo invoices, InvoicePdf invoicePdf) {
+                        LearningService learning, InvoiceRepo invoices, InvoicePdf invoicePdf,
+                        CampaignResultRepo results, ResultsPdf resultsPdf) {
+        this.results = results;
+        this.resultsPdf = resultsPdf;
         this.invoices = invoices;
         this.invoicePdf = invoicePdf;
         this.llm = llm;
@@ -119,7 +127,7 @@ public class DraftService {
         if (type == DraftType.INVOICE || type == DraftType.PAYMENT_REMINDER) {
             throw new IllegalArgumentException("Invoices and payment reminders are written from the invoice itself");
         }
-        return create(opportunityId, type, instructions, taskId, followupId, null, null);
+        return create(opportunityId, type, instructions, taskId, followupId, null, null, null);
     }
 
     /**
@@ -135,11 +143,32 @@ public class DraftService {
                 drafts.save(old);
             }
         }
-        return create(invoice.opportunityId, type, instructions, null, null, invoice, fallback);
+        return create(invoice.opportunityId, type, instructions, null, null, invoice, null, fallback);
+    }
+
+    /**
+     * A results recap ({@link DraftType#RESULTS_RECAP}) to the brand, with the campaign results PDF attached when it
+     * goes by email. {@code fallback} keeps it working without Claude. Replaces an unsent recap for the same deal.
+     */
+    @Transactional
+    public Draft generateRecap(CampaignResult result, String instructions, DraftText fallback) {
+        for (Draft old : drafts.findByOpportunityIdAndStatus(result.opportunityId, DraftStatus.PENDING)) {
+            if (old.type == DraftType.RESULTS_RECAP) {
+                old.status = DraftStatus.SUPERSEDED;
+                drafts.save(old);
+            }
+        }
+        return create(result.opportunityId, DraftType.RESULTS_RECAP, instructions, null, null, null, result, fallback);
+    }
+
+    /** The one-page results PDF for a deal's campaign. */
+    public byte[] resultsPdf(CampaignResult r) {
+        Opportunity o = opportunities.findById(r.opportunityId).orElseThrow();
+        return resultsPdf.render(r, o, workflow.brandName(o));
     }
 
     private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
-                         Invoice invoice, DraftText fallback) {
+                         Invoice invoice, CampaignResult result, DraftText fallback) {
         Opportunity o = opportunities.findById(opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
         Brand b = brands.findById(o.brandId).orElseThrow();
         Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
@@ -150,6 +179,7 @@ public class DraftService {
         d.conversationId = conv == null ? null : conv.id;
         d.taskId = taskId;
         d.followupId = followupId;
+        d.resultId = result == null ? null : result.id;
         d.type = type;
         if (invoice != null) {
             d.invoiceId = invoice.id;
@@ -166,7 +196,7 @@ public class DraftService {
             text = llm.writeDraft(input);
         } catch (RuntimeException e) {
             if (fallback == null) throw e;
-            log.info("Using the standard invoice email for deal {}: {}", o.id, e.getMessage());
+            log.info("Using the standard {} email for deal {}: {}", type, o.id, e.getMessage());
             text = fallback;
         }
 
@@ -297,6 +327,10 @@ public class DraftService {
         if (d.invoiceId != null && d.channel == Platform.EMAIL) {
             Invoice inv = invoices.findById(d.invoiceId).orElseThrow(() -> new IllegalStateException("The invoice was deleted"));
             d.attachments = List.of(new Attachment(inv.number + ".pdf", "application/pdf", invoicePdf.render(inv)));
+        } else if (d.resultId != null && d.channel == Platform.EMAIL) {
+            CampaignResult r = results.findById(d.resultId).orElseThrow(() -> new IllegalStateException("The campaign results were deleted"));
+            d.attachments = List.of(new Attachment(ResultsPdf.fileName(workflow.brandName(opportunities.findById(d.opportunityId).orElseThrow())),
+                    "application/pdf", resultsPdf(r)));
         }
         return d;
     }

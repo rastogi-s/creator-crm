@@ -16,6 +16,8 @@ public class Draft {
     public Long followupId;
     /** Set for an invoice email: the invoice's PDF goes out attached, and sending marks the invoice sent. */
     public Long invoiceId;
+    /** Set for a results recap: the campaign results PDF goes out attached. */
+    public Long resultId;
     @Enumerated(EnumType.STRING) public DraftType type;
     @Enumerated(EnumType.STRING) public Platform channel;
     public String toAddress;

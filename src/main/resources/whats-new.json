@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.24.0",
+    "title": "Campaign results for brands",
+    "features": [
+      {
+        "id": "campaign-results",
+        "title": "Show brands how their post did",
+        "body": "When a deal is marked Posted, the app finds your post on Instagram, or you paste its link. A week later it reads the post's reach, views, likes, comments, saves and shares, and drafts a thank-you email to the brand with a one-page results PDF attached and an idea for working together again. You check it in Drafts before anything is sent. For TikToks or Stories, type the numbers in on the deal.",
+        "video": "campaign-results.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.23.0",
     "title": "To-dos that explain themselves",
     "features": [
