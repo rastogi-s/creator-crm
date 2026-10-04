@@ -48,7 +48,8 @@ public class SettingsController {
     /** Credentials the user may type in. Tokens obtained via OAuth are managed by the connect flows. */
     private static final Set<SecretName> USER_ENTERED = EnumSet.of(
             SecretName.ANTHROPIC_API_KEY, SecretName.GOOGLE_CLIENT_ID, SecretName.GOOGLE_CLIENT_SECRET,
-            SecretName.INSTAGRAM_APP_ID, SecretName.INSTAGRAM_APP_SECRET, SecretName.INSTAGRAM_ACCESS_TOKEN);
+            SecretName.INSTAGRAM_APP_ID, SecretName.INSTAGRAM_APP_SECRET, SecretName.INSTAGRAM_ACCESS_TOKEN,
+            SecretName.ERROR_REPORT_TOKEN);
 
     public record PasswordChange(@NotBlank String currentPassword, @NotBlank @Size(max = 200) String newPassword) {}
 

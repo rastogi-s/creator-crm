@@ -918,6 +918,7 @@
 
     root.appendChild(await learningCard(root));
     root.appendChild(updatesCard(root));
+    root.appendChild(await errorReportsCard(root, c));
     root.appendChild(backupCard(root));
 
     // Password
@@ -1189,6 +1190,68 @@
         + "backups folder next to your data."));
   }
 
+  // "Something isn't working": her note plus recent (redacted) log lines go to the developer as a GitHub issue.
+  function reportProblemCard() {
+    const note = el("textarea", { maxlength: "4000", placeholder: "What were you doing, and what went wrong?" });
+    return card("Something not working?",
+      el("p", { class: "small muted" }, "Tell us what happened. Your note and the app's recent activity log are sent so it can be fixed. "
+        + "Email addresses, phone numbers, passwords and keys are removed first."),
+      note,
+      el("div", { class: "row" },
+        el("button", { class: "primary small", onclick: action(async () => {
+          if (!note.value.trim()) throw new Error("Please describe the problem first");
+          await api("POST", "/api/diagnostics/report", { note: note.value });
+          note.value = "";
+        }, "Sent. Thank you!") }, "Report a problem"),
+        el("a", { class: "btn small", href: "/api/diagnostics/log" }, "Save log file")));
+  }
+
+  async function errorReportsCard(root, c) {
+    const d = await api("GET", "/api/diagnostics").catch(() => null);
+    if (!d) return el("div");
+    const tokenBox = el("div", {}, (() => {
+      const input = el("input", { type: "password", autocomplete: "off", placeholder: c.ERROR_REPORT_TOKEN ? "•••••••• (saved)" : "github_pat_…" });
+      input.dataset.name = "ERROR_REPORT_TOKEN";
+      return el("div", {}, el("label", {}, "Error-report token"), input);
+    })());
+    const auto = el("input", { type: "checkbox", checked: d.autoReport, onchange: action(async (e) => {
+      await api("PUT", "/api/diagnostics/auto-report", { enabled: e.target.checked });
+    }, "Saved") });
+    const line = !d.configured ? "Off: no error-report token saved yet."
+      : !d.autoReport ? "Automatic reports are paused. Report a problem still works."
+      : d.lastError ? d.lastError
+      : d.lastSentAt ? "On. Last report sent " + fmtDateTime(d.lastSentAt) + "."
+      : "On. Nothing has needed reporting since the app started.";
+    const recent = d.recent.length ? el("ul", { class: "small" }, ...d.recent.slice(0, 5).map((r) => el("li", {},
+      r.title.replace(/^\[auto-report\] /, "") + " (" + r.count + "×, " + fmtDateTime(r.lastSeen) + ")",
+      r.issueUrl ? el("span", {}, " · ", el("a", { href: r.issueUrl, target: "_blank", rel: "noopener noreferrer" }, "report")) : null))) : null;
+    return card("Error reports",
+      el("p", {}, el("span", { class: "muted" }, line)),
+      el("p", { class: "small muted" }, "When something goes wrong, the app sends a short report to the developer (a GitHub issue on "
+        + d.repo + ") so it can be fixed in the next update. Repeats of the same error are grouped. Emails, phone numbers, Instagram handles, "
+        + "passwords and keys are removed before anything is sent."),
+      recent ? el("p", { class: "small" }, "Errors since the app started:") : null, recent,
+      el("label", { class: "row check" }, auto, "Send error reports automatically"),
+      el("details", {}, el("summary", { class: "small" }, "Set up (for the developer)"),
+        el("p", { class: "small muted" }, "Create a fine-grained GitHub token with access to only " + d.repo
+          + " and the permission Issues: Read and write (nothing else), then paste it here."),
+        tokenBox,
+        el("div", { class: "row" },
+          el("button", { class: "small", onclick: action(async () => {
+            const v = tokenBox.querySelector("input").value.trim();
+            if (!v) throw new Error("Nothing to save");
+            await api("PUT", "/api/settings/credentials", { ERROR_REPORT_TOKEN: v });
+            renderSettings(root);
+          }, "Saved") }, "Save token"),
+          c.ERROR_REPORT_TOKEN ? el("button", { class: "small danger", onclick: action(async () => {
+            await api("PUT", "/api/settings/credentials", { ERROR_REPORT_TOKEN: "" });
+            renderSettings(root);
+          }, "Removed") }, "Remove") : null)),
+      el("div", { class: "row" },
+        el("a", { class: "btn small", href: "#help" }, "Report a problem"),
+        el("a", { class: "btn small", href: "/api/diagnostics/log" }, "Save log file")));
+  }
+
   function videoPlayer(version, file) {
     const fallback = el("p", { class: "small muted hidden" }, "The video couldn't load. It plays once Creator CRM can reach the internet.");
     const v = el("video", { controls: true, preload: "metadata", playsinline: true, src: "/api/videos/" + version + "/" + file });
@@ -1224,6 +1287,7 @@
     clear(root);
     root.appendChild(el("h1", {}, "Help"));
     root.appendChild(el("p", { class: "muted" }, "Short videos of every feature, newest first. Each one has a Try it button that takes you there."));
+    root.appendChild(reportProblemCard());
     if (!w.all.length) root.appendChild(emptyLine("No walkthroughs yet."));
     for (const e of w.all) {
       root.appendChild(el("h2", {}, (e.title || "Version " + e.version) + " ", el("span", { class: "badge" }, e.version)));
