@@ -1,0 +1,94 @@
+/* Links page. Kept in its own file so it can change without touching the shared styles. */
+.links-head { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; margin-bottom: 1rem; }
+.links-head p { max-width: 38rem; margin-bottom: 0; }
+.links-head button { flex-shrink: 0; margin-top: .25rem; }
+
+.links-socials { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
+.social-chip {
+  display: inline-flex; align-items: center; gap: .5rem; padding: .3rem .85rem .3rem .3rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text); text-decoration: none; font-weight: 600; font-size: .9rem; box-shadow: var(--shadow);
+  transition: transform .12s ease, border-color .12s ease;
+}
+.social-chip:hover { transform: translateY(-1px); border-color: var(--accent); }
+.social-chip .link-icon { width: 1.9rem; height: 1.9rem; font-size: .85rem; border-radius: 50%; }
+
+.links-count { font-size: .85rem; margin: 0 0 .5rem .25rem; }
+.links-list { list-style: none; margin: 0 0 1.5rem; padding: 0; display: grid; gap: .6rem; }
+
+.link-card, .links-pick li {
+  display: flex; align-items: center; gap: .9rem; min-width: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: .75rem .9rem; box-shadow: var(--shadow);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.link-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.link-card.editing { border-color: var(--accent); }
+
+.link-icon {
+  flex-shrink: 0; display: inline-grid; place-items: center;
+  width: 2.75rem; height: 2.75rem; border-radius: 12px;
+  font-weight: 700; font-size: 1.1rem; color: #fff; letter-spacing: -.02em;
+}
+.link-icon.tone-0 { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+.link-icon.tone-1 { background: linear-gradient(135deg, #f472b6, #db2777); }
+.link-icon.tone-2 { background: linear-gradient(135deg, #34d399, #059669); }
+.link-icon.tone-3 { background: linear-gradient(135deg, #818cf8, #4f46e5); }
+.link-icon.tone-4 { background: linear-gradient(135deg, #38bdf8, #0284c7); }
+.link-icon.tone-5 { background: linear-gradient(135deg, #a78bfa, #7c3aed); }
+.link-icon.brand-ig { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285aeb 90%); }
+.link-icon.brand-tt { background: #111; box-shadow: inset -2px -2px 0 #fe2c55, inset 2px 2px 0 #25f4ee; }
+.link-icon.brand-yt { background: #ff0000; }
+.link-icon.brand-x { background: #111; }
+.link-icon.brand-fb { background: #1877f2; }
+.link-icon.brand-pin { background: #e60023; }
+.link-icon.brand-li { background: #0a66c2; }
+.link-icon.brand-snap { background: #fffc00; color: #111; }
+.link-icon.brand-twitch { background: #9146ff; }
+.link-icon.brand-amz { background: #232f3e; color: #ff9900; }
+.link-icon.brand-canva { background: linear-gradient(135deg, #00c4cc, #7d2ae8); }
+
+.link-body { flex: 1; min-width: 0; }
+.link-label { font-weight: 650; font-size: 1rem; overflow-wrap: anywhere; }
+.link-url {
+  display: block; color: var(--muted); font-size: .85rem; text-decoration: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+a.link-url:hover { color: var(--accent); text-decoration: underline; }
+.link-actions { display: flex; align-items: center; gap: .3rem; flex-shrink: 0; }
+.link-move { display: inline-flex; }
+.link-move button:first-child { border-radius: 8px 0 0 8px; }
+.link-move button:last-child { border-radius: 0 8px 8px 0; border-left: 0; }
+button.small.icon { min-width: 2rem; }
+.link-edit { flex: 1; min-width: 0; display: grid; gap: .4rem; grid-template-columns: minmax(8rem, 1fr) 2fr; }
+
+.links-empty { text-align: center; padding: 2rem 1rem 1rem; }
+.links-empty-art {
+  display: inline-grid; place-items: center; width: 4rem; height: 4rem; margin-bottom: .5rem;
+  border-radius: 50%; background: var(--accent-soft); font-size: 1.8rem;
+}
+
+.links-add { border-radius: 14px; }
+.links-add > .row { margin-bottom: .5rem; }
+.links-add > .row h3 { margin: 0; }
+.links-add .row input { flex: 1 1 16rem; width: auto; min-width: 0; }
+.links-add textarea { min-height: 8rem; margin-bottom: .25rem; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: none; color: var(--muted); padding: .3rem .75rem; font-size: .85rem; border-radius: 8px; }
+.seg button:hover { color: var(--text); background: none; }
+.seg button.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+.links-pick { margin-top: 1rem; }
+.links-pick ul { list-style: none; padding: 0; margin: .5rem 0 .75rem; display: grid; gap: .4rem; max-height: 28rem; overflow-y: auto; }
+.links-pick li { padding: .5rem .75rem; box-shadow: none; }
+.links-pick li input[type=checkbox] { width: 1.1rem; height: 1.1rem; flex-shrink: 0; accent-color: var(--accent); }
+.links-pick li .link-icon { width: 2.2rem; height: 2.2rem; font-size: .95rem; border-radius: 10px; }
+.links-pick li .link-body input { padding: .25rem .45rem; font-weight: 600; }
+.links-pick li.already { opacity: .65; }
+
+@media (max-width: 640px) {
+  .links-head { flex-direction: column; gap: .25rem; }
+  .link-card { flex-wrap: wrap; }
+  .link-card .link-actions { width: 100%; padding-left: 3.65rem; flex-wrap: wrap; }
+  .link-edit { grid-template-columns: 1fr; }
+}
