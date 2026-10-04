@@ -46,6 +46,9 @@ server:
     include-stacktrace: never
     include-message: never
   tomcat:
+    # Redirects say "/" rather than "http://host/", so they keep the https:// of a proxy in front (e.g. Tailscale
+    # serve for phone access) instead of sending the browser to a plain-http address nothing answers.
+    use-relative-redirects: true
     max-http-form-post-size: 1MB
     max-swallow-size: 2MB
 

@@ -88,6 +88,8 @@ class SecurityIntegrationTest {
         assertThat(bad.headers().firstValue("Location").orElse("")).contains("error");
         HttpResponse<String> good = post("/login", "application/x-www-form-urlencoded", "username=admin&password=a-long-enough-password", true);
         assertThat(good.headers().firstValue("Location").orElse("")).doesNotContain("error");
+        // Relative, so an https proxy in front (Tailscale serve on her phone) isn't sent to a plain-http address.
+        assertThat(good.headers().firstValue("Location").orElse("")).isEqualTo("/");
 
         assertThat(get("/api/today").statusCode()).isEqualTo(200);
         assertThat(post("/api/settings/mcp-key", "application/json", "", false).statusCode()).as("CSRF required").isEqualTo(403);
