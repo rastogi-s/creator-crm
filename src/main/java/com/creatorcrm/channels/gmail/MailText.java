@@ -14,13 +14,44 @@ final class MailText {
 
     private MailText() {}
 
-    /** Prefer text/plain; fall back to text/html with tags stripped. Quoted replies are trimmed. */
+    /**
+     * Prefer text/plain; fall back to text/html with tags stripped. Quoted replies are trimmed. Many senders'
+     * text/plain part drops the URL behind "Apply here", so links that only the HTML part has are added at the end.
+     */
     static String bodyOf(MessagePart payload) {
         if (payload == null) return "";
         String plain = find(payload, "text/plain");
-        String text = plain != null ? plain : htmlToText(find(payload, "text/html"));
+        String html = find(payload, "text/html");
+        String text = plain != null ? plain : htmlToText(html);
         text = stripQuoted(text == null ? "" : text).strip();
-        return text.length() > MAX_BODY ? text.substring(0, MAX_BODY) : text;
+        String links = plain != null && html != null ? missingLinks(text, stripQuoted(htmlToText(html))) : "";
+        int room = MAX_BODY - links.length();
+        return (text.length() > room ? text.substring(0, room) : text) + links;
+    }
+
+    private static final java.util.regex.Pattern URL = java.util.regex.Pattern.compile("https?://[^\\s<>\"')\\]]+");
+
+    /**
+     * Lines of the HTML version whose link isn't in the plain-text version, e.g. "Apply here (https://...)",
+     * so the words around a vague link like "here" come along with it. Unsubscribe links are left out.
+     */
+    static String missingLinks(String plain, String htmlText) {
+        StringBuilder sb = new StringBuilder();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        int count = 0;
+        for (String line : htmlText.split("\n")) {
+            String l = line.strip();
+            if (l.toLowerCase(java.util.Locale.ROOT).contains("unsubscribe")) continue;
+            java.util.regex.Matcher m = URL.matcher(l);
+            boolean missing = false;
+            while (m.find()) {
+                if (!plain.contains(m.group()) && seen.add(m.group())) missing = true;
+            }
+            if (!missing) continue;
+            sb.append("\n- ").append(l.length() > 400 ? l.substring(0, 400) + "…" : l);
+            if (++count == 15) break;
+        }
+        return sb.isEmpty() ? "" : "\n\nLinks in this email:" + sb;
     }
 
     private static String find(MessagePart part, String mime) {

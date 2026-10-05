@@ -130,6 +130,14 @@ class WorkflowIntegrationTest {
     }
 
     @Test
+    void linkCheckIgnoresHarmlessSpellingDifferences() {
+        String email = WorkflowEngine.sameUrl("Apply here (https://forms.bloom.test/apply/?a=1&amp;b=2). Thanks");
+        assertThat(email).contains(WorkflowEngine.sameUrl("https://forms.bloom.test/apply/?a=1&b=2"));
+        assertThat(WorkflowEngine.sameUrl("See https://bloom.test/apply/.")).contains(WorkflowEngine.sameUrl("https://bloom.test/apply"));
+        assertThat(email).doesNotContain(WorkflowEngine.sameUrl("https://evil.test/apply"));
+    }
+
+    @Test
     void inboundDealLifecycle() {
         thread = "glow" + UUID.randomUUID().toString().substring(0, 6);
         String brand = "Glow " + thread;

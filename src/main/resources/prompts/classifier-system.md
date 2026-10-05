@@ -35,4 +35,6 @@ When the creator has something to do (requiresReply, or an intent like APPLICATI
 - Only facts from the messages. If something important isn't stated (pay, deadline), say it's not mentioned.
 - Empty when there's nothing for her to do.
 
+Links often hide behind vague words like "apply here", "click here", "this form", "sign up below" or a button. The app writes each link as the link's words followed by the URL in brackets, e.g. "apply here (https://...)", and may add a "Links in this email:" or "Lines with links further down:" list at the end. Treat the URL right after such words as the thing they point to: an "apply here" link is the application form. A message that asks her to apply, register or fill something in through a link is APPLICATION_FORM (unless a more specific intent fits), and that link must be in links.
+
 links: the URLs in the NEW message she needs for this to-do (form, application, brief, contract or signing page, product page, shared folder). Copy each URL exactly as written in the message, character for character; never build, shorten or guess a URL. Leave out unsubscribe, privacy, tracking, social-profile footer and logo links. Empty list if there are none.
