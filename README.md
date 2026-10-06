@@ -93,7 +93,7 @@ Needs JDK 21+.
 
 ```bash
 ./mvnw package                       # Windows: mvnw.cmd package
-java -jar target/creator-manager-1.1.0.jar
+java -jar target/creator-manager-*.jar
 ```
 
 Open <http://localhost:8080> and enter the one-time setup code printed in the console.
@@ -103,8 +103,8 @@ Open <http://localhost:8080> and enter the one-time setup code printed in the co
 Every credential you enter is **your own** and is stored encrypted (AES-256-GCM) in your database.
 
 1. **Claude**: create an API key at [console.anthropic.com](https://console.anthropic.com) and paste it.
-   Use **Test** to confirm it works. Default model: `claude-opus-5-5` for both classification (low
-   effort) and writing (medium effort). You can set the classifier to `claude-haiku-4-5` to cut cost.
+   Use **Test** to confirm it works. Default models: `claude-sonnet-5-5` for reading messages (low effort)
+   and `claude-opus-5-5` for writing drafts (medium effort). You can change either under **About you**.
 2. **Gmail**:
    1. In [Google Cloud Console](https://console.cloud.google.com), create a project and enable the **Gmail API**.
    2. Configure the OAuth consent screen (External) and add yourself as a test user.

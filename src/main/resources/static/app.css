@@ -173,6 +173,7 @@ button:disabled { opacity: .55; cursor: default; }
 .alert { padding: .6rem .8rem; border-radius: 8px; margin: .5rem 0; font-size: .9rem; }
 .alert.error { background: var(--danger-soft); color: var(--danger); }
 .alert.info { background: var(--surface-2); color: var(--muted); }
+.alert.warn { background: var(--warn-soft); color: var(--warn); }
 /* Its own row under the bar, so it never squeezes the tabs. */
 .topbar { flex-wrap: wrap; row-gap: .4rem; }
 .update-banner {

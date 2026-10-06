@@ -75,18 +75,47 @@ public class IngestionService {
 
     /** What the header shows: is work running, how much is waiting for AI, and why it might be stuck. */
     public record Status(boolean syncing, boolean analyzing, long waitingForAi, boolean aiConfigured,
-                         String aiError, String importingSince, long version, int inBatch) {}
+                         String aiError, String importingSince, long version, int inBatch, List<ChannelProblem> channelProblems) {}
+
+    /**
+     * A connected account that keeps failing, for the banner on every page. {@code signIn}: the error looks like
+     * the account needs reconnecting (expired or revoked), rather than e.g. no internet.
+     */
+    public record ChannelProblem(String channel, String since, boolean signIn, String detail) {}
 
     public Status status() {
         String importing = connectors.stream().map(c -> read("sync." + c.platform() + IMPORT))
                 .flatMap(Optional::stream).findFirst().orElse(null);
         return new Status(syncLock.isLocked(), processLock.isLocked(),
                 messages.countByAiProcessedFalseAndFilteredReasonIsNull(), llm.isConfigured(),
-                read(AI_ERROR).orElse(null), importing, version.get(), batchMessageIds().size());
+                read(AI_ERROR).orElse(null), importing, version.get(), batchMessageIds().size(), channelProblems());
+    }
+
+    /** A blip (one failed sync while offline) isn't worth a banner; an hour of failures, or a sign-in problem, is. */
+    static final java.time.Duration PROBLEM_AFTER = java.time.Duration.ofHours(1);
+    private static final java.util.regex.Pattern SIGN_IN = java.util.regex.Pattern.compile(
+            "(?i)invalid_grant|invalid_token|unauthori[sz]ed|\\b401\\b|expired|revoked|OAuthException|token has been");
+
+    List<ChannelProblem> channelProblems() {
+        List<ChannelProblem> out = new ArrayList<>();
+        for (ChannelConnector c : connectors) {
+            if (!c.isConnected()) continue;
+            String key = "sync." + c.platform();
+            Optional<OffsetDateTime> since = read(key + FAILING_SINCE).map(OffsetDateTime::parse);
+            String error = read(key + ".error").orElse("");
+            if (since.isEmpty() || error.isBlank()) continue;
+            boolean signIn = SIGN_IN.matcher(error).find();
+            if (signIn || since.get().isBefore(OffsetDateTime.now().minus(PROBLEM_AFTER))) {
+                out.add(new ChannelProblem(c.platform().name(), since.get().toString(), signIn, error.replaceFirst("^\\S+\\s+", "")));
+            }
+        }
+        return out;
     }
 
     private static final String AI_ERROR = "ai.error";
     private static final String IMPORT = ".import";
+    /** When this channel's syncs started failing outright; blank once one succeeds. */
+    private static final String FAILING_SINCE = ".failingSince";
     /** A big import can need many capped fetches; keep going in one sync instead of one batch per 30 minutes. */
     private static final int MAX_ROUNDS_PER_SYNC = 20;
 
@@ -143,6 +172,7 @@ public class IngestionService {
                     stored += n;
                     write(key, started.toString());
                     write(key + ".error", "");
+                    write(key + FAILING_SINCE, "");
                     write(key + ".pausedUntil", "");
                     write(key + IMPORT, "");
                     result.put(c.platform().name(), n + " new");
@@ -161,6 +191,7 @@ public class IngestionService {
                     stored += n;
                     log.warn("Sync of {} failed: {}", c.platform(), e.getMessage());
                     write(key + ".error", OffsetDateTime.now() + " " + e.getMessage());
+                    if (read(key + FAILING_SINCE).isEmpty()) write(key + FAILING_SINCE, OffsetDateTime.now().toString());
                     result.put(c.platform().name(), "error: " + e.getMessage());
                 }
             }

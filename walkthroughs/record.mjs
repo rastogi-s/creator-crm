@@ -462,6 +462,24 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "safer-sending"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#drafts");
+    const draft = page.locator("#view-drafts .card", { hasText: "Peak Trail Co" }).first();
+    await draft.waitFor();
+    await say("Sometimes Claude doesn't know a number yet, like your rate for one Reel. It leaves a blank for you.", 4400);
+    const note = draft.locator(".alert.warn");
+    await point(note);
+    await say("Drafts now point out every blank, so it can't slip through.", 3600);
+    await say("Until it's filled in, the app won't send it. Automatic follow-ups wait too.", 4200);
+    const box = draft.locator("textarea");
+    await point(box);
+    await box.evaluate((t) => { t.value = t.value.replace("[RATE FOR 1 REEL]", "$650"); t.dispatchEvent(new Event("input")); });
+    await say("Type your number in, and the warning goes away.", 3600);
+    await say("If Gmail or Instagram ever stops connecting, a red bar on every page shows a Reconnect button.", 4400);
+    await say("", 600);
+  },
+
   async "payment-reminders"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");

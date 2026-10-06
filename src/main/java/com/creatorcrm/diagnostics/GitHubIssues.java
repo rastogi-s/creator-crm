@@ -47,6 +47,20 @@ class GitHubIssues {
         return issue(check(r));
     }
 
+    /**
+     * Whether anyone on the internet can read this repo's issues. Anything but a clear "private" counts as public,
+     * so a failed check never sends more than a public repo should get.
+     */
+    boolean isPublic() throws InterruptedException {
+        try {
+            HttpResponse<String> r = send("GET", "/repos/" + repo, null);
+            if (r.statusCode() / 100 != 2) return true;
+            return !json.readTree(r.body()).path("private").asBoolean(false);
+        } catch (IOException e) {
+            return true;
+        }
+    }
+
     Issue get(int number) throws IOException, InterruptedException {
         HttpResponse<String> r = send("GET", "/repos/" + repo + "/issues/" + number, null);
         if (r.statusCode() == 404 || r.statusCode() == 410) return null;

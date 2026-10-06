@@ -102,7 +102,7 @@ class LearningIntegrationTest {
         draftService.markSentManually(d.id);
         WritingExample e = examples.findByOpportunityIdOrderBySentAtDesc(o1.id).getFirst();
         assertThat(e.edited).isTrue();
-        assertThat(e.aiBody).contains("[RATES]");
+        assertThat(e.aiBody).contains("(RATES)");
         assertThat(e.sentBody).contains("$800");
         assertThat(e.gotReply).isFalse();
 

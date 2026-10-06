@@ -338,7 +338,8 @@ public class DraftService {
     /** Why this draft can't be sent via API right now (e.g. outside Instagram's 24h window), if anything. */
     public Optional<String> sendBlockedReason(Draft d) {
         ChannelConnector c = channels.get(d.channel);
-        if (c == null || !c.isConnected()) return Optional.of(d.channel + " is not connected.");
+        if (c == null || !c.isConnected()) return Optional.of((d.channel == Platform.EMAIL ? "Gmail" : d.channel == Platform.INSTAGRAM ? "Instagram" : "This account")
+                + " isn't connected, so this can't be sent from here. Connect it in Settings, or copy it and press I sent it myself.");
         OffsetDateTime lastInbound = d.conversationId == null ? null
                 : messages.findByConversationIdOrderBySentAtAsc(d.conversationId).stream()
                         .filter(m -> m.direction == Direction.INBOUND).map(m -> m.sentAt)
@@ -370,6 +371,9 @@ public class DraftService {
 
     private Draft deliver(Draft d, boolean automatic) {
         sendBlockedReason(d).ifPresent(reason -> { throw new IllegalStateException(reason); });
+        // Body only: subjects often carry tags like "[EXTERNAL]" from the brand's mail system.
+        String blanks = Placeholders.message(d.body);
+        if (blanks != null) throw new IllegalStateException(blanks);
         try {
             ChannelConnector.SentMessage sent = channels.get(d.channel).send(attach(d));
             recordOutbound(d, sent, automatic);

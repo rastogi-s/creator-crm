@@ -30,11 +30,18 @@ class ErrorReporterIntegrationTest {
     record Call(String method, String path, String body) {}
 
     static final List<Call> calls = new CopyOnWriteArrayList<>();
+    static volatile boolean privateRepo = true;
     static final HttpServer github = start();
 
     static HttpServer start() {
         try {
             HttpServer s = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            s.createContext("/repos/acme/crm", ex -> { // the repo itself: is it public?
+                byte[] b = ("{\"private\":" + privateRepo + "}").getBytes(StandardCharsets.UTF_8);
+                ex.sendResponseHeaders(200, b.length);
+                ex.getResponseBody().write(b);
+                ex.close();
+            });
             s.createContext("/repos/acme/crm/issues", ex -> {
                 String body = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 calls.add(new Call(ex.getRequestMethod(), ex.getRequestURI().getPath(), body));
@@ -124,5 +131,33 @@ class ErrorReporterIntegrationTest {
         int before = calls.size();
         assertThat(reporter.reportProblem("Still broken").emailed()).isTrue();
         assertThat(calls).hasSize(before);
+
+        // Public repo: anyone can read the issues, so messages, her note and log lines go by email only.
+        privateRepo = false;
+        reporter.forgetRepoVisibility();
+        secrets.put(SecretName.ERROR_REPORT_TOKEN, "github_pat_test_token_1234567890");
+        LoggerFactory.getLogger("com.creatorcrm.rebook.WinBack").info("Drafting a re-pitch to Glowberry Skin");
+        LoggerFactory.getLogger("com.creatorcrm.rebook.WinBack").error("Could not draft a re-pitch to {}", "Glowberry Skin",
+                new IllegalStateException("Glowberry Skin has no contact"));
+        reporter.sendPending();
+        Call publicIssue = calls.get(calls.size() - 1);
+        assertThat(publicIssue.body()).contains("[auto-report] IllegalStateException in WinBack\"", "java.lang.IllegalStateException",
+                "at com.creatorcrm.diagnostics.ErrorReporterIntegrationTest", "repository is public")
+                .doesNotContain("Glowberry");
+        Mockito.verify(gmail, Mockito.atLeastOnce()).sendPlain(Mockito.eq("dev@example.com"),
+                Mockito.contains("Glowberry"), Mockito.contains("Glowberry"));
+
+        reporter.reportProblem("Glowberry Skin's invoice won't send");
+        Call publicReport = calls.get(calls.size() - 1);
+        assertThat(publicReport.body()).contains("[user-report] Problem reported from the app", "IllegalStateException in WinBack")
+                .doesNotContain("Glowberry");
+    }
+
+    @Test
+    void codeOnlyKeepsFramesAndDropsMessages() {
+        String trace = "java.lang.IllegalStateException: Glowberry failed\n\tat com.x.A.run(A.java:3)\n"
+                + "Caused by: java.io.IOException: 401 for brand\n\tat com.x.B.go(B.java:9)\n\t... 4 more";
+        assertThat(ErrorReporter.codeOnly(trace)).isEqualTo("java.lang.IllegalStateException\n\tat com.x.A.run(A.java:3)\n"
+                + "Caused by: java.io.IOException\n\tat com.x.B.go(B.java:9)\n\t... 4 more");
     }
 }

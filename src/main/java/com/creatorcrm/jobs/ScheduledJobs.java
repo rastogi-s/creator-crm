@@ -11,6 +11,7 @@ import com.creatorcrm.domain.Enums.FollowUpStatus;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.drafts.DraftService;
+import com.creatorcrm.drafts.Placeholders;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.invoices.PaymentReminders;
 import com.creatorcrm.rebook.WinBack;
@@ -156,6 +157,10 @@ public class ScheduledJobs {
                     .map(f -> f.status == FollowUpStatus.SCHEDULED && !f.scheduledDate.isAfter(today))
                     .orElse(false);
             if (!stillDue || drafts.sendBlockedReason(d).isPresent()) continue;
+            if (Placeholders.message(d.body) != null) {
+                log.info("Follow-up draft {} has blanks to fill in; leaving it in Drafts", d.id);
+                continue;
+            }
             try {
                 drafts.sendFollowUpAutomatically(d.id);
                 sent++;

@@ -90,6 +90,8 @@ public class ErrorReporter {
     private final Map<String, Recent> recent = new LinkedHashMap<>();
     private volatile Instant lastSentAt;
     private volatile String lastError;
+    /** Whether the issues repo is public; null until asked. */
+    private volatile Boolean repoPublic;
 
     public ErrorReporter(AppStateRepo state, SecretStore secrets, SettingsService settings, UpdateService updates,
                          Environment env, GmailConnector gmail,
@@ -197,13 +199,15 @@ public class ErrorReporter {
             try {
                 Optional<Integer> known = state.findById(ISSUE_KEY + fp).map(s -> Integer.parseInt(s.stateValue));
                 GitHubIssues.Issue existing = known.isPresent() ? gh.get(known.get()) : null;
+                boolean open = isPublic(gh);
                 if (existing != null && existing.open()) {
-                    body = commentBody(r, p, count);
+                    body = open ? publicCommentBody(p, count) : commentBody(r, p, count);
                     gh.comment(existing.number(), cap(body));
                     url = existing.url();
                 } else {
-                    body = issueBody(r, fp, p, count, existing);
-                    GitHubIssues.Issue created = gh.create(cap(r.redact(p.title)), cap(body), List.of("auto-report"));
+                    body = open ? publicIssueBody(fp, p, count, existing) : issueBody(r, fp, p, count, existing);
+                    String title = open ? publicTitle(p.latest) : r.redact(p.title);
+                    GitHubIssues.Issue created = gh.create(cap(title), cap(body), List.of("auto-report"));
                     put(ISSUE_KEY + fp, Integer.toString(created.number()));
                     url = created.url();
                 }
@@ -270,7 +274,10 @@ public class ErrorReporter {
         String failure = null;
         if (githubReady()) {
             try {
-                url = client().create(cap(title), cap(b.toString()), List.of("user-report")).url();
+                GitHubIssues gh = client();
+                url = isPublic(gh)
+                        ? gh.create("[user-report] Problem reported from the app", cap(publicReportBody()), List.of("user-report")).url()
+                        : gh.create(cap(title), cap(b.toString()), List.of("user-report")).url();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("Sending was interrupted");
@@ -407,6 +414,85 @@ public class ErrorReporter {
         if (c.stackTrace() != null) b.append(details("Stack trace", r, List.of(c.stackTrace())));
         b.append(details("Log lines before it", r, c.recentLines())).append(footer());
         return b.toString();
+    }
+
+    // ---------------------------------------------------------------- public repos
+
+    /**
+     * Anyone can read a public repo's issues, so those get only what the code says (exception types, where, stack
+     * frames). Her note, error messages and log lines can name brands and deals; they go by email only.
+     */
+    boolean isPublic(GitHubIssues gh) throws InterruptedException {
+        Boolean known = repoPublic;
+        if (known != null) return known;
+        boolean open = gh.isPublic(); // a failed check counts as public until the app restarts: the safe side
+        repoPublic = open;
+        return open;
+    }
+
+    void forgetRepoVisibility() {
+        repoPublic = null;
+    }
+
+    private static String publicTitle(LogCapture.Captured c) {
+        String what = c.exception() != null ? c.exception().substring(c.exception().lastIndexOf('.') + 1) : "Error";
+        String where = c.logger().substring(c.logger().lastIndexOf('.') + 1);
+        return "[auto-report] " + what + " in " + where;
+    }
+
+    private String publicIssueBody(String fp, Pending p, int count, GitHubIssues.Issue closedBefore) {
+        LogCapture.Captured c = p.latest;
+        StringBuilder b = new StringBuilder()
+                .append("<!-- crm-fingerprint: ").append(fp).append(" -->\n")
+                .append("**Automatic error report** from Creator CRM ").append(environment()).append("\n\n");
+        if (closedBefore != null) b.append("This happened again after ").append(closedBefore.url()).append(" was closed.\n\n");
+        b.append("- **Where:** `").append(c.logger()).append("`\n")
+                .append("- **Times:** ").append(count).append(", first ").append(WHEN.format(p.first.at()))
+                .append(", latest ").append(WHEN.format(c.at())).append("\n\n");
+        if (c.stackTrace() != null) {
+            b.append("<details><summary>Stack trace (code only)</summary>\n\n```\n").append(fence(codeOnly(c.stackTrace())))
+                    .append("\n```\n</details>\n\n");
+        }
+        return b.append(PUBLIC_NOTE).toString();
+    }
+
+    private String publicCommentBody(Pending p, int count) {
+        return "Happened " + count + " more time" + (count == 1 ? "" : "s") + " (latest " + WHEN.format(p.latest.at()) + ") on "
+                + environment() + ".\n\n" + PUBLIC_NOTE;
+    }
+
+    private String publicReportBody() {
+        StringBuilder b = new StringBuilder("**Problem reported from Creator CRM** ").append(environment()).append("\n\n");
+        synchronized (pending) {
+            if (!recent.isEmpty()) {
+                b.append("**Errors since the app started:**\n");
+                recent.values().forEach(x -> b.append("- ").append(fence(x.title().replaceFirst("^(\\[auto-report\\] \\S+ in \\S+):.*$", "$1")))
+                        .append(" (").append(x.count()).append("×)").append(x.issueUrl() == null ? "" : " " + x.issueUrl()).append('\n'));
+                b.append('\n');
+            }
+        }
+        return b.append(emailReady() ? PUBLIC_NOTE
+                : "_This repository is public, so her note and the log lines were left out. Turn on email reports in Settings to receive them._\n")
+                .toString();
+    }
+
+    private static final String PUBLIC_NOTE =
+            "_This repository is public, so messages, her note and log lines were left out here. They were emailed to the developer if email reports are on._\n";
+
+    /** Stack frames and exception class names; the messages after "Exception:" are dropped. */
+    static String codeOnly(String trace) {
+        StringBuilder b = new StringBuilder();
+        for (String line : trace.split("\\R")) {
+            String t = line.strip();
+            if (t.startsWith("at ") || t.matches("\\.\\.\\. \\d+ (more|common frames omitted)")) {
+                b.append(line).append('\n');
+            } else {
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("^(\\s*(?:Caused by: |Suppressed: )?)([\\w$.]+(?:Exception|Error|Throwable))\\b.*").matcher(line);
+                if (m.matches()) b.append(m.group(1)).append(m.group(2)).append('\n');
+            }
+        }
+        return b.toString().stripTrailing();
     }
 
     private String commentBody(Redactor r, Pending p, int count) {
