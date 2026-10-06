@@ -5,6 +5,9 @@
 #
 # Run on the target OS (jpackage can't cross-build). Needs JDK 21+ on PATH/JAVA_HOME and the app jar in
 # target/ (./mvnw package). Windows .msi/.exe also needs WiX Toolset 3.x on PATH.
+#
+# APP_IMAGE=<folder> packages an app image made earlier with `package.sh app-image` instead of the jar. The
+# release build uses it on Windows to code-sign Creator CRM.exe before it goes into the .msi.
 set -euo pipefail
 
 TYPE="${1:?usage: package.sh <msi|exe|dmg|pkg|deb|rpm|app-image> [version]}"
@@ -18,21 +21,28 @@ VERSION="${VERSION%%-*}"   # installers need plain numbers: 1.2.3
 JPACKAGE="jpackage"
 if [ -n "${JAVA_HOME:-}" ]; then JPACKAGE="$JAVA_HOME/bin/jpackage"; fi
 
-JAR="$(ls -t target/creator-manager-*.jar | grep -v '\.original$' | head -1)"   # newest build
-rm -rf target/jpackage-input target/installer
-mkdir -p target/jpackage-input target/installer
-cp "$JAR" target/jpackage-input/creator-crm.jar
+if [ -n "${APP_IMAGE:-}" ]; then
+  # Copied out first: target/installer is cleared below, and an earlier app-image build lives there.
+  rm -rf target/app-image-input && mkdir -p target/app-image-input && cp -R "$APP_IMAGE" target/app-image-input/
+  SOURCE=(--app-image "target/app-image-input/$(basename "$APP_IMAGE")")
+else
+  JAR="$(ls -t target/creator-manager-*.jar | grep -v '\.original$' | head -1)"   # newest build
+  rm -rf target/jpackage-input
+  mkdir -p target/jpackage-input
+  cp "$JAR" target/jpackage-input/creator-crm.jar
+  SOURCE=(--input target/jpackage-input --main-jar creator-crm.jar
+    --java-options "-Dcrm.desktop=true" --java-options "-Xmx768m")
+fi
+rm -rf target/installer
+mkdir -p target/installer
 
 COMMON=(
-  --input target/jpackage-input
-  --main-jar creator-crm.jar
+  "${SOURCE[@]}"
   --name "Creator CRM"
   --app-version "$VERSION"
   --vendor "Creator CRM contributors"
   --description "Brand-collaboration manager for content creators"
   --copyright "MIT License"
-  --java-options "-Dcrm.desktop=true"
-  --java-options "-Xmx768m"
   --dest target/installer
 )
 
