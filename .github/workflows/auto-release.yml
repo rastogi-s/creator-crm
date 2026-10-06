@@ -59,6 +59,8 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       tag: ${{ needs.version.outputs.tag }}
+    secrets: inherit    # Windows code signing (docs/code-signing.md); unused until it's set up
     permissions:
       contents: write   # create the GitHub Release
       packages: write   # push the Docker image
+      id-token: write   # sign in to Azure for Windows code signing

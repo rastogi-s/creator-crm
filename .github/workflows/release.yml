@@ -3,6 +3,12 @@
 # Docker image to ghcr.io, and creates a GitHub Release with everything attached. Installed apps see the new
 # release within a few hours and offer "Update now". Tags with a suffix (v1.1.0-beta.1) become pre-releases, which
 # installed apps ignore: use them to try a build yourself first.
+#
+# Windows code signing (optional, see docs/code-signing.md): set the repository variables AZURE_SIGNING_ENDPOINT,
+# AZURE_SIGNING_ACCOUNT and AZURE_SIGNING_PROFILE and the secrets AZURE_CLIENT_ID, AZURE_TENANT_ID and
+# AZURE_SUBSCRIPTION_ID. Then Creator CRM.exe and the .msi are signed with Azure Artifact Signing, so Windows
+# shows "Creator CRM" with a verified publisher instead of an "unknown publisher" warning. Without them the
+# installers are built unsigned, as before.
 name: Release
 
 on:
@@ -62,6 +68,13 @@ jobs:
             type: deb
             suffix: linux-amd64
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write   # signs in to Azure for Windows code signing (OpenID Connect, no stored password)
+    env:
+      # Only for the automatic release from main: Azure trusts this repo's main branch (docs/code-signing.md).
+      # A tag pushed by hand still builds, unsigned.
+      SIGN_WINDOWS: ${{ startsWith(matrix.os, 'windows') && vars.AZURE_SIGNING_ENDPOINT != '' && github.ref == 'refs/heads/main' && 'true' || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -82,8 +95,60 @@ jobs:
           Expand-Archive wix.zip -DestinationPath "$env:RUNNER_TEMP\wix"
           "$env:RUNNER_TEMP\wix" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Build installer
+        if: env.SIGN_WINDOWS != 'true'
         shell: bash
         run: bash packaging/package.sh ${{ matrix.type }} "${TAG#v}"
+      # Signed Windows build: make the app folder, sign Creator CRM.exe, package that folder as the .msi, sign the .msi.
+      - name: Build the app folder (Windows, signed)
+        if: env.SIGN_WINDOWS == 'true'
+        shell: bash
+        run: |
+          bash packaging/package.sh app-image "${TAG#v}"
+          mkdir -p "$RUNNER_TEMP/app" && mv "target/installer/Creator CRM" "$RUNNER_TEMP/app/"
+      - name: Sign in to Azure
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign Creator CRM.exe
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ runner.temp }}\app\Creator CRM
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Build the .msi from the signed app folder
+        if: env.SIGN_WINDOWS == 'true'
+        shell: bash
+        run: APP_IMAGE="$RUNNER_TEMP/app/Creator CRM" bash packaging/package.sh msi "${TAG#v}"
+      - name: Sign the .msi
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\target\installer
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Check the signatures
+        if: env.SIGN_WINDOWS == 'true'
+        shell: pwsh
+        run: |
+          foreach ($f in @("$env:RUNNER_TEMP\app\Creator CRM\Creator CRM.exe") + (Get-ChildItem target\installer\*.msi).FullName) {
+            $s = Get-AuthenticodeSignature -LiteralPath $f
+            "$f : $($s.Status) $($s.SignerCertificate.Subject)"
+            if ($s.Status -ne 'Valid') { Write-Error "Not signed: $f"; exit 1 }
+          }
       - name: Name it for the release page
         shell: bash
         run: |

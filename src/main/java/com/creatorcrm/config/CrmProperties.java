@@ -33,7 +33,7 @@ public record CrmProperties(
     public record Schedule(String syncCron, String morningCheckCron) {}
 
     /**
-     * In-app updates: the app reads the latest GitHub release of {@code repo} and can install it (Windows).
+     * In-app updates: the app reads the latest GitHub release of {@code repo} and can install it (Windows and macOS desktop apps).
      *
      * @param simulateLatest demo/screen recordings only: pretend this version ("next" = one minor up) is the latest, without the network
      * @param localVideoDir  demo/screen recordings only: serve walkthrough videos from this folder instead of the release

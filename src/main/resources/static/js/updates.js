@@ -5,7 +5,7 @@
 "use strict";
 
 // ---------- updates, What's New, Help ----------
-// The app checks GitHub for a new release; on the Windows app "Update now" backs up, installs and reopens.
+// The app checks GitHub for a new release; in the Windows and Mac apps "Update now" backs up, installs and reopens.
 
 let updateStatus = null;
 let updateTimer = null;

@@ -46,15 +46,19 @@ import org.springframework.stereotype.Service;
  * Keeps an installed app up to date from the project's GitHub releases.
  *
  * <p>Checking is read-only and needs no account (the repo is public). Installing only happens when the user
- * clicks "Update now", and only on the Windows desktop app: download the {@code .msi}, verify it against the
- * release's {@code SHA256SUMS.txt}, back up the embedded database, then hand over to a small PowerShell script
- * that waits for this app to quit, runs the installer (it upgrades in place) and starts the app again.
+ * clicks "Update now", and only in the desktop app on Windows or a Mac: download the installer for this computer,
+ * verify it against the release's {@code SHA256SUMS.txt}, back up the embedded database, then hand over to a small
+ * script that waits for this app to quit, installs the new version and starts the app again. On Windows that's
+ * PowerShell running the {@code .msi} (it upgrades in place); on a Mac it's bash copying the new
+ * {@code Creator CRM.app} out of the {@code .dmg} over the old one.
  */
 @Service
 public class UpdateService {
     private static final Logger log = LoggerFactory.getLogger(UpdateService.class);
     private static final String AUTO_CHECK_KEY = "updates.autoCheck";
-    private static final String WINDOWS_SUFFIX = "-windows-x64.msi";
+    static final String WINDOWS_SUFFIX = "-windows-x64.msi";
+    static final String MAC_ARM_SUFFIX = "-macos-apple-silicon.dmg";
+    static final String MAC_INTEL_SUFFIX = "-macos-intel.dmg";
     private static final long MAX_INSTALLER_BYTES = 600L * 1024 * 1024;
     private static final int KEEP_BACKUPS = 3;
 
@@ -177,9 +181,13 @@ public class UpdateService {
     public Status status() {
         Release l = latest;
         boolean available = l != null && Versions.isNewer(l.version(), currentVersion);
-        boolean installable = available && installSupported() && l.asset(WINDOWS_SUFFIX).isPresent();
+        String suffix = installerSuffix();
+        String macProblem = installSupported() && !isSimulated() && suffix.endsWith(".dmg")
+                ? macInstallProblem(macAppBundle(launcherPath())) : null;
+        boolean installable = available && installSupported() && macProblem == null && l.asset(suffix).isPresent();
         String hint = !available ? null
                 : installable ? null
+                : macProblem != null ? macProblem
                 : DesktopMode.enabled() ? "Download the installer for your computer from the release page and run it. Your data is kept."
                 : "Update this install the way you set it up (for Docker: pull the new image and restart).";
         return new Status(currentVersion, l == null ? null : l.version(), available, l == null ? null : l.name(),
@@ -199,8 +207,42 @@ public class UpdateService {
     }
 
     private boolean installSupported() {
-        return isSimulated() || (DesktopMode.enabled()
-                && System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"));
+        return isSimulated() || (DesktopMode.enabled() && installerSuffix() != null);
+    }
+
+    /** The release file this computer installs from, e.g. {@code -windows-x64.msi}. Null where the app can't update itself. */
+    private String installerSuffix() {
+        return isSimulated() ? WINDOWS_SUFFIX
+                : installerSuffix(System.getProperty("os.name", ""), System.getProperty("os.arch", ""));
+    }
+
+    static String installerSuffix(String osName, String osArch) {
+        String os = osName.toLowerCase(Locale.ROOT);
+        if (os.contains("win")) return WINDOWS_SUFFIX;
+        if (os.contains("mac")) return osArch.toLowerCase(Locale.ROOT).matches("aarch64|arm64") ? MAC_ARM_SUFFIX : MAC_INTEL_SUFFIX;
+        return null;
+    }
+
+    /** The {@code .app} folder the running app was started from, found from its launcher inside {@code Contents/MacOS}. */
+    static Path macAppBundle(String launcher) {
+        if (launcher == null || launcher.isBlank()) return null;
+        for (Path p = Path.of(launcher); p != null; p = p.getParent()) {
+            if (p.getFileName() != null && p.getFileName().toString().endsWith(".app")) return p;
+        }
+        return null;
+    }
+
+    /** Why "Update now" can't replace this copy of the app, in her words; null when it can. */
+    static String macInstallProblem(Path app) {
+        String move = "Drag Creator CRM into your Applications folder, open it from there, and Update now will work.";
+        if (app == null) return "Download the installer for your Mac from the release page and run it. Your data is kept.";
+        String path = app.toString();
+        // Started straight from the downloaded disk image, or from a read-only copy macOS made of a quarantined app
+        if (path.startsWith("/Volumes/") || path.contains("/AppTranslocation/")) return move;
+        if (!Files.isWritable(app) || app.getParent() == null || !Files.isWritable(app.getParent())) {
+            return "This Mac account can't change the Creator CRM app in " + app.getParent() + ". " + move;
+        }
+        return null;
     }
 
     private boolean isSimulated() {
@@ -212,7 +254,8 @@ public class UpdateService {
         if ("next".equals(v)) v = Versions.nextMinor(currentVersion);
         return new Release(v, "v" + v, "Creator CRM " + v, "Demo release used for walkthrough videos.",
                 config.downloadBaseUrl() + "/" + config.repo() + "/releases",
-                List.of(new Asset("Creator-CRM-" + v + WINDOWS_SUFFIX, "")));
+                List.of(new Asset("Creator-CRM-" + v + WINDOWS_SUFFIX, ""), new Asset("Creator-CRM-" + v + MAC_ARM_SUFFIX, ""),
+                        new Asset("Creator-CRM-" + v + MAC_INTEL_SUFFIX, "")));
     }
 
     // ---------------------------------------------------------------- installing
@@ -249,17 +292,17 @@ public class UpdateService {
             installing.set(false);
             return;
         }
-        Asset msi = release.asset(WINDOWS_SUFFIX).orElseThrow();
+        Asset installer = release.asset(installerSuffix()).orElseThrow();
         Asset sums = release.asset("SHA256SUMS.txt")
                 .orElseThrow(() -> new IOException("the release has no SHA256SUMS.txt to check the download against"));
 
         Path dir = Files.createDirectories(installRoot().resolve("updates"));
         try (Stream<Path> old = Files.list(dir)) {
-            old.filter(p -> p.getFileName().toString().endsWith(".msi")).forEach(p -> p.toFile().delete());
+            old.filter(p -> p.getFileName().toString().matches(".*\\.(msi|dmg)$")).forEach(p -> p.toFile().delete());
         }
-        String expected = expectedHash(fetchText(sums.url()), msi.name());
-        Path file = dir.resolve(msi.name());
-        download(msi.url(), file);
+        String expected = expectedHash(fetchText(sums.url()), installer.name());
+        Path file = dir.resolve(installer.name());
+        download(installer.url(), file);
 
         installState = "Checking the download…";
         String actual = sha256(file);
@@ -273,12 +316,23 @@ public class UpdateService {
         log.info("Pre-update backup: {}", backup == null ? "skipped (not the embedded database)" : backup);
 
         installState = "Installing version " + release.version() + ". Creator CRM will close and reopen by itself.";
-        Path script = dir.resolve("install-update.ps1");
-        Files.writeString(script, windowsScript(ProcessHandle.current().pid(), file, dir.resolve("install-update.log"),
-                launcherPath()), StandardCharsets.UTF_8);
-        new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-WindowStyle", "Hidden", "-File", script.toString())
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD)
+        ProcessBuilder handOver;
+        if (file.getFileName().toString().endsWith(".dmg")) {
+            Path app = macAppBundle(launcherPath());
+            String problem = macInstallProblem(app);
+            if (problem != null) throw new IOException(problem);
+            Path script = dir.resolve("install-update.sh");
+            Files.writeString(script, macScript(ProcessHandle.current().pid(), file, dir.resolve("install-update.log"), app),
+                    StandardCharsets.UTF_8);
+            handOver = new ProcessBuilder("/bin/bash", script.toString());
+        } else {
+            Path script = dir.resolve("install-update.ps1");
+            Files.writeString(script, windowsScript(ProcessHandle.current().pid(), file, dir.resolve("install-update.log"),
+                    launcherPath()), StandardCharsets.UTF_8);
+            handOver = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                    "-WindowStyle", "Hidden", "-File", script.toString());
+        }
+        handOver.redirectOutput(ProcessBuilder.Redirect.DISCARD).redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start();
         // Give the browser a moment to show the message, then quit so the installer can replace our files.
         Thread.sleep(2500);
@@ -311,6 +365,43 @@ public class UpdateService {
                 "if (-not (Test-Path -LiteralPath $app)) { $app = Join-Path $env:LOCALAPPDATA 'Creator CRM\\Creator CRM.exe' }",
                 "if (Test-Path -LiteralPath $app) { Start-Process -FilePath $app -ArgumentList '" + DesktopMode.AFTER_UPDATE_ARG + "' }",
                 "");
+    }
+
+    /**
+     * bash for a Mac: wait for this app to quit, open the disk image without showing it in Finder (answering yes to
+     * its licence page), copy the new app next to the old one, swap them, and start it. If the copy fails, the old
+     * app stays where it was and still opens.
+     */
+    static String macScript(long pid, Path dmg, Path logFile, Path app) {
+        return String.join("\n",
+                "#!/bin/bash",
+                "exec >>" + sh(logFile.toString()) + " 2>&1",
+                "APP=" + sh(app.toString()),
+                "DMG=" + sh(dmg.toString()),
+                "echo \"$(date) updating $APP from $DMG\"",
+                "for i in $(seq 1 120); do kill -0 " + pid + " 2>/dev/null || break; sleep 1; done",
+                "sleep 1",
+                "MNT=$(mktemp -d \"${TMPDIR:-/tmp}/creator-crm-update.XXXXXX\")",
+                "if yes | hdiutil attach -nobrowse -noautoopen -noverify -mountpoint \"$MNT\" \"$DMG\"; then",
+                "  SRC=$(find \"$MNT\" -maxdepth 1 -name '*.app' | head -n 1)",
+                "  if [ -n \"$SRC\" ] && rm -rf \"$APP.new\" && ditto \"$SRC\" \"$APP.new\"; then",
+                "    rm -rf \"$APP.old\"",
+                "    if mv \"$APP\" \"$APP.old\"; then",
+                "      if mv \"$APP.new\" \"$APP\"; then rm -rf \"$APP.old\"; else mv \"$APP.old\" \"$APP\"; fi",
+                "    fi",
+                "  fi",
+                "  rm -rf \"$APP.new\"",
+                "  hdiutil detach \"$MNT\" -quiet || hdiutil detach \"$MNT\" -force -quiet",
+                "fi",
+                "rmdir \"$MNT\" 2>/dev/null",
+                "xattr -dr com.apple.quarantine \"$APP\" 2>/dev/null",
+                "open -n \"$APP\" --args " + DesktopMode.AFTER_UPDATE_ARG,
+                "");
+    }
+
+    /** A single-quoted bash word: the only character to escape is the single quote itself. */
+    private static String sh(String s) {
+        return "'" + s.replace("'", "'\\''") + "'";
     }
 
     private static String ps(String s) {
