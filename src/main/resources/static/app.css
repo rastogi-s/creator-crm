@@ -225,6 +225,17 @@ label.check input { width: auto; }
 }
 .steps > li.done::before { content: "✓"; background: var(--ok-soft); color: var(--ok); }
 
+/* ---------- icons ---------- */
+.ico-inline {
+  width: 1.1em; height: 1.1em; vertical-align: -.18em; flex-shrink: 0;
+  fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.card > h3 .ico-inline { color: var(--accent); margin-right: .4rem; }
+.status-tag { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.status-tag .ico-inline { color: var(--muted); }
+.chip .ico-inline { margin-right: .3rem; }
+.links-empty-art .ico-inline { width: 2.5rem; height: 2.5rem; color: var(--accent); }
+
 /* ---------- Settings tabs ---------- */
 .settings-tabs { display: flex; gap: .25rem; overflow-x: auto; border-bottom: 1px solid var(--border); margin: .5rem 0 1rem; }
 .settings-tab {

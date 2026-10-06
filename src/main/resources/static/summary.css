@@ -43,6 +43,10 @@
   flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%;
   display: grid; place-items: center; background: var(--surface-2); font-size: .95rem;
 }
+.eod-stat-icon .ico-inline, .eod-icon .ico-inline { width: 1.2rem; height: 1.2rem; vertical-align: 0; }
+.eod-stat.ok .eod-stat-icon { color: var(--ok); }
+.eod-stat.warn .eod-stat-icon { color: var(--warn); }
+.eod-stat.accent .eod-stat-icon { color: var(--accent); }
 .eod-done .title { font-weight: 500; }
 .eod-more { margin-top: .5rem; }
 

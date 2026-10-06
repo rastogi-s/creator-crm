@@ -208,7 +208,7 @@ public class WinBack {
         if (on != null) return new Collab(o, on, amount, currency); // paid: that's when it finished
         for (Activity a : activity.findByOpportunityIdOrderByAtDesc(o.id)) {
             if (!Activity.STATUS_CHANGED.equals(a.type) || a.text == null) continue;
-            if (CONTENT_UP.stream().anyMatch(s -> a.text.endsWith("→ " + s.label))) {
+            if (CONTENT_UP.stream().anyMatch(s -> endsWithStatus(a.text, s))) {
                 on = a.at.atZoneSameInstant(settings.zone()).toLocalDate();
                 break;
             }
@@ -242,5 +242,10 @@ public class WinBack {
         if (a == null) return b;
         if (b == null) return a;
         return b.isAfter(a) ? b : a;
+    }
+
+    /** "Brand: X → Posted". History written before 1.34 has an emoji before each status name ("→ ✅ Posted"). */
+    static boolean endsWithStatus(String text, OpportunityStatus s) {
+        return text.matches("(?is).*→ (\\S+ )?" + java.util.regex.Pattern.quote(s.label) + "\\s*");
     }
 }

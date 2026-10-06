@@ -94,6 +94,64 @@
     return iso ? new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
   }
 
+  // ---------- icons ----------
+  // One line-drawn icon set, in the same style as the tab bar, instead of emoji (which look different on every
+  // computer and phone). icon("mail") is decorative; screen readers read the words next to it.
+  const ICONS = {
+    check: "M5 12.5l4.5 4.5L19 7",
+    x: "M6 6l12 12M18 6L6 18",
+    alert: "M12 4 2.5 20h19zM12 10v4.5M12 17.5h.01",
+    mail: "M3.5 6.5h17v11a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1zm0 0 8.5 6.5 8.5-6.5",
+    money: "M3.5 7h17v10h-17zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
+    calendar: "M4 6.5h16v13.5H4zM4 10.5h16M8.5 4v4M15.5 4v4",
+    bell: "M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0",
+    repeat: "M4 11V9a3 3 0 0 1 3-3h12l-3-3M20 13v2a3 3 0 0 1-3 3H5l3 3",
+    link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+    clip: "M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7",
+    chart: "M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3",
+    bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z",
+    send: "M21 3 10 14M21 3l-7 18-4-7-7-4z",
+    chat: "M4 5h16v11H9l-5 4z",
+    sparkle: "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6",
+    sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4",
+    hourglass: "M7 3.5h10M7 20.5h10M8 3.5c0 4 8 5 8 8.5s-8 4.5-8 8.5M16 3.5c0 4-8 5-8 8.5s8 4.5 8 8.5",
+    camera: "M4 8h3.5L9 5.5h6L16.5 8H20v11H4zM12 10.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+    pen: "M4 20l4-1 11-11-3-3L5 16zM14 7l3 3",
+    box: "M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5zM3.5 7.5 12 12l8.5-4.5M12 12v9",
+    film: "M4 6h12v12H4zM16 10l4-2.5v9L16 14",
+    eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z",
+    inbox: "M3.5 13.5 6 5h12l2.5 8.5V19h-17zM3.5 13.5H9l1 2h4l1-2h5.5",
+    snow: "M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9",
+    checkCircle: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM8 12.5l3 3 5-6",
+    xCircle: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9 9l6 6M15 9l-6 6",
+  };
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  function icon(name) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("class", "ico-inline");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", ICONS[name] || ICONS.sparkle);
+    svg.appendChild(path);
+    return svg;
+  }
+
+  const STATUS_ICONS = { NEW_LEAD: "sparkle", PITCHED: "send", AWAITING_MY_REPLY: "inbox", NEGOTIATING: "money",
+    CONTRACT_PENDING: "pen", CONTRACT_TO_SIGN: "pen", PRODUCT_PENDING: "box", PRODUCT_RECEIVED: "box",
+    CONTENT_TO_CREATE: "film", AWAITING_APPROVAL: "eye", SCHEDULED_TO_POST: "calendar", POSTED: "checkCircle",
+    PAYMENT_PENDING: "money", FOLLOW_UP_NEEDED: "repeat", COLD: "snow", CLOSED: "xCircle" };
+
+  // A deal's status with its icon. Older saved text may still start with an emoji; that's dropped.
+  function statusTag(key, label) {
+    return el("span", { class: "status-tag" }, icon(STATUS_ICONS[key]), stripEmoji(label || pretty(key)));
+  }
+
+  function stripEmoji(text) {
+    return String(text).replace(/^[\p{Extended_Pictographic}️‍\s]+/u, "");
+  }
+
   function card(title, ...children) {
     return el("div", { class: "card" }, title ? el("h3", {}, title) : null, ...children);
   }
@@ -275,11 +333,11 @@
         el("summary", {}, el("h3", {}, "Everything else for today (" + rest.length + ")")),
         itemList(rest, "", false)));
     }
-    root.appendChild(card("📌 Follow-ups", followUpList(t.followUps)));
+    root.appendChild(card([icon("bell"), "Follow-ups"], followUpList(t.followUps)));
     if (t.rebook && t.rebook.length) root.appendChild(rebookCard(t.rebook));
 
     if (t.approvals.length) {
-      root.appendChild(card("✉️ Drafts awaiting your approval",
+      root.appendChild(card([icon("mail"), "Drafts awaiting your approval"],
         el("ul", { class: "list" }, t.approvals.map((a) => el("li", { class: "item" },
           el("div", { class: "body" }, el("div", { class: "title" }, a.brand + " — " + pretty(a.type)),
             el("div", { class: "detail" }, a.preview)),
@@ -287,16 +345,16 @@
     }
 
     const o = t.newOpportunities;
-    root.appendChild(card("💰 New opportunities (last 24h)",
+    root.appendChild(card([icon("money"), "New opportunities (last 24h)"],
       el("p", {}, o.paid + " paid · " + o.gifted + " gifted · " + o.affiliate + " affiliate · " + o.other + " other"),
       o.items.length ? el("ul", {}, o.items.map((s) => el("li", {}, s))) : null));
 
-    root.appendChild(card("📅 Upcoming", itemList(t.upcoming, "Nothing scheduled in the next two weeks.", false)));
+    root.appendChild(card([icon("calendar"), "Upcoming"], itemList(t.upcoming, "Nothing scheduled in the next two weeks.", false)));
   }
 
   // Win back past brands: re-pitches drafted for brands she worked with before, a few each week.
   function rebookCard(items) {
-    const c = card("🔁 Rebook past brands",
+    const c = card([icon("repeat"), "Rebook past brands"],
       el("p", { class: "small muted" }, "Brands that paid you and have gone quiet, or gave you a gifted collab a few weeks ago. "
         + "A short re-pitch is ready for each; nothing is sent until you approve it."),
       el("ul", { class: "list" }, items.map((it) => el("li", { class: "item" },
@@ -332,7 +390,7 @@
     return el("div", { class: "task-about" },
       brief ? el("p", { class: "brief" }, brief) : null,
       ok.length ? el("div", { class: "chips links" }, ok.map((l) =>
-        el("a", { class: "chip", href: l.url, target: "_blank", rel: "noopener noreferrer", title: l.url }, "🔗 " + (l.label || "Link")))) : null);
+        el("a", { class: "chip", href: l.url, target: "_blank", rel: "noopener noreferrer", title: l.url }, icon("link"), " " + (l.label || "Link")))) : null);
   }
 
   // One click to the email a to-do came from: in the app (works offline, for DMs too) and in Gmail.
@@ -366,7 +424,7 @@
         it.kind === "INVOICE" ? el("button", { class: "small", title: "The money arrived", onclick: action(async () => {
           if (!confirm("Mark this invoice as paid today?")) return;
           await api("POST", "/api/invoices/" + it.refId + "/paid"); route();
-        }, "Marked paid 🎉") }, "Mark paid") : null,
+        }, "Marked paid") }, "Mark paid") : null,
         it.kind === "INVOICE" ? el("button", { class: "small", onclick: () => openInvoice(it.refId) }, "Open")
           : it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null))));
   }
@@ -444,7 +502,7 @@
         el("button", { class: "chip" + (f.status === k ? " active" : ""), "aria-pressed": String(f.status === k),
           title: "Show only " + (statuses[k] || pretty(k)),
           onclick: () => { f.status = f.status === k ? "" : k; statusSelect.value = f.status; save(); draw(); } },
-          (statuses[k] || pretty(k)) + " · " + counts[k])));
+          icon(STATUS_ICONS[k]), stripEmoji(statuses[k] || pretty(k)) + " · " + counts[k])));
       clear(list);
       if (!rows.length) { list.appendChild(card(null, emptyLine("No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch."))); return; }
       const shown = sortRows(rows.filter((r) => (!f.status || r.status === f.status) && (!f.comp || r.compensation === f.comp)
@@ -483,7 +541,7 @@
             } }) : null),
           el("td", {}, el("strong", {}, r.brand), r.campaign ? el("div", { class: "small muted" }, r.campaign) : null),
           el("td", {}, leadBadge(r.lead, r.leadWhy) || el("span", { class: "muted" }, "—")),
-          el("td", {}, r.statusLabel),
+          el("td", {}, statusTag(r.status, r.statusLabel)),
           el("td", {}, pretty(r.type) + " · " + pretty(r.compensation)),
           el("td", {}, r.budget || "—"),
           el("td", {}, r.nextFollowUp ? "#" + r.nextFollowUpNumber + " · " + fmtDate(r.nextFollowUp) : "—"),
@@ -620,7 +678,7 @@
           el("label", { class: "row" }, "Paid on ", paidOn),
           el("button", { class: "primary small", onclick: action(async () => {
             await api("POST", "/api/invoices/" + id + "/paid", { paidDate: paidOn.value || null }); refresh();
-          }, "Marked paid 🎉") }, "Mark paid"),
+          }, "Marked paid") }, "Mark paid"),
           el("button", { class: "small", title: "A polite payment reminder with the invoice attached, for you to check in Drafts", onclick: action(async () => {
             const made = await api("POST", "/api/invoices/" + id + "/reminder"); closeDrawer(); showDraft(made);
           }, "Payment reminder is in Drafts") }, "Write a reminder"),
@@ -994,7 +1052,7 @@
     if (d.deadlines.length) {
       drawer.appendChild(card("Deadlines", el("ul", { class: "list" }, d.deadlines.map((x) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, pretty(x.type) + " — " + fmtDate(x.dueDate)),
-          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "📅 on your calendar · " : "") + (x.description || ""))))))));
+          el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "on your calendar · " : "") + (x.description || ""))))))));
     }
 
     const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : ""), id: "msg-" + m.id },
@@ -1227,7 +1285,7 @@
         renderOutreach(root);
       }, "Contact saved") }, "Save contact"));
     const contact = l.contactEmail
-      ? el("span", {}, "✉️ " + l.contactEmail, safeUrl(l.contactSourceUrl) ? el("a", { href: l.contactSourceUrl, target: "_blank", rel: "noopener noreferrer", class: "small" }, " (source)") : null)
+      ? el("span", {}, icon("mail"), " " + l.contactEmail, safeUrl(l.contactSourceUrl) ? el("a", { href: l.contactSourceUrl, target: "_blank", rel: "noopener noreferrer", class: "small" }, " (source)") : null)
       : el("span", { class: "muted" }, "No published email found");
     return el("div", { class: "item" },
       el("div", { class: "body" },
@@ -1237,9 +1295,9 @@
           l.source === "INSTAGRAM" ? el("span", { class: "badge" }, "Engaged with you") : null,
           l.source === "LOOKUP" ? el("span", { class: "badge" }, "Looked up") : null),
         l.fitReason ? el("div", { class: "detail" }, l.fitReason) : null,
-        l.igCheckedAt ? el("div", { class: "detail" }, "📸 " + [l.igFollowers != null ? compactNum(l.igFollowers) + " followers" : null,
+        l.igCheckedAt ? el("div", { class: "detail" }, icon("camera"), " " + [l.igFollowers != null ? compactNum(l.igFollowers) + " followers" : null,
           l.igBio, l.igPartners ? "Works with " + l.igPartners.split(",").map((h) => "@" + h).join(", ") : null].filter(Boolean).join(" · ")) : null,
-        l.pitchAngle ? el("div", { class: "detail" }, "💡 " + l.pitchAngle) : null,
+        l.pitchAngle ? el("div", { class: "detail" }, icon("bulb"), " " + l.pitchAngle) : null,
         el("div", { class: "small" }, contact),
         contactEdit),
       el("div", { class: "actions" },
@@ -1305,7 +1363,7 @@
 
     if (!links.length) {
       root.appendChild(el("div", { class: "links-empty" },
-        el("div", { class: "links-empty-art", "aria-hidden": "true" }, "🔗"),
+        el("div", { class: "links-empty-art", "aria-hidden": "true" }, icon("link")),
         el("h3", {}, "No links yet"),
         el("p", { class: "muted" }, "Bring everything over from your Linktree in one go, or add links one by one.")));
       root.appendChild(addLinksCard(root, links, linksAddMode || "linktree"));
@@ -1610,8 +1668,8 @@
         el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
         el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
-        d.invoiceId ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
-        d.resultId && d.channel === "EMAIL" ? el("div", { class: "small" }, "📎 ", el("a", { href: "/api/opportunities/" + d.opportunityId + "/results/pdf", target: "_blank", rel: "noopener" }, "Results PDF"), " is attached") : null,
+        d.invoiceId ? el("div", { class: "small" }, icon("clip"), " ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
+        d.resultId && d.channel === "EMAIL" ? el("div", { class: "small" }, icon("clip"), " ", el("a", { href: "/api/opportunities/" + d.opportunityId + "/results/pdf", target: "_blank", rel: "noopener" }, "Results PDF"), " is attached") : null,
         d.type === "PAYMENT_REMINDER" ? el("div", { class: "small muted" }, "Payment reminders always wait for you here, even when follow-ups are sent automatically.") : null,
         d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
@@ -1690,7 +1748,7 @@
 
   // ---------- Day summary ----------
 
-  const DONE_ICONS = { TASK: "✔️", SENT: "📤", REPLY: "💬", MONEY: "💸", PITCH: "📣" };
+  const DONE_ICONS = { TASK: "check", SENT: "send", REPLY: "chat", MONEY: "money", PITCH: "send" };
   const COMP_BADGES = { PAID: ["Paid", "badge ok"], GIFTED: ["Gifted", "badge accent"], AFFILIATE: ["Affiliate", "badge medium"] };
 
   async function renderSummary(root) {
@@ -1711,17 +1769,17 @@
       el("h1", {}, s.headline),
       el("p", { class: "muted" }, sub),
       el("div", { class: "eod-stats" },
-        eodStat("✅", s.done.length, "Done today", "ok", goTo("eod-done")),
-        eodStat("⏳", waiting, "Still to do", waiting ? "warn" : "ok", goTo("eod-waiting")),
-        eodStat("💰", s.newDeals.length, s.newDeals.length === 1 ? "New deal" : "New deals", "accent", goTo("eod-new")),
-        eodStat("🌅", s.tomorrowItems.length, "For tomorrow", "plain", goTo("eod-tomorrow"))),
+        eodStat(icon("checkCircle"), s.done.length, "Done today", "ok", goTo("eod-done")),
+        eodStat(icon("hourglass"), waiting, "Still to do", waiting ? "warn" : "ok", goTo("eod-waiting")),
+        eodStat(icon("money"), s.newDeals.length, s.newDeals.length === 1 ? "New deal" : "New deals", "accent", goTo("eod-new")),
+        eodStat(icon("sun"), s.tomorrowItems.length, "For tomorrow", "plain", goTo("eod-tomorrow"))),
       s.draftsWaiting ? el("div", { class: "eod-nudge" },
-        el("span", {}, "✉️ " + n(s.draftsWaiting, "draft is", "drafts are") + " ready for you to read and send."),
+        el("span", {}, icon("mail"), " " + n(s.draftsWaiting, "draft is", "drafts are") + " ready for you to read and send."),
         el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review drafts")) : null));
 
-    const doneCard = card("✅ What you got done",
+    const doneCard = card([icon("checkCircle"), "What you got done"],
       s.done.length ? showMore(s.done, 6, (items) => el("ul", { class: "list eod-done" }, items.map((d) => el("li", { class: "item" },
-        el("span", { class: "eod-icon", "aria-hidden": "true" }, DONE_ICONS[d.kind] || "✔️"),
+        el("span", { class: "eod-icon", "aria-hidden": "true" }, icon(DONE_ICONS[d.kind] || "check")),
         el("div", { class: "body" },
           el("div", { class: "title" }, d.text),
           el("div", { class: "detail" }, d.brand && !d.text.includes(d.brand) ? d.brand + " · " : "",
@@ -1730,26 +1788,26 @@
         : emptyLine("Nothing ticked off yet. When you finish a task, send a message or a brand writes back, it shows up here."));
     doneCard.id = "eod-done";
 
-    const tomorrowCard = card("🌅 Lined up for tomorrow",
+    const tomorrowCard = card([icon("sun"), "Lined up for tomorrow"],
       s.tomorrowItems.length ? itemList(s.tomorrowItems, "", false)
         : emptyLine("Nothing is due tomorrow yet." + (waiting ? " A good start is whatever is still waiting below." : "")));
     tomorrowCard.id = "eod-tomorrow";
     root.appendChild(el("div", { class: "eod-grid" }, doneCard, tomorrowCard));
 
-    const waitingCard = card("⏳ Still waiting on you");
+    const waitingCard = card([icon("hourglass"), "Still waiting on you"]);
     waitingCard.id = "eod-waiting";
-    if (!waiting) waitingCard.appendChild(emptyLine("All clear. Nothing is waiting on you. 🎉"));
+    if (!waiting) waitingCard.appendChild(emptyLine("All clear. Nothing is waiting on you."));
     if (s.pending.length) {
       waitingCard.appendChild(el("p", { class: "small muted" }, "Most important first. Press Done when you've handled one."));
       waitingCard.appendChild(showMore(s.pending, 5, (items) => itemList(items, "", false)));
     }
     if (s.followUps.length) {
-      waitingCard.appendChild(el("h4", { class: "eod-sub" }, "📌 Follow-ups to send"));
+      waitingCard.appendChild(el("h4", { class: "eod-sub" }, icon("bell"), " Follow-ups to send"));
       waitingCard.appendChild(showMore(s.followUps, 5, followUpList));
     }
     root.appendChild(waitingCard);
 
-    const newCard = card("💰 New deals today",
+    const newCard = card([icon("money"), "New deals today"],
       s.newDeals.length ? showMore(s.newDeals, 6, (items) => el("ul", { class: "list" }, items.map((d) => {
         const [label, cls] = COMP_BADGES[d.compensation] || ["Not sure yet", "badge"];
         return el("li", { class: "item" },
@@ -2125,7 +2183,7 @@
           const r = await api("POST", "/oauth/facebook/start"); location.href = r.url;
         }) }, fb.connected ? "Reconnect Facebook" : "Connect Facebook") : null,
         fb.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/facebook/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
-      fb.connected ? el("p", { class: "small" }, "✅ Connected through the Facebook Page “" + fb.page + "”.") : null));
+      fb.connected ? el("p", { class: "small" }, icon("checkCircle"), " Connected through the Facebook Page “" + fb.page + "”.") : null));
 
     // MCP
     const keyOut = el("div", { class: "code hidden" });
@@ -2142,7 +2200,7 @@
         }) }, c.MCP_API_KEY_HASH ? "Regenerate key" : "Generate key"),
         c.MCP_API_KEY_HASH ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/api/settings/mcp-key/revoke"); renderSettings(root); }, "Key revoked") }, "Revoke") : null),
       keyOut,
-      el("p", { class: "small muted" }, s.mcpAllowSend ? "⚠️ Sending via MCP is enabled." : "MCP can draft but not send; you approve sends here.")));
+      el("p", { class: "small muted" }, s.mcpAllowSend ? "Sending via MCP is turned on." : "MCP can draft but not send; you approve sends here.")));
 
     const [spend, learning, startup, errorReports, autoBackup] = await Promise.all([claudeSpendCard(root), learningCard(root),
       startWithWindowsCard(), errorReportsCard(root, c), autoBackupCard(root)]);
@@ -2178,7 +2236,7 @@
       ? fmt(st.followers) + " followers · " + (st.postsSampled ? st.engagementRatePct + "% engagement over " + st.postsSampled + " posts" : "no recent posts")
         + (st.reach28d != null ? " · " + fmt(st.reach28d) + " accounts reached in 28 days" : "") + " · updated " + fmtDate(st.updatedAt)
       : "Your follower and engagement numbers haven't been read yet.";
-    return el("div", { class: "row" }, el("span", { class: "small" }, "📊 " + text), el("button", { class: "small", onclick: action(async () => {
+    return el("div", { class: "row" }, el("span", { class: "small" }, icon("chart"), " " + text), el("button", { class: "small", onclick: action(async () => {
       await api("POST", "/api/settings/instagram-stats/refresh"); renderSettings(root);
     }, "Instagram stats updated") }, "Refresh stats"));
   }
@@ -2240,7 +2298,7 @@
     if (!a) return;
     b.classList.toggle("error", a.level === "OUT");
     b.classList.toggle("warn", a.level !== "OUT");
-    b.appendChild(el("span", {}, el("strong", {}, a.level === "OUT" ? "⚠️ Out of Claude credits. " : "Claude credits low. "),
+    b.appendChild(el("span", {}, el("strong", {}, a.level === "OUT" ? "Out of Claude credits. " : "Claude credits low. "),
       a.message.replace(/^Claude credits[^.:]*[.:]\s*/, "")));
     b.appendChild(el("span", { class: "spacer" }));
     b.appendChild(el("a", { class: "btn small", href: "#settings?spend" }, "Details"));
@@ -3064,7 +3122,7 @@
       const name = p.channel === "EMAIL" ? "Gmail" : "Instagram";
       const when = fmtDate(p.since.slice(0, 10));
       const row = el("div", { class: "row", title: p.detail },
-        el("span", {}, el("strong", {}, "⚠️ " + name + " stopped connecting on " + when + ". "),
+        el("span", {}, el("strong", {}, name + " stopped connecting on " + when + ". "),
           p.signIn ? "New messages aren't coming in until you reconnect it."
             : "New messages aren't coming in. Check the internet connection, or reconnect it."),
         el("span", { class: "spacer" }),
