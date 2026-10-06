@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.33.0",
+    "title": "An app icon on your phone and laptop",
+    "features": [
+      {
+        "id": "phone-icon",
+        "title": "Add Creator CRM to your phone's home screen",
+        "body": "Open Creator CRM on your phone, then add it to your home screen. On Android, open the browser menu (the three dots) and press Add to Home screen or Install app. On iPhone, press the Share button in Safari, then Add to Home Screen. The orange Creator CRM icon appears next to your other apps, and it opens full screen, without the browser's address bar."
+      },
+      {
+        "id": "app-window",
+        "title": "Its own window on your laptop",
+        "body": "On your laptop, Creator CRM now opens in a window of its own, with no tabs or address bar, and its own button on the taskbar. It uses Microsoft Edge behind the scenes, so if it asks you to sign in once, use the same username and password as always."
+      }
+    ]
+  },
+  {
     "version": "1.30.0",
     "title": "Drafts as an inbox",
     "features": [
