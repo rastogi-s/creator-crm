@@ -6,7 +6,7 @@
       {
         "id": "stage-colours",
         "title": "Every stage has its own colour",
-        "body": "On Deals, each stage now has its own colour and icon: blue for new and waiting, amber while you're talking it through, violet while you're making the content, green once it's posted, and teal while you wait to be paid. The coloured row above your deals is the filter: press a stage to see only those deals, and All to see everything again. On your phone, slide the row sideways to see every stage.",
+        "body": "On Deals, each stage now has its own colour and icon: blue for new and waiting, amber while you're talking it through, violet while you're making the content, green once it's posted, and teal while you wait to be paid. The coloured row above your deals is the filter: press a stage to see only those deals, and All to see everything again.",
         "tryIt": "#pipeline"
       },
       {
