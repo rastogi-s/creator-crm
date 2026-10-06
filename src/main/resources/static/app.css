@@ -13,6 +13,13 @@
   --warn-soft: #fdf1dc;
   --danger: #b91c1c;
   --danger-soft: #fbe4e4;
+  /* Stage and section colours (see STATUS_TONES in core.js) */
+  --blue: #1d4ed8;
+  --blue-soft: #e5edfd;
+  --violet: #6d28d9;
+  --violet-soft: #efe7fd;
+  --teal: #0f766e;
+  --teal-soft: #dcf3ef;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
   color-scheme: light;
@@ -33,6 +40,12 @@
     --warn-soft: #3a2e12;
     --danger: #f87171;
     --danger-soft: #3b1a1a;
+    --blue: #93b4fd;
+    --blue-soft: #1a2540;
+    --violet: #c4b0fd;
+    --violet-soft: #2a2140;
+    --teal: #5eead4;
+    --teal-soft: #12302c;
     --shadow: none;
     color-scheme: dark;
   }
@@ -245,8 +258,41 @@ label.check input { width: auto; }
   fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 .card > h3 .ico-inline { color: var(--accent); margin-right: .4rem; }
-.status-tag { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
-.status-tag .ico-inline { color: var(--muted); }
+
+/* Colour by meaning: each tone sets --tone and --tone-soft for whatever uses it. */
+.tone-blue { --tone: var(--blue); --tone-soft: var(--blue-soft); }
+.tone-amber { --tone: var(--warn); --tone-soft: var(--warn-soft); }
+.tone-violet { --tone: var(--violet); --tone-soft: var(--violet-soft); }
+.tone-green { --tone: var(--ok); --tone-soft: var(--ok-soft); }
+.tone-teal { --tone: var(--teal); --tone-soft: var(--teal-soft); }
+.tone-accent { --tone: var(--accent); --tone-soft: var(--accent-soft); }
+.tone-grey { --tone: var(--muted); --tone-soft: var(--surface-2); }
+svg.ico-inline[class*="tone-"] { color: var(--tone); }
+
+/* A deal's stage: a soft pill in the stage's colour. */
+.status-tag {
+  display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap;
+  background: var(--tone-soft, var(--surface-2)); color: var(--tone, var(--muted));
+  border-radius: 999px; padding: .2rem .6rem .2rem .5rem; font-size: .85rem; font-weight: 600;
+}
+.status-tag .ico-inline { width: 1.05rem; height: 1.05rem; stroke-width: 2; }
+
+/* Section headings: the icon sits in a tinted circle, with a count at the end. */
+.card > h3:has(.sec-ico), details > summary h3:has(.sec-ico) { display: flex; align-items: center; gap: .6rem; font-size: 1.05rem; }
+.sec-ico {
+  display: inline-grid; place-items: center; flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%;
+  background: var(--tone-soft); color: var(--tone);
+}
+.card > h3 .sec-ico .ico-inline { margin: 0; color: inherit; width: 1.15rem; height: 1.15rem; stroke-width: 2; vertical-align: 0; }
+.sec-count {
+  margin-left: auto; min-width: 1.6rem; padding: .1rem .5rem; border-radius: 999px; text-align: center;
+  background: var(--surface-2); color: var(--muted); font-size: .85rem; font-weight: 600;
+}
+/* The first card on Today leads, with an accent edge. */
+.card.lead-card { border-left: 4px solid var(--accent); }
+details > summary h3:has(.sec-ico) { flex: 1; }
+.see-all { margin: .75rem 0 0; font-weight: 600; }
+details.fold > summary { cursor: pointer; color: var(--accent); font-weight: 600; margin: .25rem 0; }
 .chip .ico-inline { margin-right: .3rem; }
 .links-empty-art .ico-inline { width: 2.5rem; height: 2.5rem; color: var(--accent); }
 
@@ -396,6 +442,25 @@ details.more-items[open] > summary { margin-bottom: .5rem; }
 }
 .chip:hover { background: var(--surface-2); }
 .chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+/* Deals: stage pills in their colours. The chosen one is filled; the others fade back. */
+.stage-chips { gap: .45rem; margin: 0 0 1rem; }
+.chip.stage {
+  display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .8rem; font-size: .88rem; font-weight: 600;
+  background: var(--tone-soft); color: var(--tone); border: 1.5px solid transparent;
+}
+.chip.stage:hover { border-color: var(--tone); background: var(--tone-soft); }
+.chip.stage .ico-inline { margin: 0; width: 1.1rem; height: 1.1rem; stroke-width: 2; }
+.chip.stage .n {
+  background: var(--surface); color: var(--tone); border-radius: 999px; padding: 0 .45rem; font-size: .8rem; min-width: 1.3rem; text-align: center;
+}
+.chip.stage.active { border-color: var(--tone); box-shadow: 0 0 0 1px var(--tone) inset; }
+.stage-chips.filtering .chip.stage:not(.active) { opacity: .55; }
+.stage-chips.filtering .chip.stage:not(.active):hover { opacity: 1; }
+@media (max-width: 640px) {
+  .stage-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .25rem; -webkit-overflow-scrolling: touch; }
+  .stage-chips::-webkit-scrollbar { display: none; }
+  .chip.stage { flex-shrink: 0; }
+}
 .shown-line { margin: 0 0 .5rem; }
 th .th-sort {
   border: 0; background: none; padding: 0; font: inherit; color: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
