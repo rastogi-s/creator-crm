@@ -27,7 +27,7 @@ async function renderPipeline(root) {
   root.appendChild(el("div", { class: "row" }, el("h1", {}, "Deals"), el("div", { class: "spacer" }),
     el("label", { class: "check" }, closedBox, "Show closed")));
   root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), leadSelect, compSelect));
-  // The stage pills are the status filter: one row, scrolling sideways on a phone.
+  // The stage pills are the status filter.
   const chips = el("div", { class: "chips stage-chips", role: "group", "aria-label": "Filter by stage" });
   const list = el("div", {});
   root.append(chips, list);
@@ -58,8 +58,6 @@ async function renderPipeline(root) {
           "aria-pressed": String(f.status === k), title: "Show only " + (statuses[k] || pretty(k)),
           onclick: () => { f.status = f.status === k ? "" : k; save(); draw(); } },
           icon(STATUS_ICONS[k]), stripEmoji(statuses[k] || pretty(k)), el("span", { class: "n" }, String(counts[k])))));
-    const active = chips.querySelector(".active");
-    if (active && f.status) active.scrollIntoView({ block: "nearest", inline: "nearest" });
     clear(list);
     if (!rows.length) { list.appendChild(card(null, emptyLine("No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch."))); return; }
     const shown = sortRows(rows.filter((r) => (!f.status || r.status === f.status) && (!f.comp || r.compensation === f.comp)

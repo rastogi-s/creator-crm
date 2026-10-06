@@ -456,10 +456,12 @@ details.more-items[open] > summary { margin-bottom: .5rem; }
 .chip.stage.active { border-color: var(--tone); box-shadow: 0 0 0 1px var(--tone) inset; }
 .stage-chips.filtering .chip.stage:not(.active) { opacity: .55; }
 .stage-chips.filtering .chip.stage:not(.active):hover { opacity: 1; }
+/* On a phone every stage stays in sight: smaller pills that wrap, rather than a row to slide. */
 @media (max-width: 640px) {
-  .stage-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: .25rem; -webkit-overflow-scrolling: touch; }
-  .stage-chips::-webkit-scrollbar { display: none; }
-  .chip.stage { flex-shrink: 0; }
+  .stage-chips { gap: .35rem; }
+  .chip.stage { padding: .3rem .6rem; font-size: .8rem; gap: .3rem; }
+  .chip.stage .ico-inline { width: .95rem; height: .95rem; }
+  .chip.stage .n { font-size: .72rem; padding: 0 .35rem; min-width: 1.1rem; }
 }
 .shown-line { margin: 0 0 .5rem; }
 th .th-sort {
