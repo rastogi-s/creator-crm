@@ -73,7 +73,8 @@ public class SecurityConfig {
         RequestMatcher setupPending = req -> !setup.isSetupComplete();
         RequestMatcher appPage = req -> !EMAIL_PAGE.matches(req);
         http.authorizeHttpRequests(a -> a
-                        .requestMatchers("/setup.html", "/setup.js", "/login.html", "/login.js", "/app.css", "/favicon.ico", "/favicon.png", "/error").permitAll()
+                        .requestMatchers("/setup.html", "/setup.js", "/login.html", "/login.js", "/app.css", "/favicon.ico", "/favicon.png",
+                                "/manifest.webmanifest", "/icons/*", "/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/setup/status").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/setup/admin").access((auth, ctx) ->
                                 new org.springframework.security.authorization.AuthorizationDecision(!setup.isSetupComplete()))

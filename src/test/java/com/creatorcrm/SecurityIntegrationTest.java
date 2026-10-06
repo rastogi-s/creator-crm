@@ -119,6 +119,23 @@ class SecurityIntegrationTest {
     }
 
     @Test
+    @Order(5)
+    void phoneHomeScreenIconLoadsWithoutSigningIn() throws Exception {
+        // Phones fetch the manifest without cookies, so it and its icons must be public.
+        HttpClient plain = HttpClient.newHttpClient();
+        HttpResponse<String> manifest = plain.send(HttpRequest.newBuilder(uri("/manifest.webmanifest")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(manifest.statusCode()).isEqualTo(200);
+        assertThat(manifest.body()).contains("\"display\": \"standalone\"", "/icons/maskable-512.png");
+        for (String icon : new String[]{"/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png", "/icons/apple-touch-icon.png"}) {
+            assertThat(plain.send(HttpRequest.newBuilder(uri(icon)).build(), HttpResponse.BodyHandlers.discarding()).statusCode())
+                    .as(icon).isEqualTo(200);
+        }
+        assertThat(plain.send(HttpRequest.newBuilder(uri("/index.html")).build(), HttpResponse.BodyHandlers.discarding()).statusCode())
+                .isNotEqualTo(200);
+    }
+
+    @Test
     @Order(4)
     void webhookRequiresValidSignature() throws Exception {
         secrets.put(SecretName.INSTAGRAM_APP_SECRET, "app-secret");
