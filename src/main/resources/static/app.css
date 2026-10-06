@@ -150,6 +150,12 @@ button:disabled { opacity: .55; cursor: default; }
 .msg .meta { color: var(--muted); font-size: .8rem; margin-bottom: .25rem; }
 .msg .text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; }
 .msg .open-gmail { float: right; }
+.msg .email-box { position: relative; margin-top: .35rem; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: #fff; }
+.msg .email-box.clipped { max-height: 560px; }
+.msg .email-box.clipped::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; pointer-events: none;
+  background: linear-gradient(rgba(255,255,255,0), #fff); }
+.msg .email-frame { display: block; width: 100%; height: 160px; border: 0; }
+.msg .email-more { margin-top: .4rem; }
 .msg.focus { outline: 2px solid var(--accent); outline-offset: 2px; transition: outline-color .3s; }
 .task-about .brief { margin: .3rem 0 .2rem; font-size: .88rem; line-height: 1.4; overflow-wrap: anywhere; }
 .task-about .links { margin-top: .25rem; }

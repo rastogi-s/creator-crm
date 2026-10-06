@@ -177,7 +177,7 @@ public class GmailConnector implements ChannelConnector {
     private static final Duration DEFAULT_PAUSE = Duration.ofMinutes(15);
 
     /** "429: User-rate limit exceeded..." instead of the full HTTP dump Google puts in getMessage(). */
-    static String brief(Exception e) {
+    public static String brief(Exception e) {
         if (e instanceof GoogleJsonResponseException g && g.getDetails() != null && g.getDetails().getMessage() != null) {
             return g.getStatusCode() + ": " + g.getDetails().getMessage();
         }
@@ -247,6 +247,25 @@ public class GmailConnector implements ChannelConnector {
                 replyTo.email(),
                 OffsetDateTime.ofInstant(Instant.ofEpochMilli(m.getInternalDate()), ZoneId.systemDefault()),
                 bulk);
+    }
+
+    /**
+     * The HTML version of one message with its inline pictures embedded, or "" when it has none. Needs only the
+     * read-only scope the app already has.
+     */
+    public String emailHtml(String messageId) throws Exception {
+        Gmail gmail = gmail();
+        Message m = gmail.users().messages().get("me", messageId).setFormat("full").execute();
+        return MailText.htmlOf(m.getPayload(), part -> {
+            if (part.getBody() == null || part.getBody().getAttachmentId() == null) return null;
+            Integer size = part.getBody().getSize();
+            if (size != null && size > MailText.MAX_HTML) return null;
+            try {
+                return gmail.users().messages().attachments().get("me", messageId, part.getBody().getAttachmentId()).execute().decodeData();
+            } catch (IOException e) {
+                return null; // the picture stays out; the rest of the email still shows
+            }
+        });
     }
 
     /** A file attached to an email. */

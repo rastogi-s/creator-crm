@@ -5,10 +5,14 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface MessageRepo extends JpaRepository<Message, Long> {
     boolean existsByExternalId(String externalId);
+
+    java.util.Optional<Message> findByExternalId(String externalId);
 
     /** {@code pattern} is a lower-case LIKE pattern with a backslash as the escape character. Newest first. */
     @Query("select m from Message m where m.conversationId is not null and (lower(m.content) like ?1 escape '\\'"
@@ -25,4 +29,10 @@ public interface MessageRepo extends JpaRepository<Message, Long> {
     boolean existsByConversationIdAndSentAtAfter(Long conversationId, OffsetDateTime sentAt);
 
     boolean existsByConversationIdAndAiProcessedTrueAndSentAtAfter(Long conversationId, OffsetDateTime sentAt);
+
+    /** Only the HTML column, so a sync updating the same message at the same moment isn't overwritten. */
+    @Modifying
+    @Transactional
+    @Query("update Message m set m.htmlContent = ?2 where m.id = ?1")
+    int saveHtml(Long id, String html);
 }

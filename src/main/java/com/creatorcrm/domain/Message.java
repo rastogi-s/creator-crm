@@ -16,6 +16,8 @@ public class Message {
     public String recipient;
     public String subject;
     public String content;
+    /** Raw HTML from Gmail, or "" when the email has none; null until first opened. Never shown without {@code EmailHtml}. */
+    public String htmlContent;
     public String rfcMessageId;
     public String replyTo;
     public OffsetDateTime sentAt;
