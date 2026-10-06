@@ -23,3 +23,13 @@ played and keeps it in the data folder.
 
 Demo mode signs in as `demo` / `demo-password-123`, uses a fake Claude, never touches Gmail or Instagram, and
 pretends a newer version is available so the update banner can be filmed.
+
+## Smoke test
+
+`smoke.mjs` runs in CI on every pull request. It signs in to a demo-mode app and opens every page (Today, Drafts,
+Deals, Money, More and everything under it) at laptop and phone size. It fails on a JavaScript or console error,
+a failed API call, a red error message, an empty page, or a phone page that scrolls sideways. Screenshots of
+failed pages are attached to the CI run as `smoke-screenshots`. Run it locally the same way as a recording,
+with `node smoke.mjs` in place of `node record.mjs`.
+
+When you add a page, add it to `PLACES` in `smoke.mjs`.
