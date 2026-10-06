@@ -104,6 +104,7 @@ public final class DesktopMode {
 
     public static void openBrowser(String url) {
         try {
+            if (openAppWindow(url)) return;
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
                 Desktop.getDesktop().browse(URI.create(url));
                 return;
@@ -115,6 +116,39 @@ public final class DesktopMode {
         } catch (Exception e) {
             message("Open this address in your browser:\n" + url.replaceAll("#.*$", ""));
         }
+    }
+
+    /**
+     * On Windows, opens the app in its own Edge window (no tabs or address bar) with its own taskbar entry,
+     * so it feels like a program rather than a web page. Edge ships with Windows; if it's missing, or
+     * {@code -Dcrm.app-window=false} is set, the caller falls back to the default browser.
+     */
+    private static boolean openAppWindow(String url) {
+        if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")) return false;
+        if ("false".equalsIgnoreCase(System.getProperty("crm.app-window"))) return false;
+        Path edge = findEdge(System::getenv);
+        if (edge == null) return false;
+        try {
+            new ProcessBuilder(appWindowCommand(edge, url)).start();
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    static java.util.List<String> appWindowCommand(Path edge, String url) {
+        return java.util.List.of(edge.toString(), "--app=" + url);
+    }
+
+    /** Where Edge installs: system-wide (either Program Files) or, rarely, just for this user. */
+    static Path findEdge(java.util.function.Function<String, String> env) {
+        for (String root : new String[]{"ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA"}) {
+            String dir = env.apply(root);
+            if (dir == null || dir.isBlank()) continue;
+            Path exe = Path.of(dir, "Microsoft", "Edge", "Application", "msedge.exe");
+            if (java.nio.file.Files.isRegularFile(exe)) return exe;
+        }
+        return null;
     }
 
     static void message(String text) {

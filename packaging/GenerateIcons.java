@@ -33,11 +33,31 @@ public class GenerateIcons {
         Files.write(icons.resolve("creator-crm.icns"), icns());
         ImageIO.write(draw(64), "png", Path.of("src/main/resources/desktop/tray.png").toFile());
         ImageIO.write(draw(64), "png", Path.of("src/main/resources/static/favicon.png").toFile());
+
+        // Phone home-screen icons (manifest.webmanifest and the apple-touch-icon link in the pages)
+        Path web = Path.of("src/main/resources/static/icons");
+        Files.createDirectories(web);
+        ImageIO.write(draw(192), "png", web.resolve("icon-192.png").toFile());
+        ImageIO.write(draw(512), "png", web.resolve("icon-512.png").toFile());
+        ImageIO.write(drawFullBleed(512), "png", web.resolve("maskable-512.png").toFile());
+        ImageIO.write(drawFullBleed(180), "png", web.resolve("apple-touch-icon.png").toFile());
         System.out.println("Icons written to " + icons.toAbsolutePath());
     }
 
     /** Rounded orange square with a white "C" ring and a spark: a conversation that keeps moving. */
     static BufferedImage draw(int size) {
+        return draw(size, false);
+    }
+
+    /**
+     * Square orange tile with no transparent corners, for phones that cut their own shape (Android "maskable")
+     * or would fill the corners with black (iPhone). The mark is shrunk to stay inside the safe circle.
+     */
+    static BufferedImage drawFullBleed(int size) {
+        return draw(size, true);
+    }
+
+    private static BufferedImage draw(int size, boolean fullBleed) {
         BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -45,7 +65,13 @@ public class GenerateIcons {
         double s = size;
         double pad = s * 0.04;
         g.setPaint(new GradientPaint(0, 0, new Color(0xF9, 0x73, 0x16), (float) s, (float) s, new Color(0xC2, 0x41, 0x0C)));
-        g.fill(new RoundRectangle2D.Double(pad, pad, s - 2 * pad, s - 2 * pad, s * 0.42, s * 0.42));
+        if (fullBleed) {
+            g.fillRect(0, 0, size, size);
+            g.translate(s * 0.15, s * 0.15);
+            g.scale(0.7, 0.7);
+        } else {
+            g.fill(new RoundRectangle2D.Double(pad, pad, s - 2 * pad, s - 2 * pad, s * 0.42, s * 0.42));
+        }
 
         g.setColor(Color.WHITE);
         float stroke = (float) (s * 0.13);

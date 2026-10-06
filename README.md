@@ -59,7 +59,9 @@ so there's nothing else to install.
 1. Install it. On Windows no admin rights are needed; it installs just for you.
 2. Open **Creator CRM** from the Start menu, Applications folder or app launcher. Your browser opens the
    setup page with your one-time code already filled in: choose a username and password.
-3. Follow the checklist on the **Settings** page to connect Claude, Gmail and (optionally) Instagram.
+3. The **setup guide** opens by itself and connects Claude and Gmail one step at a time, with exactly what to
+   click on each site. Instagram and the rest are optional, under **Settings** (More → Settings), which has
+   tabs for Accounts, You, Deals & money, App and Advanced.
 
 The app keeps running in the background with an icon in the system tray / menu bar: **Open Creator CRM** or
 **Quit**. Opening it again just brings the dashboard back. Your data lives in `~/.creator-crm` (Windows:
@@ -104,7 +106,7 @@ Every credential you enter is **your own** and is stored encrypted (AES-256-GCM)
 
 1. **Claude**: create an API key at [console.anthropic.com](https://console.anthropic.com) and paste it.
    Use **Test** to confirm it works. Default models: `claude-sonnet-5-5` for reading messages (low effort)
-   and `claude-opus-5-5` for writing drafts (medium effort). You can change either under **About you**.
+   and `claude-opus-5-5` for writing drafts (medium effort). You can change either under **Settings → Advanced**.
 2. **Gmail**:
    1. In [Google Cloud Console](https://console.cloud.google.com), create a project and enable the **Gmail API**.
    2. Configure the OAuth consent screen (External) and add yourself as a test user.

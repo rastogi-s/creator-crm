@@ -190,9 +190,9 @@
 
   const views = { today: renderToday, pipeline: renderPipeline, money: renderMoney, outreach: renderOutreach, links: renderLinks,
                   drafts: renderDrafts, summary: renderSummary, settings: renderSettings,
-                  help: renderHelp, whatsnew: renderWhatsNew, more: renderMore };
+                  help: renderHelp, whatsnew: renderWhatsNew, more: renderMore, setup: renderSetup };
   // Five places in the tab bar; the other pages live under Deals or More, and keep their own addresses.
-  const NAV_OF = { outreach: "pipeline", links: "more", summary: "more", settings: "more", help: "more", whatsnew: "more" };
+  const NAV_OF = { outreach: "pipeline", links: "more", summary: "more", settings: "more", help: "more", whatsnew: "more", setup: "more" };
   let statuses = {};
 
   function currentTab() {
@@ -209,19 +209,23 @@
     });
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + tab));
     const q = new URLSearchParams(location.hash.split("?")[1] || "");
+    if (tab === "settings" && q.has("gmail") && oauthReturnsToSetup()) {
+      location.replace("#setup?step=gmail&gmail=" + encodeURIComponent(q.get("gmail")));
+      return;
+    }
     const notes = {
       "gmail=connected": "Gmail connected.", "gmail=denied": "Gmail access was not granted.",
-      "gmail=failed": "Gmail connection failed. Check the client ID/secret and redirect URI.",
-      "gmail=no-refresh-token": "Google didn't return a refresh token. Remove the app's access in your Google account and try again.",
-      "gmail=state-mismatch": "Gmail connection expired. Please try again.",
+      "gmail=failed": "Google didn't accept the sign-in. Check the Client ID, Client secret and the address you added in Google Cloud (the setup guide's Gmail step lists each one).",
+      "gmail=no-refresh-token": "Google didn't finish connecting. Open myaccount.google.com/permissions, remove Creator CRM, then press Connect Gmail again.",
+      "gmail=state-mismatch": "The Gmail sign-in took too long. Please press Connect Gmail again.",
       "instagram=connected": "Instagram connected.", "instagram=denied": "Instagram access was not granted.",
-      "instagram=failed": "Instagram connection failed. Check the app ID/secret and redirect URI.",
-      "instagram=state-mismatch": "Instagram connection expired. Please try again.",
+      "instagram=failed": "Instagram didn't accept the sign-in. Check the app ID, app secret and the address you added in the Meta dashboard.",
+      "instagram=state-mismatch": "The Instagram sign-in took too long. Please press Connect Instagram again.",
       "facebook=connected": "Facebook connected. You can now look up brands on Instagram.",
       "facebook=denied": "Facebook access was not granted.",
-      "facebook=failed": "Facebook connection failed. Check the app ID/secret and redirect URI.",
+      "facebook=failed": "Facebook didn't accept the sign-in. Check the app ID, app secret and the address you added in the Meta dashboard.",
       "facebook=no-page": "No Facebook Page with a linked Instagram account was found. Link your Instagram to a Facebook Page and try again.",
-      "facebook=state-mismatch": "Facebook connection expired. Please try again.",
+      "facebook=state-mismatch": "The Facebook sign-in took too long. Please press Connect Facebook again.",
     };
     for (const [k, v] of q.entries()) {
       const msg = notes[k + "=" + v];
@@ -1151,7 +1155,7 @@
     return card("Brands engaging with you on Instagram",
       el("p", { class: "small muted" }, "Accounts that tagged you in a post, @mentioned you or commented on your recent posts. Brands that already know you are the easiest to pitch. "
         + (ig.facebookConnected ? "Personal accounts (fans) are hidden automatically." : "Connect Facebook on the Settings page to hide fans automatically and see posts you're tagged in.")
-        + " Checked with every sync."),
+        + " Checked each time the app looks for new messages."),
       ig.error ? el("div", { class: "alert error small" }, ig.error) : null,
       ig.accounts.length ? el("div", {}, ig.accounts.map(row)) : emptyLine("No brands have tagged, mentioned or commented on you yet."),
       el("div", { class: "row" }, el("button", { class: "small", onclick: check }, "Check now")));
@@ -1817,6 +1821,31 @@
     return li;
   }
 
+  // Settings is split into tabs so the everyday choices aren't buried among developer ones. The open tab lives in
+  // the address (#settings?tab=you), so a Save that re-renders the page, or a link from elsewhere, lands on it.
+  const SETTINGS_TABS = [
+    ["accounts", "Accounts", "Claude, Gmail, Google Calendar and Instagram"],
+    ["you", "You", "Your name, voice, rates and to-do rules"],
+    ["deals", "Deals & money", "Follow-ups, invoices, rates, contracts, rebooking"],
+    ["app", "App", "Updates, backups, Claude spending, password"],
+    ["advanced", "Advanced", "Claude models, extra connections, error reports, restoring a backup"],
+  ];
+  // Older links (and the OAuth return pages) name a card, not a tab.
+  const SETTINGS_TAB_OF = { spend: "app", backup: "app", gmail: "accounts", instagram: "accounts", facebook: "advanced" };
+
+  function settingsTab() {
+    const q = new URLSearchParams(location.hash.split("?")[1] || "");
+    if (SETTINGS_TABS.some(([id]) => id === q.get("tab"))) return q.get("tab");
+    for (const k of q.keys()) if (SETTINGS_TAB_OF[k]) return SETTINGS_TAB_OF[k];
+    return "accounts";
+  }
+
+  function settingsSection(id, title, ...children) {
+    const c = card(title, ...children);
+    if (id) c.id = id;
+    return c;
+  }
+
   async function renderSettings(root) {
     // A second render (a sync finishing, a Save) can start while this one waits on the server. Only the newest
     // one may add cards, or the page ends up with two of some cards.
@@ -1832,6 +1861,26 @@
     root.appendChild(el("h1", {}, "Settings"));
     root.appendChild(el("p", { class: "muted" }, "Everything here is stored encrypted in your own database. Saved credentials are never shown again — leave a field blank to keep the current value."));
 
+    const open = settingsTab();
+    const panes = {};
+    const tabBar = el("div", { class: "settings-tabs", role: "tablist", "aria-label": "Settings sections" });
+    for (const [id, label, detail] of SETTINGS_TABS) {
+      panes[id] = el("div", { class: "settings-pane" + (id === open ? "" : " hidden"), role: "tabpanel", id: "settings-pane-" + id,
+        "aria-labelledby": "settings-tab-" + id });
+      tabBar.appendChild(el("button", { type: "button", class: "settings-tab" + (id === open ? " active" : ""), role: "tab",
+        id: "settings-tab-" + id, "data-settings-tab": id, title: detail, "aria-selected": String(id === open),
+        "aria-controls": "settings-pane-" + id, onclick: () => {
+          history.replaceState(null, "", "#settings?tab=" + id);
+          tabBar.querySelectorAll(".settings-tab").forEach((b) => {
+            b.classList.toggle("active", b.dataset.settingsTab === id);
+            b.setAttribute("aria-selected", String(b.dataset.settingsTab === id));
+          });
+          Object.entries(panes).forEach(([k, pane]) => pane.classList.toggle("hidden", k !== id));
+        } }, label));
+    }
+    root.appendChild(tabBar);
+    Object.values(panes).forEach((pane) => root.appendChild(pane));
+
     const secretField = (name, label, placeholder) => {
       const input = el("input", Object.assign({ type: "password", placeholder: c[name] ? "•••••••• (saved)" : placeholder || "" }, NOT_A_LOGIN));
       input.dataset.name = name;
@@ -1845,15 +1894,28 @@
       if (extra) await extra();
       renderSettings(root);
     }, "Saved");
+    const savePrefsButton = (fields, label, primary) => el("p", {}, el("button", { class: (primary === false ? "" : "primary ") + "small", onclick: action(async () => {
+      const body = {};
+      for (const [k, v] of Object.entries(fields)) body[k] = v.value;
+      await api("PUT", "/api/settings/preferences", body);
+      renderSettings(root);
+    }, "Saved") }, label || "Save"));
     const channel = s.channels;
+
+    // ----- Accounts -----
+    const done = c.ANTHROPIC_API_KEY && channel.EMAIL.connected;
+    panes.accounts.appendChild(el("div", { class: "setup-callout" + (done ? " quiet" : "") },
+      el("span", {}, done ? "Need to connect a new computer or account? The setup guide walks through it one step at a time."
+        : "New here? The setup guide connects Claude and Gmail one step at a time, with what to click at each step."),
+      el("a", { class: "btn small" + (done ? "" : " primary"), href: "#setup" }, "Open the setup guide")));
     const steps = el("ol", { class: "steps" });
-    root.appendChild(card(null, steps));
+    panes.accounts.appendChild(card(null, steps));
 
     // 1. Claude
     const claudeBox = el("div", {}, secretField("ANTHROPIC_API_KEY", "Claude API key", "sk-ant-…"));
     steps.appendChild(el("li", { class: c.ANTHROPIC_API_KEY ? "done" : "" },
       el("h3", {}, "Connect Claude"),
-      el("p", { class: "small muted" }, "Create a key at console.anthropic.com → API keys. It reads and classifies your messages and writes drafts."),
+      el("p", { class: "small muted" }, "Claude reads your brand messages and writes your drafts. Create a key at console.anthropic.com → API keys, or use the setup guide for step-by-step help."),
       claudeBox,
       el("div", { class: "row" }, el("button", { class: "primary small", onclick: saveSecrets(claudeBox) }, "Save"),
         c.ANTHROPIC_API_KEY ? el("button", { class: "small", onclick: action(async () => {
@@ -1865,7 +1927,8 @@
     const gmailBox = el("div", {}, secretField("GOOGLE_CLIENT_ID", "Google OAuth client ID"), secretField("GOOGLE_CLIENT_SECRET", "Google OAuth client secret"));
     steps.appendChild(el("li", { class: channel.EMAIL.connected ? "done" : "" },
       el("h3", {}, "Connect Gmail"),
-      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API and the Google Calendar API, create an OAuth client of type “Web application”, and add this authorized redirect URI:"),
+      el("p", { class: "small muted" }, "In Google Cloud Console: enable the Gmail API and the Google Calendar API, create an OAuth client of type “Web application”, and add this authorized redirect URI. ",
+        el("a", { href: "#setup?step=gmail" }, "Step-by-step help")),
       el("div", { class: "code" }, s.googleRedirectUri),
       gmailBox,
       el("div", { class: "row" },
@@ -1874,14 +1937,17 @@
           const r = await api("POST", "/oauth/google/start"); location.href = r.url;
         }) }, channel.EMAIL.connected ? "Reconnect Gmail" : "Connect Gmail") : null,
         channel.EMAIL.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/google/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
-      channelStatus(channel.EMAIL),
+      channelStatus(channel.EMAIL, "Gmail"),
       channel.EMAIL.connected ? importHistory() : null,
       el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts, and a Creator CRM calendar for deal dates. The app cannot delete or change existing mail or see your other calendars.")));
 
-    // 3. Instagram
+    // 3. Google Calendar
+    const calendar = await calendarStep(root, c);
+    if (stale()) return;
+    steps.appendChild(calendar);
+
+    // 4. Instagram (the extras, like pasting a token or real-time webhooks, are under Advanced)
     const igBox = el("div", {}, secretField("INSTAGRAM_APP_ID", "Instagram app ID"), secretField("INSTAGRAM_APP_SECRET", "Instagram app secret"));
-    const igTokenBox = el("div", {}, secretField("INSTAGRAM_ACCESS_TOKEN", "…or paste an access token from the Meta App Dashboard"));
-    const webhookOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: channel.INSTAGRAM.connected ? "done" : "" },
       el("h3", {}, "Connect Instagram (optional)"),
       el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions (add instagram_business_manage_insights to show your reach, and instagram_business_manage_comments so brands commenting on your posts show up under Deals, Pitching brands). Add yourself as a tester; App Review is only needed if other people's accounts will use your app. Added a permission? Press Reconnect Instagram once."),
@@ -1894,82 +1960,37 @@
           const r = await api("POST", "/oauth/instagram/start"); location.href = r.url;
         }) }, channel.INSTAGRAM.connected ? "Reconnect Instagram" : "Connect Instagram") : null,
         channel.INSTAGRAM.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/instagram/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
-      igTokenBox,
-      el("div", { class: "row" }, el("button", { class: "small", onclick: saveSecrets(igTokenBox) }, "Save token")),
-      channelStatus(channel.INSTAGRAM),
+      channelStatus(channel.INSTAGRAM, "Instagram"),
       channel.INSTAGRAM.connected ? instagramStatsLine(s.instagramStats, root) : null,
-      s.instagramTokenExpiresAt ? el("p", { class: "small muted" }, "Token renews automatically; current expiry " + fmtDate(s.instagramTokenExpiresAt) + ".") : null,
-      el("p", { class: "small muted" }, "Real-time DMs (optional): in the Meta dashboard set the webhook callback URL to the address below, subscribe to “messages” (and “comments” and “mentions” for brands engaging with you), and use a verify token generated here. Without webhooks, DMs and comments are fetched on each sync."),
-      el("div", { class: "code" }, s.instagramWebhookUrl),
-      el("div", { class: "row" }, el("button", { class: "small", onclick: action(async () => {
-        const r = await api("POST", "/api/settings/instagram-webhook-token");
-        webhookOut.textContent = "Verify token (shown once): " + r.verifyToken;
-        webhookOut.classList.remove("hidden");
-      }) }, c.INSTAGRAM_WEBHOOK_VERIFY_TOKEN ? "Regenerate verify token" : "Generate verify token")),
-      webhookOut));
+      s.instagramTokenExpiresAt ? el("p", { class: "small muted" }, "Token renews automatically; current expiry " + fmtDate(s.instagramTokenExpiresAt) + ".") : null));
 
-    // 3b. Facebook (optional, for brand lookups)
-    const fb = s.facebook || {};
-    const fbBox = el("div", {}, secretField("FACEBOOK_APP_ID", "Meta app ID (Facebook Login)"), secretField("FACEBOOK_APP_SECRET", "Meta app secret"));
-    steps.appendChild(el("li", { class: fb.connected ? "done" : "" },
-      el("h3", {}, "Connect Facebook for brand lookups (optional)"),
-      el("p", { class: "small muted" }, "Lets Outreach look up any brand's Instagram account by handle (followers, bio, the creators it tags in sponsored posts, an email in its bio), hide fans among accounts engaging with you, and see posts you're tagged in. Your DMs and stats keep using the Instagram connection above."),
-      el("p", { class: "small muted" }, "Needs your Instagram account linked to a Facebook Page you manage (Instagram → Settings → Accounts Center), and the “Instagram API with Facebook Login” use case in your Meta app with instagram_basic, instagram_manage_comments, instagram_manage_insights, pages_show_list, pages_read_engagement and business_management. While the app is in development mode, give your Facebook account a role on it. Redirect URI:"),
-      el("div", { class: "code" }, s.facebookRedirectUri),
-      fbBox,
-      el("div", { class: "row" },
-        el("button", { class: "small", onclick: saveSecrets(fbBox) }, "Save app"),
-        c.FACEBOOK_APP_ID && c.FACEBOOK_APP_SECRET ? el("button", { class: "primary small", onclick: action(async () => {
-          const r = await api("POST", "/oauth/facebook/start"); location.href = r.url;
-        }) }, fb.connected ? "Reconnect Facebook" : "Connect Facebook") : null,
-        fb.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/facebook/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
-      fb.connected ? el("p", { class: "small" }, "✅ Connected through the Facebook Page “" + fb.page + "”.") : null));
-
-    // 4. Profile
+    // ----- You -----
     const pf = {
       creatorName: el("input", { value: p.creatorName, maxlength: "200" }),
       creatorProfile: el("textarea", { class: "tall", maxlength: "20000" }),
       timezone: el("input", { value: p.timezone }),
-      brandKeywords: el("textarea", { maxlength: "2000" }),
       taskRules: el("textarea", { maxlength: "2000", id: "task-rules",
         placeholder: "e.g. For application forms, list what the form asks for.\nGifted-only offers are low priority.\nAlways say if usage rights aren't mentioned." }),
-      classifierModel: modelSelect(p.classifierModel, [
-        ["claude-sonnet-5-5", "Sonnet 5.5: cheaper, under 1¢ per message (recommended)"],
-        ["claude-opus-5-5", "Opus 5.5: most careful, about 2× the cost"]]),
-      writerModel: modelSelect(p.writerModel, [
-        ["claude-opus-5-5", "Opus 5.5: best writing, about 2–4¢ per draft (recommended)"],
-        ["claude-sonnet-5-5", "Sonnet 5.5: about half the cost, plainer drafts"]]),
     };
     pf.creatorProfile.value = p.creatorProfile;
-    pf.brandKeywords.value = p.brandKeywords;
     pf.taskRules.value = p.taskRules || "";
-    steps.appendChild(el("li", { class: p.creatorName !== "Creator" ? "done" : "" },
-      el("h3", {}, "About you"),
+    panes.you.appendChild(settingsSection("settings-about", "About you",
       el("label", {}, "Your name (used in sign-offs)"), pf.creatorName,
       el("label", {}, "Voice, rates & rules — drafts only quote rates written here"), pf.creatorProfile,
       el("label", {}, "Time zone"), pf.timezone,
-      el("label", {}, "Brand keywords (emails without these in bulk/automated mail are skipped before AI)"), pf.brandKeywords,
       el("label", { for: "task-rules" }, "Your rules for to-dos (Claude follows these when it reads a new email and writes the to-do and its summary)"), pf.taskRules,
-      el("div", { class: "grid" },
-        el("div", {}, el("label", {}, "Claude for reading messages"), pf.classifierModel),
-        el("div", {}, el("label", {}, "Claude for writing drafts and finding brands"), pf.writerModel)),
-      el("p", { class: "small muted" }, "Costs are rough. Settings → Claude spending shows what you actually spend."),
-      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
-        const body = {};
-        for (const [k, v] of Object.entries(pf)) body[k] = v.value;
-        await api("PUT", "/api/settings/preferences", body);
-      }, "Saved") }, "Save"))));
+      savePrefsButton(pf)));
 
-    // 5. Follow-ups
+    // ----- Deals & money -----
+    // Follow-ups
     const fu = {
       followupCadenceDays: el("input", { value: p.followupCadenceDays, pattern: "[0-9, ]+" }),
       followupTime: el("input", { type: "time", value: p.followupTime }),
       followupAutoSend: el("input", { type: "checkbox", id: "followup-auto-send" }),
     };
     fu.followupAutoSend.checked = p.followupAutoSend === "true";
-    steps.appendChild(el("li", { class: "done" },
-      el("h3", {}, "Follow-ups"),
-      el("p", { class: "small muted" }, "Each day at this time the app syncs and drafts every follow-up that's due. Brands that reply drop out automatically."),
+    panes.deals.appendChild(settingsSection("settings-followups", "Follow-ups",
+      el("p", { class: "small muted" }, "Each day at this time the app checks for new messages and drafts every follow-up that's due. Brands that reply drop out automatically."),
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Days to wait before follow-up #1, #2, …"), fu.followupCadenceDays),
         el("div", {}, el("label", {}, "Daily follow-up time (your time zone)"), fu.followupTime)),
@@ -1984,7 +2005,7 @@
         renderSettings(root);
       }, "Saved") }, "Save"))));
 
-    // 6. Invoices
+    // Invoices
     const iv = {
       invoiceBusinessName: el("input", { value: p.invoiceBusinessName, maxlength: "200", placeholder: p.creatorName }),
       invoiceAddress: el("textarea", { maxlength: "2000", placeholder: "Street\nCity, postcode\nCountry" }),
@@ -1996,8 +2017,7 @@
     };
     iv.invoiceAddress.value = p.invoiceAddress;
     iv.invoicePaymentDetails.value = p.invoicePaymentDetails;
-    steps.appendChild(el("li", { class: p.invoiceAddress && p.invoicePaymentDetails ? "done" : "" },
-      el("h3", {}, "Invoices"),
+    panes.deals.appendChild(settingsSection("settings-invoices", "Invoices",
       el("p", { class: "small muted" }, "Printed on every invoice. Payment details only appear in the PDF; they're never shown to Claude."),
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Business name"), iv.invoiceBusinessName),
@@ -2011,80 +2031,106 @@
       el("p", { class: "small muted" }, "On each of these days a polite reminder with the invoice attached is drafted for an unpaid invoice. "
         + "Reminders always wait in Drafts for you, stop as soon as you mark the invoice paid, and pause while you're checking a payment "
         + "the brand says it sent. Leave blank to turn them off."),
-      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
-        const body = {};
-        for (const [k, v] of Object.entries(iv)) body[k] = v.value;
-        await api("PUT", "/api/settings/preferences", body);
-        renderSettings(root);
-      }, "Saved") }, "Save"))));
+      savePrefsButton(iv)));
 
-    // 7. Rebooking past brands
-    const wb = {
-      winBackQuietDays: el("input", { type: "number", min: "14", max: "999", value: p.winBackQuietDays }),
-      winBackWeeklyLimit: el("input", { type: "number", min: "0", max: "20", value: p.winBackWeeklyLimit }),
-    };
-    steps.appendChild(el("li", { class: "done", id: "settings-rebook" },
-      el("h3", {}, "Rebooking past brands"),
-      el("p", { class: "small muted" }, "Each week the app drafts a few re-pitches to brands that paid you and have gone quiet, and to brands "
-        + "whose gifted collab went up at least two weeks ago. Brands with an open deal or a recent pitch are skipped. "
-        + "Re-pitches wait in Drafts and show on Today; nothing is sent until you approve it."),
-      el("div", { class: "grid" },
-        el("div", {}, el("label", {}, "Quiet for at least (days)"), wb.winBackQuietDays),
-        el("div", {}, el("label", {}, "Re-pitches per week (0 = off)"), wb.winBackWeeklyLimit)),
-      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
-        await api("PUT", "/api/settings/preferences", { winBackQuietDays: wb.winBackQuietDays.value, winBackWeeklyLimit: wb.winBackWeeklyLimit.value });
-        renderSettings(root);
-      }, "Saved") }, "Save"))));
-
-    // 8. Rate advisor
+    // Rate advisor
     const ra = {
       rateUsagePercentPerMonth: el("input", { type: "number", min: "0", max: "999", value: p.rateUsagePercentPerMonth }),
       rateExclusivityPercent: el("input", { type: "number", min: "0", max: "999", value: p.rateExclusivityPercent }),
     };
-    steps.appendChild(el("li", { class: "done", id: "settings-rates" },
-      el("h3", {}, "Rate advisor"),
+    panes.deals.appendChild(settingsSection("settings-rates", "Rate advisor",
       el("p", { class: "small muted" }, "On a deal you're still deciding, the app suggests what to ask for. Your price per Reel, Story, "
         + "TikTok, post or UGC video comes from your last paid deals once you have five, and until then from the rates in About you. "
         + "Paid usage and exclusivity add these percentages. The number only goes to a brand if you put it in a counter-offer and send it."),
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Paid usage: add % per month"), ra.rateUsagePercentPerMonth),
         el("div", {}, el("label", {}, "Exclusivity: add %"), ra.rateExclusivityPercent)),
-      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
-        await api("PUT", "/api/settings/preferences", { rateUsagePercentPerMonth: ra.rateUsagePercentPerMonth.value,
-          rateExclusivityPercent: ra.rateExclusivityPercent.value });
-        renderSettings(root);
-      }, "Saved") }, "Save"))));
+      savePrefsButton(ra)));
 
-    // 9. Contract check
+    // Contract check
     const ck = {
       contractMaxPaymentDays: el("input", { type: "number", min: "0", max: "999", value: p.contractMaxPaymentDays }),
       contractFreeUsageMonths: el("input", { type: "number", min: "0", max: "999", value: p.contractFreeUsageMonths }),
       contractRevisionsIncluded: el("input", { type: "number", min: "0", max: "99", value: p.contractRevisionsIncluded }),
     };
-    steps.appendChild(el("li", { class: "done", id: "settings-contracts" },
-      el("h3", {}, "Contract check"),
+    panes.deals.appendChild(settingsSection("settings-contracts", "Contract check",
       el("p", { class: "small muted" }, "When a brand emails a contract as a PDF, Claude reads its terms and the app flags anything outside these limits. "
         + "Contracts on DocuSign and similar sites can't be opened by the app; paste their text on the deal instead. Each contract costs one Claude call."),
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Get paid within (days)"), ck.contractMaxPaymentDays),
         el("div", {}, el("label", {}, "Paid usage your fee includes (months)"), ck.contractFreeUsageMonths),
         el("div", {}, el("label", {}, "Revision rounds you include"), ck.contractRevisionsIncluded)),
-      el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
-        const body = {};
-        for (const [k, v] of Object.entries(ck)) body[k] = v.value;
-        await api("PUT", "/api/settings/preferences", body);
-        renderSettings(root);
-      }, "Saved") }, "Save"))));
+      savePrefsButton(ck)));
 
-    // 10. Google Calendar
-    const calendar = await calendarStep(root, c);
-    if (stale()) return;
-    steps.appendChild(calendar);
+    // Rebooking past brands
+    const wb = {
+      winBackQuietDays: el("input", { type: "number", min: "14", max: "999", value: p.winBackQuietDays }),
+      winBackWeeklyLimit: el("input", { type: "number", min: "0", max: "20", value: p.winBackWeeklyLimit }),
+    };
+    panes.deals.appendChild(settingsSection("settings-rebook", "Rebooking past brands",
+      el("p", { class: "small muted" }, "Each week the app drafts a few re-pitches to brands that paid you and have gone quiet, and to brands "
+        + "whose gifted collab went up at least two weeks ago. Brands with an open deal or a recent pitch are skipped. "
+        + "Re-pitches wait in Drafts and show on Today; nothing is sent until you approve it."),
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Quiet for at least (days)"), wb.winBackQuietDays),
+        el("div", {}, el("label", {}, "Re-pitches per week (0 = off)"), wb.winBackWeeklyLimit)),
+      savePrefsButton(wb)));
 
-    // 11. MCP
+    // ----- Advanced -----
+    const adv = {
+      classifierModel: modelSelect(p.classifierModel, [
+        ["claude-sonnet-5-5", "Sonnet 5.5: cheaper, under 1¢ per message (recommended)"],
+        ["claude-opus-5-5", "Opus 5.5: most careful, about 2× the cost"]]),
+      writerModel: modelSelect(p.writerModel, [
+        ["claude-opus-5-5", "Opus 5.5: best writing, about 2–4¢ per draft (recommended)"],
+        ["claude-sonnet-5-5", "Sonnet 5.5: about half the cost, plainer drafts"]]),
+      brandKeywords: el("textarea", { maxlength: "2000" }),
+    };
+    adv.brandKeywords.value = p.brandKeywords;
+    panes.advanced.appendChild(el("p", { class: "muted small" }, "You don't need anything on this tab for everyday use. The defaults are fine."));
+    panes.advanced.appendChild(settingsSection("settings-claude", "Claude models and email filtering",
+      el("div", { class: "grid" },
+        el("div", {}, el("label", {}, "Claude for reading messages"), adv.classifierModel),
+        el("div", {}, el("label", {}, "Claude for writing drafts and finding brands"), adv.writerModel)),
+      el("p", { class: "small muted" }, "Costs are rough. Settings → App → Claude spending shows what you actually spend."),
+      el("label", {}, "Brand keywords (emails without these in bulk/automated mail are skipped before AI)"), adv.brandKeywords,
+      savePrefsButton(adv)));
+
+    // Instagram extras
+    const igTokenBox = el("div", {}, secretField("INSTAGRAM_ACCESS_TOKEN", "Paste an access token from the Meta App Dashboard"));
+    const webhookOut = el("div", { class: "code hidden" });
+    panes.advanced.appendChild(settingsSection("settings-instagram-extras", "Instagram: token and real-time DMs",
+      el("p", { class: "small muted" }, "Instead of Connect Instagram on the Accounts tab, you can paste an access token here."),
+      igTokenBox,
+      el("div", { class: "row" }, el("button", { class: "small", onclick: saveSecrets(igTokenBox) }, "Save token")),
+      el("p", { class: "small muted" }, "Real-time DMs (optional): in the Meta dashboard set the webhook callback URL to the address below, subscribe to “messages” (and “comments” and “mentions” for brands engaging with you), and use a verify token generated here. Without webhooks, DMs and comments are fetched on each sync."),
+      el("div", { class: "code" }, s.instagramWebhookUrl),
+      el("div", { class: "row" }, el("button", { class: "small", onclick: action(async () => {
+        const r = await api("POST", "/api/settings/instagram-webhook-token");
+        webhookOut.textContent = "Verify token (shown once): " + r.verifyToken;
+        webhookOut.classList.remove("hidden");
+      }) }, c.INSTAGRAM_WEBHOOK_VERIFY_TOKEN ? "Regenerate verify token" : "Generate verify token")),
+      webhookOut));
+
+    // Facebook (optional, for brand lookups)
+    const fb = s.facebook || {};
+    const fbBox = el("div", {}, secretField("FACEBOOK_APP_ID", "Meta app ID (Facebook Login)"), secretField("FACEBOOK_APP_SECRET", "Meta app secret"));
+    panes.advanced.appendChild(settingsSection("settings-facebook", "Facebook for brand lookups (optional)",
+      el("p", { class: "small muted" }, "Lets Outreach look up any brand's Instagram account by handle (followers, bio, the creators it tags in sponsored posts, an email in its bio), hide fans among accounts engaging with you, and see posts you're tagged in. Your DMs and stats keep using the Instagram connection on the Accounts tab."),
+      el("p", { class: "small muted" }, "Needs your Instagram account linked to a Facebook Page you manage (Instagram → Settings → Accounts Center), and the “Instagram API with Facebook Login” use case in your Meta app with instagram_basic, instagram_manage_comments, instagram_manage_insights, pages_show_list, pages_read_engagement and business_management. While the app is in development mode, give your Facebook account a role on it. Redirect URI:"),
+      el("div", { class: "code" }, s.facebookRedirectUri),
+      fbBox,
+      el("div", { class: "row" },
+        el("button", { class: "small", onclick: saveSecrets(fbBox) }, "Save app"),
+        c.FACEBOOK_APP_ID && c.FACEBOOK_APP_SECRET ? el("button", { class: "primary small", onclick: action(async () => {
+          const r = await api("POST", "/oauth/facebook/start"); location.href = r.url;
+        }) }, fb.connected ? "Reconnect Facebook" : "Connect Facebook") : null,
+        fb.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/facebook/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
+      fb.connected ? el("p", { class: "small" }, "✅ Connected through the Facebook Page “" + fb.page + "”.") : null));
+
+    // MCP
     const keyOut = el("div", { class: "code hidden" });
-    steps.appendChild(el("li", { class: c.MCP_API_KEY_HASH ? "done" : "" },
-      el("h3", {}, "Use it from Claude (MCP, optional)"),
+    panes.advanced.appendChild(settingsSection("settings-mcp", "Use it from Claude (MCP, optional)",
       el("p", { class: "small muted" }, "Lets Claude Desktop, Claude Code or Cowork read your plan and update the CRM. MCP endpoint:"),
       el("div", { class: "code" }, s.mcpUrl),
       el("div", { class: "row" },
@@ -2102,18 +2148,20 @@
     const [spend, learning, startup, errorReports, autoBackup] = await Promise.all([claudeSpendCard(root), learningCard(root),
       startWithWindowsCard(), errorReportsCard(root, c), autoBackupCard(root)]);
     if (stale()) return;
-    root.appendChild(spend);
-    root.appendChild(learning);
-    root.appendChild(updatesCard(root));
-    if (startup) root.appendChild(startup);
-    root.appendChild(errorReports);
-    root.appendChild(autoBackup);
-    root.appendChild(backupCard(root));
+    panes.you.appendChild(learning);
+    panes.advanced.appendChild(errorReports);
+
+    // ----- App -----
+    panes.app.appendChild(updatesCard(root));
+    if (startup) panes.app.appendChild(startup);
+    panes.app.appendChild(spend);
+    panes.app.appendChild(autoBackup);
+    panes.advanced.appendChild(backupCard(root));
 
     // Password
     const cur = el("input", { type: "password", autocomplete: "current-password" });
     const nw = el("input", { type: "password", autocomplete: "new-password", minlength: "12" });
-    root.appendChild(passwordForm(card("Change password", el("div", { class: "grid" },
+    panes.app.appendChild(passwordForm(card("Change password", el("div", { class: "grid" },
       el("div", {}, el("label", {}, "Current password"), cur), el("div", {}, el("label", {}, "New password (12+ characters)"), nw)),
       el("p", {}, el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/settings/password", { currentPassword: cur.value, newPassword: nw.value });
@@ -2121,7 +2169,7 @@
       }, "Password changed") }, "Change password")))));
 
     if (s.pendingAnalysis > 0) {
-      root.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + " message(s) waiting for AI analysis" + (c.ANTHROPIC_API_KEY ? "." : " — add your Claude API key.")));
+      panes.accounts.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + (s.pendingAnalysis === 1 ? " message is" : " messages are") + " waiting for Claude to read them" + (c.ANTHROPIC_API_KEY ? "." : ". Add your Claude key above.")));
     }
   }
 
@@ -2248,7 +2296,7 @@
     const b = await api("GET", "/api/backup/auto");
     const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
     const status = b.lastError
-      ? el("p", { class: "alert error" }, b.lastError)
+      ? channelError(b.lastError)
       : b.lastBackupAt
         ? el("p", {}, el("span", { class: "status-dot on" }), "Last backup: " + fmtDateTime(b.lastBackupAt) + ", " + kb(b.lastSizeBytes))
         : el("p", { class: "muted" }, b.enabled ? "No backup yet. The first one is made within a few minutes." : "Not set up yet.");
@@ -2292,7 +2340,7 @@
           if (r.lastError) throw new Error(r.lastError);
           renderSettings(root);
         }, "Backup saved") }, "Back up now") : null),
-      el("p", { class: "small muted" }, "To restore one, use Restore from a backup below with the same passphrase."));
+      el("p", { class: "small muted" }, "To restore one, use Backup & restore on the Advanced tab with the same passphrase."));
     c.id = "backup";
     return passwordForm(c);
   }
@@ -2362,12 +2410,12 @@
       el("p", {}, el("button", { class: "danger small", onclick: doRestore }, "Restore…"))));
   }
 
-  function channelStatus(ch) {
+  function channelStatus(ch, name) {
     return el("div", {},
       el("p", { class: "small" }, el("span", { class: "status-dot" + (ch.connected ? " on" : "") }),
         ch.connected ? "Connected" + (ch.account ? " as " + ch.account : "") : "Not connected",
-        ch.lastSync ? " · last sync " + fmtDateTime(ch.lastSync) : ""),
-      ch.lastError ? channelError(ch.lastError) : null);
+        ch.lastSync ? " · last checked " + fmtDateTime(ch.lastSync) : ""),
+      ch.lastError ? channelError(ch.lastError, name) : null);
   }
 
   function importHistory() {
@@ -2388,9 +2436,28 @@
         }, "Import started. Progress shows at the top.") }, "Import")));
   }
 
+  // Raw errors from Google, Meta and the network, in words she can act on. The original stays under Details.
+  const PLAIN_ERRORS = [
+    [/invalid_grant|invalid_token|token has been|expired|revoked|unauthori[sz]ed|\b401\b|OAuthException/i,
+      (n) => n + " needs you to sign in again. Press Reconnect " + n + "."],
+    [/\b403\b|insufficient|permission|scope/i,
+      (n) => n + " hasn't given the app permission for this. Press Reconnect " + n + " and allow everything on the sign-in screen."],
+    [/\b429\b|rate.?limit|quota|too many requests/i, (n) => n + " asked the app to slow down. It carries on by itself shortly."],
+    [/UnknownHost|timed? ?out|connection (refused|reset)|no route|network is unreachable|SocketException/i,
+      (n) => "Couldn't reach " + n + ". Check this computer is online; the app tries again by itself."],
+    [/\b5\d\d\b|backendError|service unavailable|internal server error|overloaded/i,
+      (n) => n + " is having problems on its side. The app tries again by itself."],
+  ];
+
+  function plainError(text, name) {
+    const hit = name && PLAIN_ERRORS.find(([re]) => re.test(text));
+    return hit ? hit[1](name) : null;
+  }
+
   // Short first line always visible; anything longer folds into "Details" so the page never scrolls sideways.
-  function channelError(text) {
-    const first = text.split("\n")[0];
+  function channelError(text, name) {
+    text = text.replace(/^\d{4}-\d\d-\d\dT\S+\s+/, ""); // stored with the time it happened
+    const first = plainError(text, name) || text.split("\n")[0];
     const summary = first.length > 160 ? first.slice(0, 160) + "…" : first;
     return el("div", { class: "alert error channel-error" },
       el("strong", {}, "Last error: "), summary,
@@ -2572,7 +2639,7 @@
         el("label", {}, "Email reports to"), emailInput,
         el("p", { class: "small muted" }, d.gmailConnected
           ? "Sent from the connected Gmail account, so a copy also appears in its Sent folder. Leave blank to turn email reports off."
-          : "Needs Gmail connected (step 2 above), because reports are sent from that account."),
+          : "Needs Gmail connected (Settings, Accounts), because reports are sent from that account."),
         el("div", { class: "row" }, el("button", { class: "small", onclick: action(async () => {
           await api("PUT", "/api/diagnostics/email", { address: emailInput.value.trim() });
           renderSettings(root);
@@ -2645,6 +2712,201 @@
       const w = await api("GET", "/api/whats-new");
       if (w.unseen.length && !location.hash.replace(/^#/, "")) location.hash = "#whatsnew";
     } catch (e) { /* not important */ }
+  }
+
+  // ---------- Setup guide ----------
+  // First run: one task per screen, why the app needs it, and exactly what to click. It opens by itself until
+  // Claude and Gmail are connected (or she chooses to set up later); Settings, Accounts links back to it.
+
+  const SETUP_STEPS = [["welcome", "Welcome"], ["claude", "Claude"], ["gmail", "Gmail"], ["voice", "Your rates"], ["done", "Done"]];
+
+  // OAuth sign-ins come back to Settings; one started from the guide should come back to the guide.
+  function oauthReturnsToSetup() {
+    try {
+      const v = sessionStorage.getItem("crm.oauthReturn");
+      sessionStorage.removeItem("crm.oauthReturn");
+      return v === "setup";
+    } catch (e) { return false; }
+  }
+
+  async function maybeShowSetup() {
+    if (location.hash.replace(/^#/, "") || practiceInside) return; // a link or bookmark to a page wins
+    try {
+      const s = await api("GET", "/api/settings");
+      if (!s.preferences.setupGuide && !(s.credentials.ANTHROPIC_API_KEY && s.channels.EMAIL.connected)) location.hash = "#setup";
+    } catch (e) { /* not important */ }
+  }
+
+  function copyButton(text) {
+    return el("button", { type: "button", class: "small", onclick: action(async () => {
+      await navigator.clipboard.writeText(text);
+    }, "Copied") }, "Copy");
+  }
+
+  function extLink(href, text) {
+    return el("a", { href, target: "_blank", rel: "noopener noreferrer" }, text);
+  }
+
+  async function renderSetup(root) {
+    const s = await api("GET", "/api/settings");
+    const c = s.credentials;
+    const p = s.preferences;
+    const gmail = s.channels.EMAIL;
+    const q = new URLSearchParams(location.hash.split("?")[1] || "");
+    const step = SETUP_STEPS.some(([id]) => id === q.get("step")) ? q.get("step") : "welcome";
+    const at = SETUP_STEPS.findIndex(([id]) => id === step);
+    const go = (id) => { location.hash = "#setup?step=" + id; };
+    const next = () => go(SETUP_STEPS[at + 1][0]);
+    const later = action(async () => {
+      await api("PUT", "/api/settings/preferences", { setupGuide: "skipped" });
+      location.hash = "#today";
+    }, "You can finish setting up any time from Settings, Accounts.");
+
+    clear(root);
+    root.appendChild(el("ol", { class: "setup-progress", "aria-label": "Setup steps" }, SETUP_STEPS.map(([id, label], i) =>
+      el("li", { class: i < at ? "past" : i === at ? "now" : "", "aria-current": i === at ? "step" : null },
+        el("a", { href: "#setup?step=" + id }, label)))));
+    const box = el("div", { class: "card setup-step", "data-step": step });
+    root.appendChild(box);
+    const put = (...nodes) => nodes.forEach((n) => { if (n) box.appendChild(n); });
+    const why = (text) => el("p", { class: "setup-why" }, el("strong", {}, "Why: "), text);
+    const nav = (...right) => el("div", { class: "setup-nav" },
+      at > 0 ? el("button", { type: "button", onclick: () => go(SETUP_STEPS[at - 1][0]) }, "Back") : null,
+      el("span", { class: "spacer" }),
+      step !== "done" ? el("button", { type: "button", class: "link", onclick: later }, "Set up later") : null,
+      ...right);
+
+    if (step === "welcome") {
+      const fresh = p.creatorName === "Creator";
+      let zone = p.timezone;
+      try { if (fresh) zone = Intl.DateTimeFormat().resolvedOptions().timeZone || zone; } catch (e) { /* keep the saved one */ }
+      const name = el("input", { value: fresh ? "" : p.creatorName, maxlength: "200", placeholder: "e.g. Priya", id: "setup-name" });
+      const tz = el("input", { value: zone, id: "setup-tz" });
+      put(
+        el("h1", {}, "Let's get Creator CRM ready"),
+        el("p", { class: "lede" }, "Three short steps: connect Claude, connect Gmail, and tell the app your rates. "
+          + "You can stop at any point and pick up again from Settings."),
+        el("label", { for: "setup-name" }, "Your name, as you sign your emails"), name,
+        el("label", { for: "setup-tz" }, "Your time zone"), tz,
+        el("p", { class: "small muted" }, "Filled in from this computer. Follow-ups and reminders use it."),
+        nav(el("button", { class: "primary", onclick: action(async () => {
+          if (!name.value.trim()) throw new Error("Please type your name");
+          await api("PUT", "/api/settings/preferences", { creatorName: name.value.trim(), timezone: tz.value.trim() });
+          next();
+        }) }, "Start")));
+    }
+
+    if (step === "claude") {
+      const key = el("input", Object.assign({ type: "password", id: "setup-claude-key",
+        placeholder: c.ANTHROPIC_API_KEY ? "•••••••• (saved, paste a new one to replace it)" : "sk-ant-…" }, NOT_A_LOGIN));
+      put(
+        el("h1", {}, "Connect Claude"),
+        why("Claude reads each brand email, works out what the brand wants, and writes your reply drafts. You pay Anthropic "
+          + "directly for what you use, usually a few dollars a month."),
+        c.ANTHROPIC_API_KEY ? el("p", { class: "setup-ok" }, "✓ A Claude key is saved. Paste a new one only if you want to replace it.") : null,
+        el("ol", { class: "setup-howto" },
+          el("li", {}, "Open ", extLink("https://console.anthropic.com/", "console.anthropic.com"), " and sign up with your email."),
+          el("li", {}, "Go to ", el("strong", {}, "Billing"), " and add credits. $10 is a good start; Settings, App, Claude spending shows what you use."),
+          el("li", {}, "Go to ", el("strong", {}, "API keys"), ", press ", el("strong", {}, "Create key"), ", name it Creator CRM, and copy it."),
+          el("li", {}, "Paste it here and press ", el("strong", {}, "Save and test"), ".")),
+        passwordForm(el("div", {}, el("label", { for: "setup-claude-key" }, "Claude API key"), key)),
+        nav(
+          c.ANTHROPIC_API_KEY ? el("button", { type: "button", onclick: next }, "Next") : el("button", { type: "button", onclick: next }, "Skip for now"),
+          el("button", { class: "primary", onclick: action(async () => {
+            if (key.value.trim()) await api("PUT", "/api/settings/credentials", { ANTHROPIC_API_KEY: key.value.trim() });
+            else if (!c.ANTHROPIC_API_KEY) throw new Error("Paste your Claude API key first");
+            const r = await api("POST", "/api/settings/test-anthropic");
+            if (!r.ok) throw new Error(r.error);
+            next();
+          }, "Claude is connected ✓") }, "Save and test")));
+    }
+
+    if (step === "gmail") {
+      const id = el("input", Object.assign({ type: "password", id: "setup-google-id",
+        placeholder: c.GOOGLE_CLIENT_ID ? "•••••••• (saved)" : "….apps.googleusercontent.com" }, NOT_A_LOGIN));
+      const secret = el("input", Object.assign({ type: "password", id: "setup-google-secret",
+        placeholder: c.GOOGLE_CLIENT_SECRET ? "•••••••• (saved)" : "GOCSPX-…" }, NOT_A_LOGIN));
+      const connect = action(async () => {
+        const body = {};
+        if (id.value.trim()) body.GOOGLE_CLIENT_ID = id.value.trim();
+        if (secret.value.trim()) body.GOOGLE_CLIENT_SECRET = secret.value.trim();
+        if (Object.keys(body).length) await api("PUT", "/api/settings/credentials", body);
+        else if (!(c.GOOGLE_CLIENT_ID && c.GOOGLE_CLIENT_SECRET)) throw new Error("Paste the Client ID and Client secret first");
+        const r = await api("POST", "/oauth/google/start");
+        try { sessionStorage.setItem("crm.oauthReturn", "setup"); } catch (e) { /* comes back to Settings instead */ }
+        location.href = r.url;
+      });
+      put(
+        el("h1", {}, "Connect Gmail"),
+        why("So the app can read brand emails as they arrive, save your replies in Gmail Drafts, and put deal dates on a "
+          + "Creator CRM calendar. It can't delete or change your existing mail."),
+        gmail.connected ? el("p", { class: "setup-ok" }, "✓ Gmail is connected" + (gmail.account ? " as " + gmail.account : "") + ".") : null,
+        gmail.connected ? null : el("p", { class: "small muted" }, "This is the one technical step, done once. Google needs you to create "
+          + "your own private sign-in for the app. If someone is helping you set up, this is the step to hand them."),
+        gmail.connected ? null : el("ol", { class: "setup-howto" },
+          el("li", {}, "Open ", extLink("https://console.cloud.google.com/projectcreate", "Google Cloud"), ", sign in with your Gmail, and create a project called Creator CRM."),
+          el("li", {}, "Turn on ", extLink("https://console.cloud.google.com/apis/library/gmail.googleapis.com", "the Gmail API"), " and ",
+            extLink("https://console.cloud.google.com/apis/library/calendar-json.googleapis.com", "the Google Calendar API"), ": press ", el("strong", {}, "Enable"), " on each."),
+          el("li", {}, "Open ", extLink("https://console.cloud.google.com/auth/overview", "Google Auth Platform"), " and press ", el("strong", {}, "Get started"),
+            ". App name: Creator CRM. Audience: ", el("strong", {}, "External"), ". Then under ", el("strong", {}, "Audience"),
+            " press ", el("strong", {}, "Publish app"), ", so the connection doesn't stop every 7 days."),
+          el("li", {}, "Under ", el("strong", {}, "Clients"), " press ", el("strong", {}, "Create client"), ", choose ", el("strong", {}, "Web application"),
+            ", and under Authorized redirect URIs add this address:",
+            el("div", { class: "row copy-row" }, el("code", { class: "code" }, s.googleRedirectUri), copyButton(s.googleRedirectUri))),
+          el("li", {}, "Google shows a Client ID and a Client secret. Paste them below and press ", el("strong", {}, "Connect Gmail"), "."),
+          el("li", {}, "On Google's screen pick your account. If it says Google hasn't verified this app, press ", el("strong", {}, "Advanced"),
+            ", then ", el("strong", {}, "Go to Creator CRM"), ". That's expected: it's your own private app.")),
+        gmail.connected ? null : passwordForm(el("div", { class: "grid" },
+          el("div", {}, el("label", { for: "setup-google-id" }, "Client ID"), id),
+          el("div", {}, el("label", { for: "setup-google-secret" }, "Client secret"), secret))),
+        gmail.lastError ? channelError(gmail.lastError, "Gmail") : null,
+        nav(
+          el("button", { type: "button", class: gmail.connected ? "primary" : "", onclick: next }, gmail.connected ? "Next" : "Skip for now"),
+          gmail.connected ? null : el("button", { class: "primary", onclick: connect }, "Connect Gmail")));
+    }
+
+    if (step === "voice") {
+      const profile = el("textarea", { class: "tall", maxlength: "20000", id: "setup-profile" });
+      profile.value = p.creatorProfile;
+      put(
+        el("h1", {}, "Your rates and how you write"),
+        why("Drafts only ever quote rates written here. Anything missing becomes a blank like [RATE FOR 1 REEL] that you fill in, "
+          + "and the app won't send a draft until every blank is filled."),
+        el("p", { class: "small muted" }, "Fill in the parts you know: your rates, what you will and won't promote, and a few words on how you "
+          + "like to sound. You can change this any time in Settings, You."),
+        el("label", { for: "setup-profile" }, "About you, your rates and your rules"), profile,
+        nav(
+          el("button", { type: "button", onclick: next }, "Skip for now"),
+          el("button", { class: "primary", onclick: action(async () => {
+            await api("PUT", "/api/settings/preferences", { creatorProfile: profile.value });
+            next();
+          }, "Saved") }, "Save and continue")));
+    }
+
+    if (step === "done") {
+      const check = (ok, text, fix) => el("li", { class: ok ? "ok" : "" }, el("span", { class: "mark" }, ok ? "✓" : "○"), " ", text,
+        ok || !fix ? null : el("span", {}, " · ", el("a", { href: fix }, "Do it now")));
+      const ready = c.ANTHROPIC_API_KEY && gmail.connected;
+      put(
+        el("h1", {}, ready ? "You're all set" : "Almost there"),
+        el("p", { class: "lede" }, ready
+          ? "New brand emails are read as they arrive, and replies wait in Drafts for you to check. Nothing is sent without your click."
+          : "The app works once Claude and Gmail are both connected. You can come back to the guide any time from Settings, Accounts."),
+        el("ul", { class: "setup-checklist" },
+          check(c.ANTHROPIC_API_KEY, "Claude connected", "#setup?step=claude"),
+          check(gmail.connected, "Gmail connected", "#setup?step=gmail"),
+          check(p.creatorName !== "Creator", "Your name: " + p.creatorName, "#setup?step=welcome")),
+        el("h3", {}, "When you're ready (optional)"),
+        el("ul", { class: "setup-extras" },
+          el("li", {}, el("a", { href: "#settings?tab=accounts" }, "Connect Instagram"), " to see brand DMs and your follower numbers."),
+          el("li", {}, el("a", { href: "#settings?tab=deals" }, "Add your invoice details"), ": your address and how brands pay you."),
+          el("li", {}, el("a", { href: "#settings?tab=app" }, "Turn on nightly backups"), " so a lost laptop doesn't lose your deals."),
+          gmail.connected ? el("li", {}, el("a", { href: "#settings?tab=accounts" }, "Import older email"), " to bring in past deals.") : null),
+        nav(el("button", { class: "primary", onclick: action(async () => {
+          await api("PUT", "/api/settings/preferences", { setupGuide: ready ? "done" : "skipped" });
+          location.hash = "#today";
+        }) }, "Go to Today")));
+    }
   }
 
   // ---------- More ----------
@@ -2738,6 +3000,7 @@
       link("summary", "Day summary", "What you got done today and what's lined up for tomorrow"),
       link("links", "My links", "Your Instagram, TikTok, website and media kit, used in drafts"),
       link("settings", "Settings", "Accounts, your rates and voice, follow-ups, backups"),
+      link("setup", "Setup guide", "Connect Claude and Gmail one step at a time"),
       link("help", "Help", "Short videos for every feature, and Report a problem"),
       link("whatsnew", "What's new", "The latest changes to the app")));
     root.appendChild(practiceCard());
@@ -2841,20 +3104,21 @@
     const msgs = n + " message" + (n === 1 ? "" : "s");
     let text = "", warn = false, title = "";
     const since = s.importingSince ? fmtDate(s.importingSince.slice(0, 10)) : null;
-    if (s.analyzing) text = "Analyzing " + msgs + "…";
-    else if (s.syncing) text = since ? "Importing email since " + since + "…" : "Syncing…";
-    else if (since) text = "Import since " + since + " continues on the next sync";
+    if (s.analyzing) text = "Claude is reading " + msgs + "…";
+    else if (s.syncing) text = since ? "Bringing in email since " + since + "…" : "Checking for new messages…";
+    else if (since) text = "Bringing in email since " + since + " continues next time the app checks";
     else if (n > 0 && !s.aiConfigured) {
-      text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
+      text = msgs + " waiting: add your Claude key in Settings, Accounts"; warn = true;
     } else if (s.inBatch > 0 && !s.aiError) {
-      text = s.inBatch + " older message" + (s.inBatch === 1 ? "" : "s") + " being analyzed at half price"
+      text = s.inBatch + " older message" + (s.inBatch === 1 ? "" : "s") + " being read at half price"
         + (n > s.inBatch ? " (" + n + " waiting in all)" : "") + ". Results come in over the next few hours.";
     } else if (n > 0 && s.aiError) {
       const reason = s.aiError.replace(/^\S+\s+/, "");
-      text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude API key rejected"
-        : /\(429\)/.test(reason) ? "Claude rate limit, retrying next sync" : reason);
+      text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude didn't accept your key. Check it in Settings, Accounts"
+        : /\(429\)/.test(reason) ? "Claude asked the app to slow down; it tries again shortly"
+        : plainError(reason, "Claude") || reason);
       warn = true; title = s.aiError;
-    } else if (n > 0) text = msgs + " waiting for analysis";
+    } else if (n > 0) text = msgs + " waiting for Claude to read them";
     const chip = document.getElementById("sync-status");
     chip.textContent = text;
     chip.title = title;
@@ -2908,5 +3172,5 @@
 
   refreshUpdate();
   setInterval(refreshUpdate, 30 * 60 * 1000);
-  checkPractice().then(maybeShowWhatsNew).then(() => api("GET", "/api/statuses")).then((s) => { statuses = s; route(); });
+  checkPractice().then(maybeShowWhatsNew).then(maybeShowSetup).then(() => api("GET", "/api/statuses")).then((s) => { statuses = s; route(); });
 })();
