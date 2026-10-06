@@ -554,3 +554,7 @@ select { max-width: 100%; text-overflow: ellipsis; }
   /* Buttons drop under the words, lined up with them, instead of squeezing the sentence. */
   .health-row > .btn, .health-row > button { margin-left: 2.15rem; }
 }
+/* Practice mode: the sample-brands copy of the app always looks different from the real one. */
+body.practice .topbar { box-shadow: inset 0 4px 0 var(--warn); }
+.update-banner.practice-banner { order: 8; }
+.practice-card .row { flex-wrap: wrap; gap: .5rem; align-items: center; }
