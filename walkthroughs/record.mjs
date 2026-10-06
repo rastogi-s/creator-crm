@@ -466,9 +466,10 @@ const scenarios = {
     await pause(400);
     await click(page.locator("#view-pipeline th button", { hasText: "Updated" }));
     await say("Click a column name to sort by it. Click it again to flip the order.", 3800);
-    await click(page.locator("#view-pipeline .chip").first());
+    // The first pill is All; pick a stage so the filter visibly changes the list.
+    await click(page.locator("#view-pipeline .chip.stage:not(.active)").first());
     await say("The status counts are filters too. Your choices stay put, even after the app restarts.", 4200);
-    await click(page.locator("#view-pipeline .chip.active"));
+    await click(page.locator("#view-pipeline .chip.stage", { hasText: "All" }));
     await click(page.locator(".tab[data-tab=money]"));
     const overdue = page.locator("#view-money .stat", { hasText: "Invoiced, waiting for payment" });
     await overdue.waitFor();
