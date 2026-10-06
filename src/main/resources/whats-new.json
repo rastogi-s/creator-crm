@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.27.0",
+    "title": "A calmer, simpler layout",
+    "features": [
+      {
+        "id": "new-layout",
+        "title": "Five places instead of nine",
+        "body": "The top bar now has just Today, Drafts, Deals, Money and More. Deals holds your deals and the brands you're pitching; More has your day summary, links, Settings and Help. Today starts with the three things to do first, and the rest of the day's list is folded underneath, one tap away. On your phone the five places sit at the bottom of the screen, where your thumb is.",
+        "video": "new-layout.webm",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.26.0",
     "title": "Safer sending",
     "features": [
