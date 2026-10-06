@@ -114,7 +114,16 @@ public class AutoBackupService {
 
     private static String describe(Exception e) {
         String m = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-        return "Couldn't save the backup: " + (m.length() > 300 ? m.substring(0, 300) : m);
+        String detail = m.length() > 300 ? m.substring(0, 300) : m;
+        // Lead with what she can do about it; the original message stays for the developer.
+        String plain = e instanceof java.nio.file.AccessDeniedException
+                ? "Creator CRM isn't allowed to save in the backup folder. Pick another folder below."
+                : e instanceof java.nio.file.NoSuchFileException
+                ? "The backup folder can't be found. If it's on OneDrive or a USB drive, check it's there, or pick another folder below."
+                : m.toLowerCase().contains("no space left") || m.toLowerCase().contains("not enough space")
+                ? "There isn't enough free space for the backup. Free some space or pick another folder below."
+                : "Couldn't save the backup. The app tries again tonight.";
+        return plain + "\n" + detail;
     }
 
     /** Deletes the oldest automatic backups beyond {@value #KEEP}. Other files in the folder are never touched. */
