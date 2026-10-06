@@ -723,6 +723,28 @@
     setTimeout(() => node.classList.remove("focus"), 2500);
   }
 
+  function progressCard(id, p, refresh) {
+    const finished = p.state === "finished";
+    const steps = el("ol", { class: "stages" + (p.state === "paused" ? " paused" : "") }, p.steps.map((s, i) => {
+      const done = s.state === "done";
+      return el("li", { class: s.state, "aria-current": s.state === "now" ? "step" : null },
+        el("div", { class: "dot", "aria-hidden": "true" }, done ? "✓" : String(i + 1)),
+        el("div", { class: "name" }, s.name),
+        el("div", { class: "when" }, s.date ? [s.label, fmtDate(s.date)].filter(Boolean).join(" ") : ""));
+    }));
+    const box = el("div", { class: "stage-now " + p.state },
+      el("div", { class: "what" }, el("strong", {}, p.headline), el("span", { class: "small" }, p.detail)),
+      p.action ? el("button", { class: "small primary", onclick: action(async () => {
+        await api("POST", "/api/opportunities/" + id + "/progress", { to: p.next });
+        refresh();
+      }, "Deal moved on") }, p.action) : null);
+    return el("div", { class: "card", id: "deal-progress" },
+      el("div", { class: "row" }, el("h3", {}, "Deal progress"), el("div", { class: "spacer" }),
+        el("span", { class: "small muted" }, finished ? "All " + p.steps.length + " steps done" : "Step " + p.step + " of " + p.steps.length)),
+      steps, box,
+      el("p", { class: "small muted" }, "Moves on by itself as emails come in. Use the button if something happened outside email."));
+  }
+
   async function openDeal(id, focusMessageId) {
     const [d, invoices] = await Promise.all([api("GET", "/api/opportunities/" + id), api("GET", "/api/opportunities/" + id + "/invoices")]);
     const drawer = clear(document.getElementById("drawer"));
@@ -733,6 +755,10 @@
 
     drawer.appendChild(el("div", { class: "row" }, el("h1", {}, d.summary.brand), el("div", { class: "spacer" }),
       el("button", { class: "small", onclick: closeDrawer }, "Close")));
+
+    // Deal progress: the steps of a deal the brand said yes to, moved along by emails
+    const progress = await api("GET", "/api/opportunities/" + id + "/progress");
+    if (progress.shown) drawer.appendChild(progressCard(id, progress, refresh));
 
     const statusSel = el("select", { onchange: action(async (e) => { await api("PATCH", "/api/opportunities/" + id, { status: e.target.value }); refresh(); }, "Status updated") },
       Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: o.status === k }, v)));

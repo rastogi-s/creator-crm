@@ -46,10 +46,12 @@ public class BackupService {
     /** Parent tables first. Restore inserts in this order and deletes in reverse. */
     static final List<String> TABLES = List.of(
             "users", "settings", "app_state", "brands", "conversations", "messages", "opportunities",
-            "tasks", "followups", "deadlines", "drafts", "activity", "creator_links", "writing_examples", "brand_leads", "invoices", "contracts", "campaign_results");
+            "tasks", "followups", "deadlines", "drafts", "activity", "creator_links", "writing_examples", "brand_leads", "invoices", "contracts", "campaign_results",
+            "deal_stages");
     private static final List<String> IDENTITY_TABLES = List.of(
             "users", "brands", "conversations", "messages", "opportunities", "tasks", "followups", "deadlines",
-            "drafts", "activity", "creator_links", "writing_examples", "brand_leads", "invoices", "contracts", "campaign_results");
+            "drafts", "activity", "creator_links", "writing_examples", "brand_leads", "invoices", "contracts", "campaign_results",
+            "deal_stages");
 
     public record Summary(String createdAt, String schemaVersion, Map<String, Integer> rows, int credentials) {}
 

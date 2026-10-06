@@ -106,6 +106,7 @@ public class MessageProcessor {
         StringBuilder sb = new StringBuilder()
                 .append("brand=").append(brand)
                 .append("; status=").append(o.status)
+                .append("; stage=").append(o.stage == null ? "NOT_AGREED_YET" : o.stage)
                 .append("; type=").append(o.type)
                 .append("; compensation=").append(o.compensation);
         if (o.budgetText != null && !o.budgetText.isBlank()) sb.append("; budget=").append(o.budgetText);

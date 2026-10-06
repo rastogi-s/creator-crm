@@ -16,6 +16,8 @@ public class Opportunity {
     @Enumerated(EnumType.STRING) public OpportunityType type;
     @Enumerated(EnumType.STRING) public Compensation compensation;
     @Enumerated(EnumType.STRING) public OpportunityStatus status;
+    /** Stage of a deal the brand said yes to; null before that. Kept when the deal goes cold or closes. */
+    @Enumerated(EnumType.STRING) public DealStage stage;
     public BigDecimal budgetAmount;
     public String currency;
     public String budgetText;

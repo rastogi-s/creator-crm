@@ -306,3 +306,37 @@ details.collapsible[open] > summary { margin-bottom: .5rem; }
 
 /* A form only so password managers keep her login inside it; it adds no box of its own. */
 .password-form { display: contents; }
+
+/* Deal progress: a step diagram on deals the brand said yes to */
+#deal-progress h3 { margin: 0; }
+.stages { list-style: none; margin: .9rem 0 0; padding: 0; display: flex; }
+.stages li { flex: 1 1 0; position: relative; text-align: center; padding: 0 .2rem; min-width: 0; }
+.stages li::before { content: ""; position: absolute; top: 14px; left: -50%; width: 100%; height: 3px; background: var(--border); }
+.stages li:first-child::before { display: none; }
+.stages li.done::before, .stages li.now::before { background: var(--ok); }
+.stages .dot { position: relative; z-index: 1; width: 30px; height: 30px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: .85rem; background: var(--surface); border: 2px solid var(--border); color: var(--muted); }
+.stages li.done .dot { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.stages li.now .dot { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 5px var(--accent-soft); }
+.stages .name { margin-top: .45rem; font-size: .8rem; font-weight: 600; color: var(--muted); }
+.stages li.done .name { color: var(--text); font-weight: 500; }
+.stages li.now .name { color: var(--accent); }
+.stages .when { font-size: .72rem; color: var(--muted); margin-top: .1rem; }
+.stages.paused li.now .dot { background: var(--surface-2); border-color: var(--muted); color: var(--muted); box-shadow: none; }
+.stages.paused li.now .name { color: var(--muted); }
+.stages.paused li.done::before, .stages.paused li.now::before { background: var(--muted); }
+.stages.paused li.done .dot { background: var(--muted); border-color: var(--muted); }
+.stage-now { margin-top: 1rem; padding: .7rem .85rem; border-radius: 8px; background: var(--accent-soft);
+  display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.stage-now .what { flex: 1 1 14rem; }
+.stage-now .what strong { display: block; }
+.stage-now .what .small { color: var(--muted); }
+.stage-now.finished { background: var(--ok-soft); }
+.stage-now.paused { background: var(--surface-2); }
+@media (max-width: 640px) {
+  .stages { flex-direction: column; gap: .2rem; }
+  .stages li { display: grid; grid-template-columns: 30px 1fr; column-gap: .7rem; text-align: left; padding: 0 0 .55rem; }
+  .stages li::before { top: -50%; left: 14px; width: 3px; height: 100%; }
+  .stages .dot { grid-row: span 2; margin: 0; }
+  .stages .name { margin-top: .3rem; }
+}

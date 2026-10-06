@@ -46,7 +46,9 @@ public record MessageAnalysis(
         @JsonPropertyDescription("Only when the creator has something to do: 2-4 plain sentences telling her what the to-do is about, so she can act without reopening the email. Say what is asked, what the opportunity is (program, product, pay or perks), what she needs ready, and any deadline. For a form or application, say what the form asks for and what it is for. Empty if no action.")
         String taskBrief,
         @JsonPropertyDescription("Links in the new message she needs for the to-do: forms, applications, briefs, contracts, product pages, shared folders. Copy each URL exactly as it appears in the message. Skip unsubscribe, tracking-pixel, social-footer and logo links. Empty list if none.")
-        List<TaskLink> links) {
+        List<TaskLink> links,
+        @JsonPropertyDescription("Where the whole deal stands right after this message, judged from the whole conversation. See 'Deal stage' in the instructions.")
+        StageSeen dealStage) {
 
     public record TaskLink(
             @JsonPropertyDescription("Short label, e.g. 'Application form' or 'Campaign brief'.")

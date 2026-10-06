@@ -14,6 +14,7 @@ import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
+import com.creatorcrm.llm.StageSeen;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,7 +38,15 @@ public class FakeLlm implements LlmClient {
                                            List<MessageAnalysis.ExtractedDeadline> deadlines) {
         return new MessageAnalysis(intent != Intent.NOT_BRAND_RELATED, brand, "Maya", intent, OpportunityType.UGC,
                 Compensation.PAID, 500, "USD", "$500", "1 UGC video", "", "Fall launch",
-                deadlines, List.of(), requiresReply, Priority.MEDIUM, "", "Summary for " + brand, "", List.of());
+                deadlines, List.of(), requiresReply, Priority.MEDIUM, "", "Summary for " + brand, "", List.of(), StageSeen.UNCLEAR);
+    }
+
+    /** The same analysis, with Claude reading the deal to be at this stage. */
+    public static MessageAnalysis atStage(MessageAnalysis a, StageSeen stage) {
+        return new MessageAnalysis(a.brandRelated(), a.brandName(), a.contactName(), a.intent(), a.opportunityType(),
+                a.compensation(), a.budgetAmount(), a.currency(), a.budgetText(), a.deliverables(), a.usageRights(),
+                a.campaign(), a.deadlines(), a.missingInfo(), a.requiresReply(), a.urgency(), a.suggestedAction(),
+                a.updatedSummary(), a.taskBrief(), a.links(), stage);
     }
 
     public static MessageAnalysis.ExtractedDeadline deadline(DeadlineType type, String date) {

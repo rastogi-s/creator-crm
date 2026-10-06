@@ -38,6 +38,27 @@ public final class Enums {
         public boolean isOpen() { return this != CLOSED && this != COLD; }
     }
 
+    /**
+     * Where a deal stands once the brand has said yes, in the order the work happens. The deal's status says the
+     * same thing in more detail; the stage is what the progress diagram shows and what Claude reads from each email.
+     */
+    public enum DealStage {
+        CONTRACT("Contract"),
+        PRODUCT("Product"),
+        CREATE_CONTENT("Create content"),
+        BRAND_APPROVAL("Brand approval"),
+        POST("Post"),
+        INVOICE("Invoice"),
+        PAYMENT("Paid"),
+        DONE("Wrapped up");
+
+        public final String label;
+
+        DealStage(String label) { this.label = label; }
+
+        public boolean isAfter(DealStage other) { return other == null || ordinal() > other.ordinal(); }
+    }
+
     public enum OpportunityType {
         PAID, UGC, GIFTED, AFFILIATE, AMBASSADOR, CREATOR_APPLICATION, LONG_TERM, CAMPAIGN,
         RATES_REQUEST, AVAILABILITY_REQUEST, OTHER

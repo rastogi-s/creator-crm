@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.25.0",
+    "title": "See where every deal is",
+    "features": [
+      {
+        "id": "deal-progress",
+        "title": "A step-by-step view of each deal",
+        "body": "Once a brand says yes, the deal shows its steps: contract, product (for gifted deals), creating the content, the brand's approval, posting, the invoice and payment. The step it's at now is highlighted with its due date and what to do next. Claude reads every email you get or send and moves the deal to the right step by itself, even when a few steps happen at once. If something happened outside email, one button moves it on.",
+        "video": "deal-progress.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.24.0",
     "title": "Campaign results for brands",
     "features": [

@@ -6,6 +6,7 @@ import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Deadline;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
+import com.creatorcrm.domain.Enums.DealStage;
 import com.creatorcrm.domain.Enums.DeadlineType;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.DraftStatus;
@@ -18,6 +19,7 @@ import com.creatorcrm.domain.Enums.TaskStatus;
 import com.creatorcrm.domain.Enums.TaskType;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
+import com.creatorcrm.domain.StageEntry;
 import com.creatorcrm.domain.Task;
 import com.creatorcrm.learning.LearningService;
 import com.creatorcrm.llm.Intent;
@@ -29,11 +31,13 @@ import com.creatorcrm.repo.DeadlineRepo;
 import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
+import com.creatorcrm.repo.StageEntryRepo;
 import com.creatorcrm.repo.TaskRepo;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -52,6 +56,11 @@ public class WorkflowEngine {
         static Outcome none() { return new Outcome(null, List.of()); }
     }
 
+    /** Messages about a deal still being decided; Claude's read of a stage from these is not trusted. */
+    private static final Set<Intent> LEAD_INTENTS = EnumSet.of(Intent.NEW_OPPORTUNITY, Intent.RATES_REQUEST,
+            Intent.MEDIA_KIT_REQUEST, Intent.AVAILABILITY_REQUEST, Intent.APPLICATION_FORM, Intent.NEGOTIATION,
+            Intent.PITCH, Intent.SENT_RATES_OR_MEDIA_KIT);
+
     private final BrandRepo brands;
     private final ConversationRepo conversations;
     private final MessageRepo messages;
@@ -62,10 +71,12 @@ public class WorkflowEngine {
     private final ActivityRepo activity;
     private final FollowUpEngine followUps;
     private final LearningService learning;
+    private final StageEntryRepo stages;
 
     public WorkflowEngine(BrandRepo brands, ConversationRepo conversations, MessageRepo messages,
                           OpportunityRepo opportunities, TaskRepo tasks, DeadlineRepo deadlines, DraftRepo drafts,
-                          ActivityRepo activity, FollowUpEngine followUps, LearningService learning) {
+                          ActivityRepo activity, FollowUpEngine followUps, LearningService learning,
+                          StageEntryRepo stages) {
         this.brands = brands;
         this.conversations = conversations;
         this.messages = messages;
@@ -76,6 +87,7 @@ public class WorkflowEngine {
         this.activity = activity;
         this.followUps = followUps;
         this.learning = learning;
+        this.stages = stages;
     }
 
     @Transactional
@@ -96,6 +108,7 @@ public class WorkflowEngine {
         }
         mergeFacts(o, a);
         LocalDate day = m.sentAt.toLocalDate();
+        OffsetDateTime at = m.sentAt;
 
         List<Task> toDraft = new ArrayList<>();
         if (m.direction == Direction.INBOUND) {
@@ -108,11 +121,12 @@ public class WorkflowEngine {
             }
             IntentRules.Rule rule = IntentRules.of(a.intent());
             if (rule.status() != null) {
-                setStatus(o, rule.status());
+                setStatus(o, rule.status(), at);
             } else if (a.requiresReply() && (o.status == OpportunityStatus.PITCHED
                     || o.status == OpportunityStatus.NEW_LEAD || o.status == OpportunityStatus.FOLLOW_UP_NEEDED)) {
-                setStatus(o, OpportunityStatus.AWAITING_MY_REPLY);
+                setStatus(o, OpportunityStatus.AWAITING_MY_REPLY, at);
             }
+            if (a.intent() == Intent.PAYMENT_UPDATE) advanceTo(o, DealStage.PAYMENT, at);
             if (rule.status() == OpportunityStatus.CLOSED) {
                 o.closedReason = "Declined by brand";
                 closeOpenWork(o);
@@ -127,8 +141,9 @@ public class WorkflowEngine {
             }
         } else {
             learning.recordWritten(m, conv.platform, o.id, a.intent(), brandName(o));
-            onCreatorMessage(o, a.intent(), day);
+            onCreatorMessage(o, a.intent(), day, at);
         }
+        if (!LEAD_INTENTS.contains(a.intent())) advanceTo(o, a.dealStage().stage, at);
 
         addDeadlines(o, a, day);
         supersedePendingDrafts(o);
@@ -141,6 +156,10 @@ public class WorkflowEngine {
     /** Effects of the creator writing to the brand (from ingestion or from sending an approved draft). */
     @Transactional
     public void onCreatorMessage(Opportunity o, Intent intent, LocalDate day) {
+        onCreatorMessage(o, intent, day, OffsetDateTime.now());
+    }
+
+    private void onCreatorMessage(Opportunity o, Intent intent, LocalDate day, OffsetDateTime at) {
         for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
             if (TaskType.ANSWERED_BY_OUTBOUND.contains(t.type)
                     || (intent == Intent.INVOICE_SENT && t.type == TaskType.SEND_INVOICE)) completeTask(t);
@@ -149,8 +168,9 @@ public class WorkflowEngine {
         if (rule.status() != null && (o.status.isOpen() || intent == Intent.PITCH)) {
             OpportunityStatus target = rule.status();
             if (intent == Intent.CONTENT_POSTED && o.compensation == Compensation.PAID) target = OpportunityStatus.PAYMENT_PENDING;
-            if (intent != Intent.PITCH || o.status == OpportunityStatus.NEW_LEAD) setStatus(o, target);
+            if (intent != Intent.PITCH || o.status == OpportunityStatus.NEW_LEAD) setStatus(o, target, at);
         }
+        if (intent == Intent.INVOICE_SENT) advanceTo(o, DealStage.PAYMENT, at);
         if (intent == Intent.CREATOR_DECLINED) {
             o.closedReason = "Declined by creator";
             closeOpenWork(o);
@@ -180,11 +200,93 @@ public class WorkflowEngine {
 
     @Transactional
     public void setStatus(Opportunity o, OpportunityStatus s) {
+        setStatus(o, s, OffsetDateTime.now());
+    }
+
+    private void setStatus(Opportunity o, OpportunityStatus s, OffsetDateTime at) {
         if (o.status == s) return;
         activity.save(Activity.of(o.id, Activity.STATUS_CHANGED, brandName(o) + ": " + o.status.label + " → " + s.label));
         o.status = s;
         o.updatedAt = OffsetDateTime.now();
+        moveStage(o, stageFor(o, s), at);
         if (!s.isOpen()) closeOpenWork(o);
+    }
+
+    /** Whether the deal ends with an invoice and a payment, rather than with the post (gifted, affiliate). */
+    public static boolean paysAfter(Opportunity o) {
+        return o.compensation != Compensation.GIFTED && o.compensation != Compensation.AFFILIATE;
+    }
+
+    /** The stage a status puts the deal at. Leads have none; a deal that goes cold or closes keeps where it stopped. */
+    static DealStage stageFor(Opportunity o, OpportunityStatus s) {
+        return switch (s) {
+            case NEW_LEAD, PITCHED, AWAITING_MY_REPLY, NEGOTIATING -> null;
+            case CONTRACT_PENDING, CONTRACT_TO_SIGN -> DealStage.CONTRACT;
+            case PRODUCT_PENDING, PRODUCT_RECEIVED -> DealStage.PRODUCT;
+            case CONTENT_TO_CREATE -> DealStage.CREATE_CONTENT;
+            case AWAITING_APPROVAL -> DealStage.BRAND_APPROVAL;
+            case SCHEDULED_TO_POST -> DealStage.POST;
+            case POSTED, PAYMENT_PENDING -> !paysAfter(o) ? DealStage.DONE
+                    : o.stage == DealStage.PAYMENT ? DealStage.PAYMENT : DealStage.INVOICE;
+            case CLOSED -> "Paid".equalsIgnoreCase(o.closedReason) ? DealStage.DONE : o.stage;
+            case FOLLOW_UP_NEEDED, COLD -> o.stage;
+        };
+    }
+
+    /** The status that matches a stage, keeping the finer status when it already says this stage. */
+    static OpportunityStatus statusFor(Opportunity o, DealStage stage) {
+        return switch (stage) {
+            case CONTRACT -> o.status == OpportunityStatus.CONTRACT_TO_SIGN ? o.status : OpportunityStatus.CONTRACT_PENDING;
+            case PRODUCT -> o.status == OpportunityStatus.PRODUCT_RECEIVED ? o.status : OpportunityStatus.PRODUCT_PENDING;
+            case CREATE_CONTENT -> OpportunityStatus.CONTENT_TO_CREATE;
+            case BRAND_APPROVAL -> OpportunityStatus.AWAITING_APPROVAL;
+            case POST -> OpportunityStatus.SCHEDULED_TO_POST;
+            case INVOICE, PAYMENT, DONE -> paysAfter(o) ? OpportunityStatus.PAYMENT_PENDING : OpportunityStatus.POSTED;
+        };
+    }
+
+    /** To-dos that belong to a stage: once the deal is past it, they're done. */
+    private static DealStage stageOf(TaskType t) {
+        return switch (t) {
+            case SIGN_CONTRACT, REVIEW_CONTRACT -> DealStage.CONTRACT;
+            case CONFIRM_PRODUCT -> DealStage.PRODUCT;
+            case CREATE_CONTENT, REVISE_CONTENT, SUBMIT_CONTENT -> DealStage.CREATE_CONTENT;
+            case POST_CONTENT -> DealStage.POST;
+            case SEND_INVOICE -> DealStage.INVOICE;
+            default -> null;
+        };
+    }
+
+    /**
+     * Moves an open deal forward to the stage an email shows it at, even when the emails skipped steps: the status
+     * follows, and to-dos from the stages it passed are done. Never moves a deal back; and a paid deal is only done
+     * once she confirms the money arrived, so an email takes it as far as Paid at most.
+     */
+    @Transactional
+    public void advanceTo(Opportunity o, DealStage target, OffsetDateTime at) {
+        if (target == null || !o.status.isOpen()) return;
+        if (target == DealStage.DONE && paysAfter(o)) target = DealStage.PAYMENT;
+        if (!target.isAfter(o.stage)) return;
+        moveTo(o, target, at);
+    }
+
+    /** Puts the deal at a stage she says it reached (the progress diagram's button), as an email would. */
+    @Transactional
+    public void moveTo(Opportunity o, DealStage target, OffsetDateTime at) {
+        setStatus(o, statusFor(o, target), at);
+        moveStage(o, target, at);
+        for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
+            DealStage of = stageOf(t.type);
+            if (of != null && target.isAfter(of)) completeTask(t);
+        }
+        o.updatedAt = OffsetDateTime.now();
+        opportunities.save(o);
+    }
+
+    private void moveStage(Opportunity o, DealStage stage, OffsetDateTime at) {
+        if (stage == o.stage) return;
+        o.stage = stage;
+        if (stage != null) stages.save(StageEntry.of(o.id, stage, at));
     }
 
     private Opportunity createOpportunity(Message m, Conversation conv, MessageAnalysis a) {
@@ -349,7 +451,7 @@ public class WorkflowEngine {
             if (d.type() == DeadlineType.CONTENT_DUE && o.status.isOpen()) {
                 upsertTask(o, TaskType.CREATE_CONTENT, "Create content for " + brandName(o), Priority.MEDIUM, date, null);
                 if (o.status == OpportunityStatus.PRODUCT_RECEIVED || o.status == OpportunityStatus.PRODUCT_PENDING) {
-                    setStatus(o, OpportunityStatus.CONTENT_TO_CREATE);
+                    setStatus(o, OpportunityStatus.CONTENT_TO_CREATE, OffsetDateTime.now());
                 }
             }
         }
