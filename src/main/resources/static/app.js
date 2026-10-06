@@ -1528,6 +1528,89 @@
       status);
   }
 
+  /**
+   * What will go out, exactly as the brand gets it, before anything is sent. Resolves true for Send, false for
+   * Keep editing (or Escape).
+   */
+  function sendPreview(d, brand, subject, body) {
+    return new Promise((resolve) => {
+      const email = d.channel === "EMAIL";
+      const files = [d.invoiceId && email ? "Invoice PDF" : null, d.resultId && email ? "Results PDF" : null].filter(Boolean);
+      const sendBtn = el("button", { class: "primary", onclick: () => close(true) }, email ? "Send email" : "Send DM");
+      const dlg = el("dialog", { class: "send-preview", "aria-labelledby": "send-preview-title" },
+        el("h2", { id: "send-preview-title" }, "Check before sending"),
+        el("p", { class: "small muted" }, email ? "This is the email " + brand + " will get." : "This is the Instagram DM " + brand + " will get."),
+        el("div", { class: "preview-mail" },
+          el("div", { class: "preview-head" },
+            el("div", {}, el("span", { class: "muted" }, "To: "), email ? (d.toAddress || brand) : brand + " on Instagram"),
+            email ? el("div", {}, el("span", { class: "muted" }, "Subject: "), el("strong", {}, subject || "(no subject)")) : null,
+            files.length ? el("div", {}, el("span", { class: "muted" }, "Attached: "), "📎 " + files.join(", ")) : null),
+          el("div", { class: "preview-body" }, body)),
+        el("p", { class: "small muted" }, "After you press Send you have a few seconds to undo it."),
+        el("div", { class: "row" }, sendBtn, el("button", { onclick: () => close(false) }, "Keep editing")));
+      let done = false;
+      function close(ok) {
+        if (done) return;
+        done = true;
+        dlg.close();
+        dlg.remove();
+        resolve(ok);
+      }
+      dlg.addEventListener("cancel", (e) => { e.preventDefault(); close(false); });
+      document.body.appendChild(dlg);
+      dlg.showModal();
+      sendBtn.focus();
+    });
+  }
+
+  /**
+   * The undo bar after Send: the message goes out when the countdown ends unless she presses Undo. It stays on
+   * screen across pages, then says whether it was sent. The server holds the actual wait, so closing the page
+   * doesn't stop or lose the send.
+   */
+  const undoBars = new Map();
+  function sendingBar(draftId, brand, sendAt) {
+    if (undoBars.has(draftId)) return;
+    let stack = document.getElementById("undo-bars");
+    if (!stack) stack = document.body.appendChild(el("div", { id: "undo-bars", class: "undo-bars" }));
+    const text = el("span", {});
+    const undo = el("button", { class: "small", onclick: action(async () => {
+      const r = await api("POST", "/api/drafts/" + draftId + "/undo-send");
+      bar.finish();
+      if (r.undone) {
+        toast("Not sent. It's back in Drafts.");
+        showDraft({ id: draftId });
+      } else {
+        await check();
+      }
+    }) }, "Undo");
+    const bar = stack.appendChild(el("div", { class: "undo-bar", role: "status" }, text, undo));
+    const end = Date.now() + Math.max(0, new Date(sendAt).getTime() - Date.now());
+    const tick = () => {
+      const left = Math.ceil((end - Date.now()) / 1000);
+      if (left > 0) { text.textContent = "Sending to " + brand + " in " + left + "s"; return; }
+      text.textContent = "Sending to " + brand + "…";
+      undo.disabled = true;
+      clearInterval(timer);
+      check();
+    };
+    const timer = setInterval(tick, 250);
+    tick();
+    let tries = 0;
+    async function check() {
+      let st;
+      try { st = await api("GET", "/api/drafts/" + draftId + "/send-status"); } catch (err) { st = { state: "unknown" }; }
+      if (st.state === "waiting" && ++tries < 60) { setTimeout(check, 1000); return; }
+      bar.finish();
+      if (st.state === "sent") toast("Sent to " + brand + " ✓");
+      else if (st.state === "failed") toast("Not sent to " + brand + ": " + st.error, true);
+      else if (st.state !== "waiting" && st.state !== "unknown") toast("Not sent to " + brand + ". It's still in Drafts.", true);
+      if (location.hash.startsWith("#drafts")) route();
+    }
+    bar.finish = () => { clearInterval(timer); bar.remove(); if (undoBars.get(draftId) === bar) undoBars.delete(draftId); };
+    undoBars.set(draftId, bar);
+  }
+
   async function renderDrafts(root) {
     const list = await api("GET", "/api/drafts");
     clear(root);
@@ -1580,7 +1663,9 @@
     const reading = (on) => { inbox.classList.toggle("showing-detail", on); root.classList.toggle("reading-draft", on); };
     reading(false);
     const cards = [];
-    for (const { draft: d, brand, blockedReason } of list) {
+    for (const { draft: d, brand, blockedReason, sendingAt, sendError } of list) {
+      // Already on its way (Send was pressed moments ago, maybe before a refresh): the undo bar shows the countdown.
+      if (sendingAt) sendingBar(d.id, brand, sendingAt);
       const subject = el("input", { value: d.subject || "", maxlength: "1000" });
       const body = el("textarea", { class: "tall", maxlength: "20000" });
       body.value = d.body;
@@ -1604,7 +1689,8 @@
       showPreview();
       const row = el("li", {}, el("button", { class: "inbox-row", onclick: () => select(d.id, true) },
         el("span", { class: "inbox-top" }, el("strong", {}, brand), el("span", { class: "small muted" }, fmtDate(d.createdAt))),
-        el("span", { class: "inbox-type small" }, pretty(d.type) + (d.channel === "EMAIL" ? "" : " · Instagram"), blankMark),
+        el("span", { class: "inbox-type small" }, pretty(d.type) + (d.channel === "EMAIL" ? "" : " · Instagram"), blankMark,
+          sendingAt ? el("span", { class: "badge" }, "Sending") : null),
         preview));
       const node = holder.appendChild(card(null,
         el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
@@ -1619,12 +1705,16 @@
         askClaude(d, subject, body),
         blanksNote,
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
-        el("div", { class: "row" },
+        sendError ? el("div", { class: "alert error" }, "Your last Send didn't go out: " + sendError) : null,
+        sendingAt ? el("div", { class: "alert info" }, "This is being sent. Press Undo at the bottom of the screen to stop it.") : null,
+        el("div", { class: "row" + (sendingAt ? " hidden" : "") },
           blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
             if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
-            if (!confirm("Send this " + (d.channel === "EMAIL" ? "email" : "DM") + " to " + brand + " now?")) return;
-            await api("POST", "/api/drafts/" + d.id + "/send", edits()); route();
-          }, "Sent ✓") }, "Send"),
+            if (!await sendPreview(d, brand, subject.value, body.value)) return;
+            const q = await api("POST", "/api/drafts/" + d.id + "/send", edits());
+            sendingBar(d.id, brand, q.sendAt);
+            route();
+          }) }, "Send"),
           el("button", { onclick: action(async () => { await navigator.clipboard.writeText(body.value); }, "Copied") }, "Copy"),
           el("button", { onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/sent-manually"); route(); }, "Recorded as sent") }, "I sent it myself"),
           el("button", { onclick: action(async () => { await api("PUT", "/api/drafts/" + d.id, edits()); }, "Saved") }, "Save edits"),

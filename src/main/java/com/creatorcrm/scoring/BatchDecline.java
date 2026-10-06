@@ -5,6 +5,7 @@ import com.creatorcrm.domain.Enums.DraftStatus;
 import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.drafts.DraftService;
+import com.creatorcrm.drafts.SendQueue;
 import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.workflow.WorkflowEngine;
@@ -36,8 +37,11 @@ public class BatchDecline {
     private final DraftRepo draftRepo;
     private final DraftService drafts;
     private final WorkflowEngine workflow;
+    private final SendQueue sendQueue;
 
-    public BatchDecline(OpportunityRepo opportunities, DraftRepo draftRepo, DraftService drafts, WorkflowEngine workflow) {
+    public BatchDecline(OpportunityRepo opportunities, DraftRepo draftRepo, DraftService drafts, WorkflowEngine workflow,
+                        SendQueue sendQueue) {
+        this.sendQueue = sendQueue;
         this.opportunities = opportunities;
         this.draftRepo = draftRepo;
         this.drafts = drafts;
@@ -78,7 +82,7 @@ public class BatchDecline {
         int sent = 0;
         List<String> skipped = new ArrayList<>();
         for (Draft d : draftRepo.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING)) {
-            if (d.type != DraftType.DECLINE) continue;
+            if (d.type != DraftType.DECLINE || sendQueue.isWaiting(d.id)) continue; // already on its way
             String brand = opportunities.findById(d.opportunityId).map(workflow::brandName).orElse("?");
             Optional<String> blocked = drafts.sendBlockedReason(d);
             if (blocked.isPresent()) {

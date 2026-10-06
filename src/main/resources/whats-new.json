@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.34.0",
+    "title": "Check before it goes, undo after",
+    "features": [
+      {
+        "id": "send-preview",
+        "title": "A last look, and ten seconds to undo",
+        "body": "When you press Send on a draft, you now see exactly what the brand will get first: who it's to, the subject, the message and any PDF attached. Press Keep editing to go back, or Send to send it. After that, a bar at the bottom counts down ten seconds with an Undo button, so a message sent by mistake never leaves. Follow-ups you've set to go out automatically still send on their own, as before.",
+        "video": "send-preview.webm",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.31.0",
     "title": "Easier setup, tidier Settings",
     "features": [

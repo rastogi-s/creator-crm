@@ -357,6 +357,19 @@ public class DraftService {
     }
 
     /**
+     * Saves her edits and checks the draft could go out now, without sending it. Used before the short undo window
+     * ({@link SendQueue}) so a draft that can't be sent says so straight away, not after the wait.
+     */
+    @Transactional
+    public Draft readyToSend(Long draftId, String editedSubject, String editedBody) {
+        Draft d = edit(draftId, editedSubject, editedBody);
+        sendBlockedReason(d).ifPresent(reason -> { throw new IllegalStateException(reason); });
+        String blanks = Placeholders.message(d.body);
+        if (blanks != null) throw new IllegalStateException(blanks);
+        return d;
+    }
+
+    /**
      * Opt-in automatic send, used by the daily follow-up run. Only email follow-ups qualify: anything else
      * (replies, rates, Instagram DMs) always waits for the creator's click.
      */

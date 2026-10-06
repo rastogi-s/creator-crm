@@ -402,6 +402,45 @@ const scenarios = {
     await say("Nothing is sent. The draft waits here until you read it and press Send.", 4200);
     await say("", 600);
   },
+  async "send-preview"(page) {
+    const { pause, say, point, click } = helpers(page);
+    // Demo mode has no Gmail, so Send is stood in for here: the drafts list says it could go out, and the send
+    // and undo calls answer as the real app does. Nothing leaves the demo either way.
+    await page.route("**/api/drafts", async (route) => {
+      const res = await route.fetch();
+      const list = await res.json();
+      for (const d of list) { d.blockedReason = null; d.sendingAt = null; }
+      await route.fulfill({ response: res, json: list });
+    });
+    await page.route(/\/api\/drafts\/\d+\/send$/, (route) => {
+      const id = Number(route.request().url().match(/drafts\/(\d+)\//)[1]);
+      route.fulfill({ json: { draftId: id, sendAt: new Date(Date.now() + 10000).toISOString(), undoSeconds: 10 } });
+    });
+    await page.route(/\/api\/drafts\/\d+\/undo-send$/, (route) => route.fulfill({ json: { undone: true } }));
+    await page.route(/\/api\/drafts\/\d+\/send-status$/, (route) => route.fulfill({ json: { state: "pending", error: null } }));
+
+    await page.goto(BASE + "/#drafts");
+    await page.addStyleTag({ content: ".undo-bars { bottom: 7rem; }" }); // above the video's caption
+    await page.locator("#view-drafts .inbox-row").first().waitFor();
+    await pause(2500); // let the first refresh settle so the card isn't replaced mid-shot
+    const draft = await openDraft(page, "Maple & Moss", "Payment reminder");
+    await click(draft.getByRole("button", { name: "Send", exact: true }));
+    const preview = page.locator("dialog.send-preview");
+    await preview.waitFor();
+    await point(preview.locator(".preview-mail"));
+    await say("Before anything goes out, you see exactly what the brand will get: who it's to, the subject, the message and the PDF attached.", 5200);
+    await point(preview.getByRole("button", { name: "Keep editing" }));
+    await say("Spot something? Keep editing takes you back to the draft.", 3400);
+    await click(preview.getByRole("button", { name: "Send email" }));
+    const bar = page.locator(".undo-bar");
+    await bar.waitFor();
+    await point(bar);
+    await say("After you press Send, you have ten seconds to change your mind.", 3800);
+    await click(bar.getByRole("button", { name: "Undo" }));
+    await say("Undo stops it, and the draft is back here, unsent.", 3600);
+    await say("Follow-ups you've set to go out automatically still send on their own, as before.", 4200);
+    await say("", 600);
+  },
 
   async "search"(page) {
     const { pause, say, point, click } = helpers(page);

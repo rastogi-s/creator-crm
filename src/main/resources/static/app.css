@@ -173,6 +173,20 @@ button:disabled { opacity: .55; cursor: default; }
 }
 .toast.error { background: var(--danger); color: #fff; }
 
+/* Undo after Send: one bar per message on its way, above the toast. */
+.undo-bars { position: fixed; bottom: 4rem; left: 50%; transform: translateX(-50%); z-index: 31; display: flex; flex-direction: column; gap: .4rem; width: max-content; max-width: 92vw; }
+.undo-bar { display: flex; align-items: center; gap: .75rem; background: var(--text); color: var(--bg); padding: .5rem .6rem .5rem 1rem; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+.undo-bar span { flex: 1; }
+.undo-bar button { background: var(--bg); color: var(--text); border-color: var(--bg); font-weight: 600; }
+
+/* Send preview: the message as the brand will get it. */
+.send-preview { width: min(640px, 94vw); max-height: 90vh; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); padding: 1rem 1.25rem; }
+.send-preview::backdrop { background: rgba(0,0,0,.45); }
+.send-preview h2 { margin: 0 0 .25rem; }
+.preview-mail { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); margin: .75rem 0; overflow: hidden; }
+.preview-head { padding: .6rem .8rem; border-bottom: 1px solid var(--border); font-size: .9rem; display: grid; gap: .2rem; overflow-wrap: anywhere; }
+.preview-body { padding: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow-y: auto; line-height: 1.5; }
+
 /* ---------- auth pages ---------- */
 .auth { max-width: 420px; margin: 8vh auto; padding: 0 1rem; }
 .auth .card { padding: 1.5rem; }
@@ -292,6 +306,7 @@ button.link:hover { background: none; color: var(--text); }
   .tab .badge { position: absolute; top: 0; left: 55%; font-size: .66rem; padding: 0 .35rem; }
   main { padding-bottom: 6rem; }
   .toast { bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+  .undo-bars { bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)); }
   .item { flex-wrap: wrap; }
   .item .actions { width: 100%; padding-left: 2.25rem; }
 }
