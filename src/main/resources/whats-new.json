@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.32.0",
+    "version": "1.31.0",
     "title": "A clearer bar at the bottom of your phone",
     "features": [
       {
@@ -8,6 +8,19 @@
         "title": "Bigger, clearer buttons along the bottom",
         "body": "On your phone the five buttons at the bottom are bigger and easier to read, and the place you're in now sits in a soft orange pill, so you always know where you are. The grey box that used to stay stuck on the last button you tapped is gone, the bar keeps clear of the iPhone's home line, and the top of the screen has the app's logo and a rounder search box. Today's greeting is a little smaller so your list starts higher up.",
         "tryIt": "#today"
+      }
+    ]
+  },
+  {
+    "version": "1.30.0",
+    "title": "Drafts as an inbox",
+    "features": [
+      {
+        "id": "drafts-inbox",
+        "title": "One draft at a time",
+        "body": "Drafts now works like your email inbox. A short list on the left shows each brand, what kind of message it is, its first line, and a yellow tag if it still has a blank to fill in. Press one to open it beside the list. On your phone, the list fills the screen; press a draft to read it, and All drafts to go back. When you write a draft from a deal, an invoice or Today, it opens straight away.",
+        "video": "drafts-inbox.webm",
+        "tryIt": "#drafts"
       }
     ]
   },
