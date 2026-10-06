@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.39.0",
+    "version": "1.41.0",
     "title": "Check before it goes, undo after",
     "features": [
       {
@@ -9,6 +9,31 @@
         "body": "When you press Send on a draft, you now see exactly what the brand will get first: who it's to, the subject, the message and any PDF attached. Press Keep editing to go back, or Send to send it. After that, a bar at the bottom counts down ten seconds with an Undo button, so a message sent by mistake never leaves. Follow-ups you've set to go out automatically still send on their own, as before.",
         "video": "send-preview.webm",
         "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
+    "version": "1.40.0",
+    "title": "Neater icons",
+    "features": [
+      {
+        "id": "icons",
+        "title": "One set of simple icons",
+        "body": "The little pictures next to headings, deal stages and your day summary are now simple line icons that look the same on your laptop and your phone, instead of emoji that changed from one device to another. Deal stages read plainly too: New lead, Negotiating, Contract to sign, Posted, Payment pending.",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
+    "version": "1.38.0",
+    "title": "Practice with sample brands",
+    "features": [
+      {
+        "id": "practice-mode",
+        "title": "Try anything without touching your real deals",
+        "body": "Open More and press Start practice. A copy of the app opens with made-up brands like Bloomleaf Tea and Juniper Juice, so you can answer emails, send invoices, ask Claude for drafts and move deals along to see what happens. An orange bar at the top says you're practising. Nothing there is real: Send only pretends, and your own deals, emails and accounts are never in it. Press Leave practice to go back. Each time you start, the sample brands begin fresh.",
+        "video": "practice-mode.webm",
+        "tryIt": "#more"
       }
     ]
   },

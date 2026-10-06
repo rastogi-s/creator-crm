@@ -47,6 +47,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +76,9 @@ public class DraftService {
     private final CampaignResultRepo results;
     private final ResultsPdf resultsPdf;
     private final InvoicePdf invoicePdf;
+    /** Practice mode (sample brands): Send only pretends. See {@code PracticeMode}. */
+    @Value("${crm.practice:false}")
+    boolean practice;
 
     public DraftService(LlmClient llm, List<ChannelConnector> connectors, DraftRepo drafts,
                         OpportunityRepo opportunities, ConversationRepo conversations, MessageRepo messages,
@@ -337,6 +341,7 @@ public class DraftService {
 
     /** Why this draft can't be sent via API right now (e.g. outside Instagram's 24h window), if anything. */
     public Optional<String> sendBlockedReason(Draft d) {
+        if (practice) return Optional.empty(); // nothing really goes out, so nothing can stop it
         ChannelConnector c = channels.get(d.channel);
         if (c == null || !c.isConnected()) return Optional.of((d.channel == Platform.EMAIL ? "Gmail" : d.channel == Platform.INSTAGRAM ? "Instagram" : "This account")
                 + " isn't connected, so this can't be sent from here. Connect it in Settings, or copy it and press I sent it myself.");
@@ -387,6 +392,14 @@ public class DraftService {
         // Body only: subjects often carry tags like "[EXTERNAL]" from the brand's mail system.
         String blanks = Placeholders.message(d.body);
         if (blanks != null) throw new IllegalStateException(blanks);
+        if (practice) {
+            // Practice mode: the deal moves on exactly as after a real send, but nothing leaves the app.
+            recordOutbound(d, null, automatic);
+            d.status = DraftStatus.SENT;
+            d.sentAt = OffsetDateTime.now();
+            d.error = null;
+            return drafts.save(d);
+        }
         try {
             ChannelConnector.SentMessage sent = channels.get(d.channel).send(attach(d));
             recordOutbound(d, sent, automatic);
