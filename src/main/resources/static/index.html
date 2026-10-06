@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1e1c1a" media="(prefers-color-scheme: dark)">
   <title>Creator CRM</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Creator CRM">
@@ -18,7 +18,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">Creator CRM</div>
+  <div class="brand"><img class="brand-mark" src="/favicon.png" alt="" width="26" height="26"><span>Creator CRM</span></div>
   <nav class="tabs" aria-label="Sections">
     <button class="tab" data-tab="today"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/></svg><span>Today</span></button>
     <button class="tab" data-tab="drafts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6.5h17v11a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1zm0 0 8.5 6.5 8.5-6.5"/></svg><span>Drafts</span> <span id="drafts-count" class="badge accent hidden"></span></button>

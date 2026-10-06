@@ -215,17 +215,17 @@
     }
     const notes = {
       "gmail=connected": "Gmail connected.", "gmail=denied": "Gmail access was not granted.",
-      "gmail=failed": "Gmail connection failed. Check the client ID/secret and redirect URI.",
-      "gmail=no-refresh-token": "Google didn't return a refresh token. Remove the app's access in your Google account and try again.",
-      "gmail=state-mismatch": "Gmail connection expired. Please try again.",
+      "gmail=failed": "Google didn't accept the sign-in. Check the Client ID, Client secret and the address you added in Google Cloud (the setup guide's Gmail step lists each one).",
+      "gmail=no-refresh-token": "Google didn't finish connecting. Open myaccount.google.com/permissions, remove Creator CRM, then press Connect Gmail again.",
+      "gmail=state-mismatch": "The Gmail sign-in took too long. Please press Connect Gmail again.",
       "instagram=connected": "Instagram connected.", "instagram=denied": "Instagram access was not granted.",
-      "instagram=failed": "Instagram connection failed. Check the app ID/secret and redirect URI.",
-      "instagram=state-mismatch": "Instagram connection expired. Please try again.",
+      "instagram=failed": "Instagram didn't accept the sign-in. Check the app ID, app secret and the address you added in the Meta dashboard.",
+      "instagram=state-mismatch": "The Instagram sign-in took too long. Please press Connect Instagram again.",
       "facebook=connected": "Facebook connected. You can now look up brands on Instagram.",
       "facebook=denied": "Facebook access was not granted.",
-      "facebook=failed": "Facebook connection failed. Check the app ID/secret and redirect URI.",
+      "facebook=failed": "Facebook didn't accept the sign-in. Check the app ID, app secret and the address you added in the Meta dashboard.",
       "facebook=no-page": "No Facebook Page with a linked Instagram account was found. Link your Instagram to a Facebook Page and try again.",
-      "facebook=state-mismatch": "Facebook connection expired. Please try again.",
+      "facebook=state-mismatch": "The Facebook sign-in took too long. Please press Connect Facebook again.",
     };
     for (const [k, v] of q.entries()) {
       const msg = notes[k + "=" + v];
@@ -1155,7 +1155,7 @@
     return card("Brands engaging with you on Instagram",
       el("p", { class: "small muted" }, "Accounts that tagged you in a post, @mentioned you or commented on your recent posts. Brands that already know you are the easiest to pitch. "
         + (ig.facebookConnected ? "Personal accounts (fans) are hidden automatically." : "Connect Facebook on the Settings page to hide fans automatically and see posts you're tagged in.")
-        + " Checked with every sync."),
+        + " Checked each time the app looks for new messages."),
       ig.error ? el("div", { class: "alert error small" }, ig.error) : null,
       ig.accounts.length ? el("div", {}, ig.accounts.map(row)) : emptyLine("No brands have tagged, mentioned or commented on you yet."),
       el("div", { class: "row" }, el("button", { class: "small", onclick: check }, "Check now")));
@@ -1914,7 +1914,7 @@
     const claudeBox = el("div", {}, secretField("ANTHROPIC_API_KEY", "Claude API key", "sk-ant-…"));
     steps.appendChild(el("li", { class: c.ANTHROPIC_API_KEY ? "done" : "" },
       el("h3", {}, "Connect Claude"),
-      el("p", { class: "small muted" }, "Create a key at console.anthropic.com → API keys. It reads and classifies your messages and writes drafts."),
+      el("p", { class: "small muted" }, "Claude reads your brand messages and writes your drafts. Create a key at console.anthropic.com → API keys, or use the setup guide for step-by-step help."),
       claudeBox,
       el("div", { class: "row" }, el("button", { class: "primary small", onclick: saveSecrets(claudeBox) }, "Save"),
         c.ANTHROPIC_API_KEY ? el("button", { class: "small", onclick: action(async () => {
@@ -1936,7 +1936,7 @@
           const r = await api("POST", "/oauth/google/start"); location.href = r.url;
         }) }, channel.EMAIL.connected ? "Reconnect Gmail" : "Connect Gmail") : null,
         channel.EMAIL.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/google/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
-      channelStatus(channel.EMAIL),
+      channelStatus(channel.EMAIL, "Gmail"),
       channel.EMAIL.connected ? importHistory() : null,
       el("p", { class: "small muted" }, "Permissions requested: read mail + create/send drafts, and a Creator CRM calendar for deal dates. The app cannot delete or change existing mail or see your other calendars.")));
 
@@ -1959,7 +1959,7 @@
           const r = await api("POST", "/oauth/instagram/start"); location.href = r.url;
         }) }, channel.INSTAGRAM.connected ? "Reconnect Instagram" : "Connect Instagram") : null,
         channel.INSTAGRAM.connected ? el("button", { class: "small danger", onclick: action(async () => { await api("POST", "/oauth/instagram/disconnect"); renderSettings(root); }, "Disconnected") }, "Disconnect") : null),
-      channelStatus(channel.INSTAGRAM),
+      channelStatus(channel.INSTAGRAM, "Instagram"),
       channel.INSTAGRAM.connected ? instagramStatsLine(s.instagramStats, root) : null,
       s.instagramTokenExpiresAt ? el("p", { class: "small muted" }, "Token renews automatically; current expiry " + fmtDate(s.instagramTokenExpiresAt) + ".") : null));
 
@@ -1989,7 +1989,7 @@
     };
     fu.followupAutoSend.checked = p.followupAutoSend === "true";
     panes.deals.appendChild(settingsSection("settings-followups", "Follow-ups",
-      el("p", { class: "small muted" }, "Each day at this time the app syncs and drafts every follow-up that's due. Brands that reply drop out automatically."),
+      el("p", { class: "small muted" }, "Each day at this time the app checks for new messages and drafts every follow-up that's due. Brands that reply drop out automatically."),
       el("div", { class: "grid" },
         el("div", {}, el("label", {}, "Days to wait before follow-up #1, #2, …"), fu.followupCadenceDays),
         el("div", {}, el("label", {}, "Daily follow-up time (your time zone)"), fu.followupTime)),
@@ -2168,7 +2168,7 @@
       }, "Password changed") }, "Change password")))));
 
     if (s.pendingAnalysis > 0) {
-      panes.accounts.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + " message(s) waiting for AI analysis" + (c.ANTHROPIC_API_KEY ? "." : " — add your Claude API key.")));
+      panes.accounts.appendChild(el("p", { class: "muted small" }, s.pendingAnalysis + (s.pendingAnalysis === 1 ? " message is" : " messages are") + " waiting for Claude to read them" + (c.ANTHROPIC_API_KEY ? "." : ". Add your Claude key above.")));
     }
   }
 
@@ -2295,7 +2295,7 @@
     const b = await api("GET", "/api/backup/auto");
     const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
     const status = b.lastError
-      ? el("p", { class: "alert error" }, b.lastError)
+      ? channelError(b.lastError)
       : b.lastBackupAt
         ? el("p", {}, el("span", { class: "status-dot on" }), "Last backup: " + fmtDateTime(b.lastBackupAt) + ", " + kb(b.lastSizeBytes))
         : el("p", { class: "muted" }, b.enabled ? "No backup yet. The first one is made within a few minutes." : "Not set up yet.");
@@ -2409,12 +2409,12 @@
       el("p", {}, el("button", { class: "danger small", onclick: doRestore }, "Restore…"))));
   }
 
-  function channelStatus(ch) {
+  function channelStatus(ch, name) {
     return el("div", {},
       el("p", { class: "small" }, el("span", { class: "status-dot" + (ch.connected ? " on" : "") }),
         ch.connected ? "Connected" + (ch.account ? " as " + ch.account : "") : "Not connected",
-        ch.lastSync ? " · last sync " + fmtDateTime(ch.lastSync) : ""),
-      ch.lastError ? channelError(ch.lastError) : null);
+        ch.lastSync ? " · last checked " + fmtDateTime(ch.lastSync) : ""),
+      ch.lastError ? channelError(ch.lastError, name) : null);
   }
 
   function importHistory() {
@@ -2435,9 +2435,28 @@
         }, "Import started. Progress shows at the top.") }, "Import")));
   }
 
+  // Raw errors from Google, Meta and the network, in words she can act on. The original stays under Details.
+  const PLAIN_ERRORS = [
+    [/invalid_grant|invalid_token|token has been|expired|revoked|unauthori[sz]ed|\b401\b|OAuthException/i,
+      (n) => n + " needs you to sign in again. Press Reconnect " + n + "."],
+    [/\b403\b|insufficient|permission|scope/i,
+      (n) => n + " hasn't given the app permission for this. Press Reconnect " + n + " and allow everything on the sign-in screen."],
+    [/\b429\b|rate.?limit|quota|too many requests/i, (n) => n + " asked the app to slow down. It carries on by itself shortly."],
+    [/UnknownHost|timed? ?out|connection (refused|reset)|no route|network is unreachable|SocketException/i,
+      (n) => "Couldn't reach " + n + ". Check this computer is online; the app tries again by itself."],
+    [/\b5\d\d\b|backendError|service unavailable|internal server error|overloaded/i,
+      (n) => n + " is having problems on its side. The app tries again by itself."],
+  ];
+
+  function plainError(text, name) {
+    const hit = name && PLAIN_ERRORS.find(([re]) => re.test(text));
+    return hit ? hit[1](name) : null;
+  }
+
   // Short first line always visible; anything longer folds into "Details" so the page never scrolls sideways.
-  function channelError(text) {
-    const first = text.split("\n")[0];
+  function channelError(text, name) {
+    text = text.replace(/^\d{4}-\d\d-\d\dT\S+\s+/, ""); // stored with the time it happened
+    const first = plainError(text, name) || text.split("\n")[0];
     const summary = first.length > 160 ? first.slice(0, 160) + "…" : first;
     return el("div", { class: "alert error channel-error" },
       el("strong", {}, "Last error: "), summary,
@@ -2839,7 +2858,7 @@
         gmail.connected ? null : passwordForm(el("div", { class: "grid" },
           el("div", {}, el("label", { for: "setup-google-id" }, "Client ID"), id),
           el("div", {}, el("label", { for: "setup-google-secret" }, "Client secret"), secret))),
-        gmail.lastError ? channelError(gmail.lastError) : null,
+        gmail.lastError ? channelError(gmail.lastError, "Gmail") : null,
         nav(
           el("button", { type: "button", class: gmail.connected ? "primary" : "", onclick: next }, gmail.connected ? "Next" : "Skip for now"),
           gmail.connected ? null : el("button", { class: "primary", onclick: connect }, "Connect Gmail")));
@@ -3014,20 +3033,21 @@
     const msgs = n + " message" + (n === 1 ? "" : "s");
     let text = "", warn = false, title = "";
     const since = s.importingSince ? fmtDate(s.importingSince.slice(0, 10)) : null;
-    if (s.analyzing) text = "Analyzing " + msgs + "…";
-    else if (s.syncing) text = since ? "Importing email since " + since + "…" : "Syncing…";
-    else if (since) text = "Import since " + since + " continues on the next sync";
+    if (s.analyzing) text = "Claude is reading " + msgs + "…";
+    else if (s.syncing) text = since ? "Bringing in email since " + since + "…" : "Checking for new messages…";
+    else if (since) text = "Bringing in email since " + since + " continues next time the app checks";
     else if (n > 0 && !s.aiConfigured) {
-      text = msgs + " waiting: add your Claude API key in Settings"; warn = true;
+      text = msgs + " waiting: add your Claude key in Settings, Accounts"; warn = true;
     } else if (s.inBatch > 0 && !s.aiError) {
-      text = s.inBatch + " older message" + (s.inBatch === 1 ? "" : "s") + " being analyzed at half price"
+      text = s.inBatch + " older message" + (s.inBatch === 1 ? "" : "s") + " being read at half price"
         + (n > s.inBatch ? " (" + n + " waiting in all)" : "") + ". Results come in over the next few hours.";
     } else if (n > 0 && s.aiError) {
       const reason = s.aiError.replace(/^\S+\s+/, "");
-      text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude API key rejected"
-        : /\(429\)/.test(reason) ? "Claude rate limit, retrying next sync" : reason);
+      text = msgs + " waiting: " + (/\(401\)/.test(reason) ? "Claude didn't accept your key. Check it in Settings, Accounts"
+        : /\(429\)/.test(reason) ? "Claude asked the app to slow down; it tries again shortly"
+        : plainError(reason, "Claude") || reason);
       warn = true; title = s.aiError;
-    } else if (n > 0) text = msgs + " waiting for analysis";
+    } else if (n > 0) text = msgs + " waiting for Claude to read them";
     const chip = document.getElementById("sync-status");
     chip.textContent = text;
     chip.title = title;
