@@ -14,22 +14,22 @@ public final class Enums {
     public enum Origin { INBOUND, PITCH }
 
     public enum OpportunityStatus {
-        NEW_LEAD("🆕 New Lead"),
-        PITCHED("📤 Pitched"),
-        AWAITING_MY_REPLY("📩 Awaiting My Reply"),
-        NEGOTIATING("💰 Negotiating"),
-        CONTRACT_PENDING("📝 Contract Pending"),
-        CONTRACT_TO_SIGN("✍️ Contract to Sign"),
-        PRODUCT_PENDING("📦 Product Pending"),
-        PRODUCT_RECEIVED("📦 Product Received"),
-        CONTENT_TO_CREATE("🎬 Content To Create"),
-        AWAITING_APPROVAL("👀 Awaiting Approval"),
-        SCHEDULED_TO_POST("📅 Scheduled to Post"),
-        POSTED("✅ Posted"),
-        PAYMENT_PENDING("💵 Payment Pending"),
-        FOLLOW_UP_NEEDED("🔄 Follow-Up Needed"),
-        COLD("🧊 Cold"),
-        CLOSED("❌ Closed");
+        NEW_LEAD("New lead"),
+        PITCHED("Pitched"),
+        AWAITING_MY_REPLY("Awaiting my reply"),
+        NEGOTIATING("Negotiating"),
+        CONTRACT_PENDING("Contract pending"),
+        CONTRACT_TO_SIGN("Contract to sign"),
+        PRODUCT_PENDING("Product pending"),
+        PRODUCT_RECEIVED("Product received"),
+        CONTENT_TO_CREATE("Content to create"),
+        AWAITING_APPROVAL("Awaiting approval"),
+        SCHEDULED_TO_POST("Scheduled to post"),
+        POSTED("Posted"),
+        PAYMENT_PENDING("Payment pending"),
+        FOLLOW_UP_NEEDED("Follow-up needed"),
+        COLD("Cold"),
+        CLOSED("Closed");
 
         public final String label;
 
