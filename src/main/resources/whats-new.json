@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.36.0",
+    "title": "Neater icons",
+    "features": [
+      {
+        "id": "icons",
+        "title": "One set of simple icons",
+        "body": "The little pictures next to headings, deal stages and your day summary are now simple line icons that look the same on your laptop and your phone, instead of emoji that changed from one device to another. Deal stages read plainly too: New lead, Negotiating, Contract to sign, Posted, Payment pending.",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.33.0",
     "title": "Clearer messages when something goes wrong",
     "features": [
