@@ -126,14 +126,18 @@ const ICONS = {
   inbox: "M3.5 13.5 6 5h12l2.5 8.5V19h-17zM3.5 13.5H9l1 2h4l1-2h5.5",
   snow: "M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9",
   checkCircle: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM8 12.5l3 3 5-6",
+  list: "M8.5 6.5h11M8.5 12h11M8.5 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01",
   xCircle: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9 9l6 6M15 9l-6 6",
+  file: "M6 3.5h8l4 4V20.5H6zM14 3.5v4h4M9 12h6M9 15.5h6",
+  gift: "M4 9h16v4H4zM5.5 13v7.5h13V13M12 9v11.5M12 9c-1.5-3.5-5.5-4-5.5-1.5S10 9 12 9zm0 0c1.5-3.5 5.5-4 5.5-1.5S14 9 12 9z",
 };
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-function icon(name) {
+// tone (optional) colours it: "blue", "amber", "violet", "green", "teal" or "grey" (see .tone-* in app.css).
+function icon(name, tone) {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("class", "ico-inline");
+  svg.setAttribute("class", "ico-inline" + (tone ? " tone-" + tone : ""));
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(SVG_NS, "path");
   path.setAttribute("d", ICONS[name] || ICONS.sparkle);
@@ -141,18 +145,30 @@ function icon(name) {
   return svg;
 }
 
-const STATUS_ICONS = { NEW_LEAD: "sparkle", PITCHED: "send", AWAITING_MY_REPLY: "inbox", NEGOTIATING: "money",
-  CONTRACT_PENDING: "pen", CONTRACT_TO_SIGN: "pen", PRODUCT_PENDING: "box", PRODUCT_RECEIVED: "box",
+// Each stage has its own icon and a colour for its phase, so a list of deals can be scanned without reading it:
+// blue = new and waiting, amber = talking it through, violet = doing the work, green = posted, teal = money.
+const STATUS_ICONS = { NEW_LEAD: "sparkle", PITCHED: "send", AWAITING_MY_REPLY: "inbox", NEGOTIATING: "chat",
+  CONTRACT_PENDING: "file", CONTRACT_TO_SIGN: "pen", PRODUCT_PENDING: "box", PRODUCT_RECEIVED: "gift",
   CONTENT_TO_CREATE: "film", AWAITING_APPROVAL: "eye", SCHEDULED_TO_POST: "calendar", POSTED: "checkCircle",
   PAYMENT_PENDING: "money", FOLLOW_UP_NEEDED: "repeat", COLD: "snow", CLOSED: "xCircle" };
+const STATUS_TONES = { NEW_LEAD: "blue", PITCHED: "blue", AWAITING_MY_REPLY: "blue", FOLLOW_UP_NEEDED: "amber",
+  NEGOTIATING: "amber", CONTRACT_PENDING: "amber", CONTRACT_TO_SIGN: "amber", PRODUCT_PENDING: "violet",
+  PRODUCT_RECEIVED: "violet", CONTENT_TO_CREATE: "violet", AWAITING_APPROVAL: "violet", SCHEDULED_TO_POST: "violet",
+  POSTED: "green", PAYMENT_PENDING: "teal", COLD: "grey", CLOSED: "grey" };
 
 // A deal's status with its icon. Older saved text may still start with an emoji; that's dropped.
 function statusTag(key, label) {
-  return el("span", { class: "status-tag" }, icon(STATUS_ICONS[key]), stripEmoji(label || pretty(key)));
+  return el("span", { class: "status-tag tone-" + (STATUS_TONES[key] || "grey") }, icon(STATUS_ICONS[key]), stripEmoji(label || pretty(key)));
 }
 
 function stripEmoji(text) {
   return String(text).replace(/^[\p{Extended_Pictographic}️‍\s]+/u, "");
+}
+
+// A section heading: its icon in a tinted circle, the words, and how many things are in it.
+function sectionTitle(iconName, tone, text, count) {
+  return [el("span", { class: "sec-ico tone-" + tone }, icon(iconName)), text,
+    count != null ? el("span", { class: "sec-count" }, String(count)) : null];
 }
 
 function card(title, ...children) {

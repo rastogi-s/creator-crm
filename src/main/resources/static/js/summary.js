@@ -35,7 +35,7 @@ async function renderSummary(root) {
       el("span", {}, icon("mail"), " " + n(s.draftsWaiting, "draft is", "drafts are") + " ready for you to read and send."),
       el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review drafts")) : null));
 
-  const doneCard = card([icon("checkCircle"), "What you got done"],
+  const doneCard = card(sectionTitle("checkCircle", "green", "What you got done"),
     s.done.length ? showMore(s.done, 6, (items) => el("ul", { class: "list eod-done" }, items.map((d) => el("li", { class: "item" },
       el("span", { class: "eod-icon", "aria-hidden": "true" }, icon(DONE_ICONS[d.kind] || "check")),
       el("div", { class: "body" },
@@ -46,13 +46,13 @@ async function renderSummary(root) {
       : emptyLine("Nothing ticked off yet. When you finish a task, send a message or a brand writes back, it shows up here."));
   doneCard.id = "eod-done";
 
-  const tomorrowCard = card([icon("sun"), "Lined up for tomorrow"],
+  const tomorrowCard = card(sectionTitle("sun", "amber", "Lined up for tomorrow"),
     s.tomorrowItems.length ? itemList(s.tomorrowItems, "", false)
       : emptyLine("Nothing is due tomorrow yet." + (waiting ? " A good start is whatever is still waiting below." : "")));
   tomorrowCard.id = "eod-tomorrow";
   root.appendChild(el("div", { class: "eod-grid" }, doneCard, tomorrowCard));
 
-  const waitingCard = card([icon("hourglass"), "Still waiting on you"]);
+  const waitingCard = card(sectionTitle("hourglass", "blue", "Still waiting on you"));
   waitingCard.id = "eod-waiting";
   if (!waiting) waitingCard.appendChild(emptyLine("All clear. Nothing is waiting on you."));
   if (s.pending.length) {
@@ -65,7 +65,7 @@ async function renderSummary(root) {
   }
   root.appendChild(waitingCard);
 
-  const newCard = card([icon("money"), "New deals today"],
+  const newCard = card(sectionTitle("money", "teal", "New deals today"),
     s.newDeals.length ? showMore(s.newDeals, 6, (items) => el("ul", { class: "list" }, items.map((d) => {
       const [label, cls] = COMP_BADGES[d.compensation] || ["Not sure yet", "badge"];
       return el("li", { class: "item" },
