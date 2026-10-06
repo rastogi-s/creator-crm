@@ -78,13 +78,15 @@ function helpers(page) {
   return { pause, say, point, click };
 }
 
-// Pages that aren't in the tab bar (Settings, Help, …) are one tap further, under More.
-async function goTo(page, tab) {
+// Pages that aren't in the tab bar (Settings, Help, …) are one tap further, under More. Settings has its own
+// tabs (accounts, you, deals, app, advanced); pass one to open it.
+async function goTo(page, tab, settingsTab) {
   const { click } = helpers(page);
   const direct = page.locator(`.tab[data-tab=${tab}]`);
   if (await direct.count()) return click(direct);
   await click(page.locator(".tab[data-tab=more]"));
   await click(page.locator(`.more-link[data-tab=${tab}]`));
+  if (settingsTab) await click(page.locator(`[data-settings-tab=${settingsTab}]`));
 }
 
 // Drafts is an inbox: the list, and the one draft that's open (the others are built but hidden).
@@ -113,7 +115,7 @@ const scenarios = {
     page.once("dialog", (d) => d.accept());
     await click(banner.getByRole("button", { name: "Update now" }));
     await say("Nothing is ever installed without your click. Afterwards, What's New shows what changed.", 4200);
-    await goTo(page, "settings");
+    await goTo(page, "settings", "app");
     const card = page.locator(".card", { has: page.getByRole("heading", { name: "Updates" }) });
     await card.scrollIntoViewIfNeeded();
     await say("Under Settings, Updates you can check by hand, or turn automatic checks off.", 3600);
@@ -223,7 +225,7 @@ const scenarios = {
     await drawer.locator(".msg.focus").first().waitFor();
     await say("Here it is, highlighted. For Gmail emails, Open in Gmail jumps to the original.", 4200);
     await click(drawer.getByRole("button", { name: "Close" }));
-    await goTo(page, "settings");
+    await goTo(page, "settings", "you");
     const rules = page.locator("#task-rules");
     await rules.waitFor();
     await rules.scrollIntoViewIfNeeded();
@@ -287,7 +289,7 @@ const scenarios = {
     await point(box.locator("summary"));
     await say("Contract on DocuSign? Paste its text here and it's checked the same way.", 4200);
     await click(drawer.getByRole("button", { name: "Close" }));
-    await goTo(page, "settings");
+    await goTo(page, "settings", "deals");
     const limits = page.locator("#settings-contracts");
     await limits.waitFor();
     await limits.scrollIntoViewIfNeeded();
@@ -481,7 +483,7 @@ const scenarios = {
     await say("It mentions your last collab and one new idea. Edit anything, then press Send.", 4200);
     await point(draft.getByText("Sending it adds a new pitch"));
     await say("Sending it adds a new pitch to your pipeline, with follow-ups like any other.", 4000);
-    await goTo(page, "settings");
+    await goTo(page, "settings", "deals");
     const step = page.locator("#settings-rebook");
     await step.waitFor();
     await step.scrollIntoViewIfNeeded();
@@ -583,7 +585,7 @@ const scenarios = {
     await draft.waitFor();
     await point(draft.locator("textarea"));
     await say("Check it, change anything you like, then press Send. Reminders never go out without you.", 4400);
-    await goTo(page, "settings");
+    await goTo(page, "settings", "deals");
     const days = page.getByText("Payment reminders: days after the due date");
     await point(days);
     await say("Under Settings, Invoices, pick the days: 3, 7 and 14 after the due date to start with.", 4200);
@@ -615,6 +617,42 @@ const scenarios = {
     await page.locator("#backup").getByText("Last backup").evaluate((e) => e.scrollIntoView({ block: "center", behavior: "smooth" }));
     await point(page.locator("#backup").getByText("Last backup"));
     await say("Done. It keeps the last two weeks. If the laptop is off at night, it backs up soon after you open the app.", 4800);
+    await say("", 600);
+  },
+
+  async "setup-guide"(page) {
+    const { say, point, click } = helpers(page);
+    const step = page.locator(".setup-step");
+    await page.goto(BASE + "/#setup");
+    await step.waitFor();
+    await say("On a new computer, a setup guide opens by itself. One step per screen.", 4000);
+    await point(page.locator(".setup-progress"));
+    await say("Your name, Claude, Gmail and your rates. That's all it takes.", 3600);
+    await click(step.getByRole("button", { name: "Start" }));
+    await page.locator(".setup-step h1", { hasText: "Connect Claude" }).waitFor();
+    await point(page.locator(".setup-why"));
+    await say("Every step says why the app needs it.", 3000);
+    await point(page.locator(".setup-howto"));
+    await say("And exactly what to click, with links straight to the right page.", 4000);
+    await click(step.getByRole("button", { name: /Skip for now|Next/ }));
+    await page.locator(".setup-step h1", { hasText: "Connect Gmail" }).waitFor();
+    await say("Gmail is the one technical step, done once. It's spelled out click by click.", 4400);
+    await point(step.getByRole("button", { name: "Copy" }));
+    await say("Copy puts the address Google asks for on your clipboard.", 3400);
+    await click(step.getByRole("button", { name: /Skip for now|Next/ }));
+    await page.locator(".setup-step h1", { hasText: "Your rates" }).waitFor();
+    await say("Then your rates. Drafts only ever quote what you write here.", 3800);
+    await click(step.getByRole("button", { name: "Skip for now" }));
+    await page.locator(".setup-checklist").waitFor();
+    await point(page.locator(".setup-checklist"));
+    await say("The last screen shows what's connected, and what you can add later.", 4000);
+    await goTo(page, "settings");
+    await page.locator(".settings-tabs").waitFor();
+    await say("Settings is now in five tabs instead of one long page.", 3600);
+    await click(page.locator("[data-settings-tab=deals]"));
+    await say("Deals & money has follow-ups, invoices, rates and contracts.", 3600);
+    await click(page.locator("[data-settings-tab=advanced]"));
+    await say("Advanced keeps the things you rarely need out of the way.", 3600);
     await say("", 600);
   },
 

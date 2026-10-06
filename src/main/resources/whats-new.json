@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.31.0",
+    "version": "1.32.0",
     "title": "A clearer bar at the bottom of your phone",
     "features": [
       {
@@ -8,6 +8,25 @@
         "title": "Bigger, clearer buttons along the bottom",
         "body": "On your phone the five buttons at the bottom are bigger and easier to read, and the place you're in now sits in a soft orange pill, so you always know where you are. The grey box that used to stay stuck on the last button you tapped is gone, the bar keeps clear of the iPhone's home line, and the top of the screen has the app's logo and a rounder search box. Today's greeting is a little smaller so your list starts higher up.",
         "tryIt": "#today"
+      }
+    ]
+  },
+  {
+    "version": "1.31.0",
+    "title": "Easier setup, tidier Settings",
+    "features": [
+      {
+        "id": "setup-guide",
+        "title": "A setup guide that holds your hand",
+        "body": "Setting up on a new computer is now one step per screen: your name, Claude, Gmail, then your rates. Each step says why the app needs it and exactly what to click, with links straight to the right page and a Copy button for the address Google asks for. It opens by itself until Claude and Gmail are connected, and you can open it again any time from More or Settings.",
+        "video": "setup-guide.webm",
+        "tryIt": "#setup"
+      },
+      {
+        "id": "settings-tabs",
+        "title": "Settings in five tabs",
+        "body": "Settings used to be one very long page. It now has tabs: Accounts for your connections, You for your name, voice, rates and to-do rules, Deals & money for follow-ups, invoices and contracts, App for updates, nightly backups and Claude spending, and Advanced for the things you rarely need, like Claude models, extra Instagram options and restoring a backup.",
+        "tryIt": "#settings"
       }
     ]
   },
