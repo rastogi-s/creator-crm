@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.43.0",
+    "title": "A laptop layout with room to breathe",
+    "features": [
+      {
+        "id": "desktop-layout",
+        "title": "A sidebar, and pages that use your whole screen",
+        "body": "On a laptop or big screen, every page now has its own place in a sidebar on the left: Today, Drafts, Deals and Money at the top, then Day summary, My links, Settings, Help and What's new, so nothing hides under More any more. Deals, Pitching brands, Money and Drafts now stretch to fill a wide screen. Your pitches show one tidy line each, with the five follow-ups as a row of dots (green once sent, orange for the next one); hover over the dots to see the dates. Your phone looks exactly the same as before.",
+        "video": "desktop-layout.webm",
+        "tryIt": "#outreach"
+      }
+    ]
+  },
+  {
     "version": "1.42.0",
     "title": "Colours that tell you where each deal is",
     "features": [

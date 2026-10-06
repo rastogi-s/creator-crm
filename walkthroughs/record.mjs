@@ -78,14 +78,17 @@ function helpers(page) {
   return { pause, say, point, click };
 }
 
-// Pages that aren't in the tab bar (Settings, Help, …) are one tap further, under More. Settings has its own
-// tabs (accounts, you, deals, app, advanced); pass one to open it.
+// On a laptop every page has its own place in the sidebar; on a phone, pages that aren't in the tab bar
+// (Settings, Help, …) are one tap further, under More. Settings has its own tabs (accounts, you, deals, app,
+// advanced); pass one to open it.
 async function goTo(page, tab, settingsTab) {
   const { click } = helpers(page);
-  const direct = page.locator(`.tab[data-tab=${tab}]`);
-  if (await direct.count()) return click(direct);
-  await click(page.locator(".tab[data-tab=more]"));
-  await click(page.locator(`.more-link[data-tab=${tab}]`));
+  const direct = page.locator(`.tab[data-tab=${tab}]:visible`);
+  if (await direct.count()) await click(direct);
+  else {
+    await click(page.locator(".tab[data-tab=more]"));
+    await click(page.locator(`.more-link[data-tab=${tab}]`));
+  }
   if (settingsTab) await click(page.locator(`[data-settings-tab=${settingsTab}]`));
 }
 
@@ -537,7 +540,7 @@ const scenarios = {
     await page.goto(BASE + "/#today");
     await page.locator("#view-today h1").waitFor();
     await point(page.locator(".tabs"));
-    await say("The top bar now has five places: Today, Drafts, Deals, Money and More.", 4200);
+    await say("Your everyday places are Today, Drafts, Deals and Money, down the left side.", 4200);
     const first = page.locator("#view-today .card", { hasText: "Do these first" });
     await point(first);
     await say("Today starts with the three things to do first, picked by money and how late they are.", 4400);
@@ -547,10 +550,31 @@ const scenarios = {
     await click(page.locator(".tab[data-tab=pipeline]"));
     await point(page.locator("#view-pipeline .segmented"));
     await say("Deals has your deals and, next door, the brands you're pitching.", 4000);
-    await click(page.locator(".tab[data-tab=more]"));
-    await point(page.locator("#view-more .more-list"));
-    await say("More has your day summary, your links, Settings and Help.", 4000);
-    await say("On your phone, the five places sit at the bottom of the screen.", 3600);
+    await point(page.locator(".tab[data-tab=settings]"));
+    await say("Day summary, your links, Settings and Help each have their own place underneath.", 4000);
+    await say("On your phone, the five places sit at the bottom of the screen, with the rest under More.", 4000);
+    await say("", 600);
+  },
+
+  async "desktop-layout"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await page.locator("#view-today h1").waitFor();
+    await point(page.locator(".tabs"));
+    await say("On a laptop, every page now sits in a sidebar on the left, one click away.", 4200);
+    await point(page.locator(".tab[data-tab=settings]"));
+    await say("Settings, Help and your day summary no longer hide under More.", 3800);
+    await click(page.locator(".tab[data-tab=pipeline]"));
+    await say("Pages with tables use the whole width of your screen.", 3600);
+    await click(page.locator("#view-pipeline .segmented a").nth(1));
+    const table = page.locator("#view-outreach table");
+    await table.waitFor();
+    await table.scrollIntoViewIfNeeded();
+    await point(table);
+    await say("Your pitches sit on one line each. The five follow-ups are one row of dots: green sent, orange next.", 5000);
+    await point(table.locator(".fu-dots").first());
+    await say("Hover over the dots to see each follow-up's date.", 3400);
+    await say("Your phone looks exactly the same as before.", 3200);
     await say("", 600);
   },
 
@@ -670,7 +694,7 @@ const scenarios = {
     if (await leftOpen.count()) { await leftOpen.click(); await card.getByRole("button", { name: "Start practice" }).waitFor(); }
     await say("Want to try something without touching your real deals? Practise with sample brands.", 4200);
     await point(card);
-    await say("Practice mode is under More.", 2600);
+    await say("Practice mode is under More, at the bottom of the sidebar.", 3000);
     await click(card.getByRole("button", { name: "Start practice" }));
     await say("It takes a few seconds to set up a copy of the app with made-up brands.", 3600);
     const banner = page.locator("#practice-banner");
