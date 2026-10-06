@@ -70,6 +70,13 @@
     };
   }
 
+  // Same rule as Placeholders.java: capitals in square brackets, e.g. [RATE FOR 1 REEL] or [MEDIA KIT LINK].
+  function blanksIn(...texts) {
+    const found = new Set();
+    for (const t of texts) for (const m of (t || "").matchAll(/\[[A-Z][A-Z0-9 &'\/+.,:#$%-]{2,80}\]/g)) found.add(m[0]);
+    return [...found];
+  }
+
   function pretty(s) {
     if (!s) return "";
     if (s === "REPITCH") return "Re-pitch";
@@ -1412,7 +1419,7 @@
     const undo = el("button", { class: "small hidden", title: "Put back the version before Claude's change", onclick: action(async () => {
       const prev = history.pop();
       if (!prev) return;
-      subject.value = prev.subject; body.value = prev.body;
+      subject.value = prev.subject; body.value = prev.body; body.dispatchEvent(new Event("input"));
       undo.classList.toggle("hidden", !history.length);
       await api("PUT", "/api/drafts/" + d.id, prev);
     }, "Change undone") }, "Undo");
@@ -1425,7 +1432,7 @@
       try {
         const r = await api("POST", "/api/drafts/" + d.id + "/revise", { subject: before.subject, body: before.body, request });
         history.push(before);
-        subject.value = r.subject || ""; body.value = r.body;
+        subject.value = r.subject || ""; body.value = r.body; body.dispatchEvent(new Event("input"));
         undo.classList.remove("hidden");
         ask.value = "";
         status.textContent = "Changed. Read it over before you send.";
@@ -1492,6 +1499,16 @@
       const body = el("textarea", { class: "tall", maxlength: "20000" });
       body.value = d.body;
       const edits = () => ({ subject: subject.value, body: body.value });
+      // Blanks like [RATE FOR 1 REEL] that Claude left for her. The server refuses to send while any remain.
+      const blanksNote = el("div", { class: "alert warn hidden", role: "status" });
+      const checkBlanks = () => {
+        const found = blanksIn(body.value); // not the subject: brands' mail adds tags like [EXTERNAL]
+        blanksNote.textContent = found.length ? (found.length === 1 ? "Fill in this blank before sending: " : "Fill in these blanks before sending: ") + found.join(", ") : "";
+        blanksNote.classList.toggle("hidden", !found.length);
+        return found;
+      };
+      body.addEventListener("input", checkBlanks);
+      checkBlanks();
       const node = holder.appendChild(card(null,
         el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
@@ -1503,9 +1520,11 @@
         d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
         el("label", {}, "Message"), body,
         askClaude(d, subject, body),
+        blanksNote,
         blockedReason ? el("div", { class: "alert info" }, blockedReason) : null,
         el("div", { class: "row" },
           blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
+            if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
             if (!confirm("Send this " + (d.channel === "EMAIL" ? "email" : "DM") + " to " + brand + " now?")) return;
             await api("POST", "/api/drafts/" + d.id + "/send", edits()); route();
           }, "Sent ✓") }, "Send"),
@@ -2615,6 +2634,28 @@
     chip.title = title;
     chip.className = "sync-status" + (warn ? " warn" : "");
     document.getElementById("sync-status-row").classList.toggle("hidden", !text);
+    showChannelBanner(s.channelProblems || []);
+  }
+
+  // An account that keeps failing gets a banner on every page: otherwise Today looks calm while no new mail arrives.
+  function showChannelBanner(problems) {
+    const b = clear(document.getElementById("channel-banner"));
+    b.classList.toggle("hidden", !problems.length);
+    for (const p of problems) {
+      const name = p.channel === "EMAIL" ? "Gmail" : "Instagram";
+      const when = fmtDate(p.since.slice(0, 10));
+      const row = el("div", { class: "row", title: p.detail },
+        el("span", {}, el("strong", {}, "⚠️ " + name + " stopped connecting on " + when + ". "),
+          p.signIn ? "New messages aren't coming in until you reconnect it."
+            : "New messages aren't coming in. Check the internet connection, or reconnect it."),
+        el("span", { class: "spacer" }),
+        p.channel === "EMAIL"
+          ? el("button", { class: "small primary", onclick: action(async () => {
+              const r = await api("POST", "/oauth/google/start"); location.href = r.url;
+            }) }, "Reconnect Gmail")
+          : el("a", { class: "btn small", href: "#settings" }, "Reconnect Instagram"));
+      b.appendChild(row);
+    }
   }
 
   async function pollStatus() {

@@ -66,7 +66,7 @@ public class FakeLlm implements LlmClient {
         draftCalls++;
         lastDraftInput = input;
         if (failDraftsWith != null) throw failDraftsWith;
-        return new DraftText("Re: collab", "Hi Maya, thanks! [" + input.draftType() + "]");
+        return new DraftText("Re: collab", "Hi Maya, thanks! (" + input.draftType() + ")");
     }
 
     public String lastRevisionRequest;

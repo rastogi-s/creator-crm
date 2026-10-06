@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.26.0",
+    "title": "Safer sending",
+    "features": [
+      {
+        "id": "safer-sending",
+        "title": "No more blanks sent to brands",
+        "body": "When your rates or a link aren't in Settings yet, Claude leaves a blank like [RATE FOR 1 REEL] for you to fill in. Drafts now point these out in yellow, and the app won't send an email or DM, or an automatic follow-up, until every blank is filled in. And if Gmail or Instagram stops connecting, a red bar on every page tells you, with a button to reconnect.",
+        "video": "safer-sending.webm",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.25.0",
     "title": "See where every deal is",
     "features": [

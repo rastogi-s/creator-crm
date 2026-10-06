@@ -35,6 +35,7 @@ class PartialSyncIntegrationTest {
         final List<String> downloaded = new ArrayList<>();
         int total = 5;
         Instant retryAfter;
+        RuntimeException failWith;
 
         public Platform platform() { return Platform.OTHER; }
         public boolean isConnected() { return true; }
@@ -46,6 +47,7 @@ class PartialSyncIntegrationTest {
         }
 
         public List<NormalizedMessage> fetchSince(OffsetDateTime since, Predicate<String> known) throws Exception {
+            if (failWith != null) throw failWith;
             List<NormalizedMessage> out = new ArrayList<>();
             for (int i = 1; i <= total; i++) {
                 String id = "m" + i;
@@ -76,6 +78,33 @@ class PartialSyncIntegrationTest {
     @BeforeEach
     void resetChannelState() {
         appState.findAll().stream().filter(s -> s.stateKey.startsWith("sync.OTHER")).forEach(appState::delete);
+        flaky.failWith = null;
+        flaky.total = 5;
+        flaky.retryAfter = null;
+        flaky.downloaded.clear();
+    }
+
+    @Test
+    void anAccountThatNeedsSigningInAgainIsFlaggedUntilASyncWorks() {
+        flaky.failWith = new RuntimeException("Connection reset");
+        ingestion.syncAll();
+        assertThat(problems()).as("one offline blip is not worth a banner").isEmpty();
+
+        flaky.failWith = new RuntimeException("400 Bad Request: invalid_grant (Token has been expired or revoked.)");
+        ingestion.syncAll();
+        assertThat(problems()).singleElement().satisfies(p -> {
+            assertThat(p.signIn()).isTrue();
+            assertThat(p.detail()).contains("invalid_grant");
+        });
+
+        flaky.failWith = null;
+        flaky.total = 0;
+        ingestion.syncAll();
+        assertThat(problems()).isEmpty();
+    }
+
+    private List<IngestionService.ChannelProblem> problems() {
+        return ingestion.status().channelProblems().stream().filter(p -> p.channel().equals("OTHER")).toList();
     }
 
     @Test
