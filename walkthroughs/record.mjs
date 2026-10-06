@@ -531,6 +531,27 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "full-emails"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Glowberry Skin" });
+    await row.waitFor();
+    await say("Brand emails now look the way they did in Gmail.", 3200);
+    await click(row.locator("strong"));
+    const email = drawer.locator(".email-box").first();
+    await email.waitFor();
+    await email.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(800);
+    await point(email);
+    await say("Pictures, colours and layout are all there, and every link works.", 4200);
+    await say("Links open in a new window, so the app stays where it was.", 3800);
+    await say("Earlier messages in the thread fold away behind a Show earlier messages button.", 4200);
+    await say("Emails are cleaned first: nothing in them can run in the app.", 3800);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await say("", 600);
+  },
+
   async "safer-sending"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");

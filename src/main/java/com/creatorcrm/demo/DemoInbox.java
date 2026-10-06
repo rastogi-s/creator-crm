@@ -46,6 +46,38 @@ final class DemoInbox {
             new Mail("Petal & Pine", "Mia", "mia@petalpine.example", 25, "Loved your candle post",
                     "Hi Ava, Mia at Petal & Pine. We saw your post with our candle gift set, it looks lovely! Thanks so much for sharing it."));
 
+    /** The HTML version of some demo emails, the way brands' newsletters-style pitches look: a banner, a button. */
+    static final java.util.Map<String, String> HTML = java.util.Map.of(
+            "Glowberry Skin", """
+                    <div style="max-width:560px;margin:auto;font-family:Georgia,serif;color:#3b2a2a">
+                      <img alt="Glowberry Skin" width="560" height="140" src="data:image/svg+xml;base64,%s">
+                      <p>Hi Ava!</p>
+                      <p>Glowberry Skin here. We'd love a <b>paid Reel</b> for our <i>autumn serum</i> launch.
+                      Budget is <b>$800</b>. Could you share your availability?</p>
+                      <p style="text-align:center;margin:24px 0">
+                        <a href="https://glowberry.example/autumn-serum" style="background:#c2410c;color:#fff;padding:10px 22px;border-radius:22px;text-decoration:none;font-family:Arial,sans-serif">See the autumn serum</a>
+                      </p>
+                      <p>Warmly,<br>Priya · Partnerships, <a href="https://glowberry.example">Glowberry Skin</a></p>
+                    </div>""".formatted(java.util.Base64.getEncoder().encodeToString("""
+                    <svg xmlns="http://www.w3.org/2000/svg" width="560" height="140" viewBox="0 0 560 140">
+                    <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#fdba74"/><stop offset="1" stop-color="#be185d"/></linearGradient></defs>
+                    <rect width="560" height="140" rx="14" fill="url(#g)"/>
+                    <circle cx="470" cy="70" r="42" fill="#fff" opacity=".35"/><circle cx="500" cy="48" r="18" fill="#fff" opacity=".5"/>
+                    <text x="32" y="78" font-family="Georgia,serif" font-size="34" fill="#fff">Glowberry Skin</text>
+                    <text x="34" y="106" font-family="Arial,sans-serif" font-size="15" fill="#fff">Autumn serum · launching soon</text></svg>
+                    """.getBytes(java.nio.charset.StandardCharsets.UTF_8))),
+            "Nova Nest Home", """
+                    <div style="font-family:Arial,sans-serif;color:#1f2937;max-width:560px">
+                      <p>Hi Ava,</p>
+                      <p>Here's the Nova Nest Home brief for the <b>cozy-corner Reel</b>:</p>
+                      <p><a href="https://drive.novanest.example/cozy-corner-brief" style="display:inline-block;border:1px solid #0f766e;color:#0f766e;padding:8px 16px;border-radius:6px;text-decoration:none">📄 Open the cozy-corner brief</a></p>
+                      <ul><li>Draft content is due soon.</li>
+                      <li>As agreed, please don't post for other home or lifestyle brands for a month after it goes live.</li></ul>
+                      <p>Thanks!<br>Sam</p>
+                      <div class="gmail_quote"><div class="gmail_attr">On Mon, Ava wrote:</div>
+                      <blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">Sounds great, send over the brief!</blockquote></div>
+                    </div>""");
+
     static MessageAnalysis analysisFor(String text, LocalDate today) {
         String t = text == null ? "" : text;
         if (t.contains("Glowberry")) return a("Glowberry Skin", "Priya", Intent.NEW_OPPORTUNITY, OpportunityType.PAID, Compensation.PAID, 800,

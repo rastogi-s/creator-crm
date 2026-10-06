@@ -744,6 +744,45 @@
   }
 
   // Scrolls the open deal to one message and highlights it for a moment.
+  // Web addresses in a message's text become links that open in a new window.
+  function linkify(text) {
+    const out = [];
+    let last = 0;
+    for (const m of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
+      const url = m[0].replace(/[.,;:!?)\]']+$/, "");
+      out.push(text.slice(last, m.index), el("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, url));
+      last = m.index + url.length;
+    }
+    out.push(text.slice(last));
+    return out;
+  }
+
+  // The email as the brand sent it (links, pictures, layout), cleaned by the server and shown in a sandboxed frame
+  // that can't run scripts. Long emails are folded until she asks for the rest.
+  function emailFrame(m) {
+    const frame = el("iframe", { class: "email-frame", src: "/api/messages/" + m.id + "/email", loading: "lazy",
+      title: "Email" + (m.subject ? ": " + m.subject : ""), referrerpolicy: "no-referrer",
+      sandbox: "allow-popups allow-popups-to-escape-sandbox allow-same-origin" });
+    const box = el("div", { class: "email-box" }, frame);
+    let expanded = false, width = 0;
+    const more = el("button", { class: "small email-more hidden", onclick: () => { expanded = true; fit(); } }, "Show the whole email");
+    function fit() {
+      const doc = frame.contentDocument;
+      if (!doc || !doc.body) return;
+      const h = Math.ceil(Math.max(doc.body.getBoundingClientRect().height, doc.body.scrollHeight));
+      frame.style.height = h + "px";
+      const clip = !expanded && h > 560;
+      box.classList.toggle("clipped", clip);
+      more.classList.toggle("hidden", !clip);
+    }
+    frame.addEventListener("load", () => {
+      fit();
+      frame.contentDocument?.addEventListener("toggle", fit, true); // "Show earlier messages"
+    });
+    new ResizeObserver(() => { if (box.clientWidth !== width) { width = box.clientWidth; fit(); } }).observe(box);
+    return [box, more];
+  }
+
   function showMessage(messageId) {
     const node = document.getElementById("msg-" + messageId);
     if (!node) return;
@@ -959,7 +998,7 @@
         + (m.type ? " · " + pretty(m.type) : ""),
         m.gmailUrl ? el("a", { class: "small open-gmail", href: m.gmailUrl, target: "_blank", rel: "noopener noreferrer" }, "Open in Gmail") : null),
       m.subject ? el("div", { class: "title small" }, m.subject) : null,
-      el("div", { class: "text" }, m.content || "")) }));
+      m.fullEmail ? emailFrame(m) : el("div", { class: "text" }, linkify(m.content || ""))) }));
     const msgCount = el("span", { class: "small muted", role: "status" });
     const msgSearch = msgs.length > 2 ? searchBox("", "Search this conversation…", (q) => {
       let hits = 0;
@@ -1129,8 +1168,9 @@
     const fillDepth = (opts) => {
       clear(depth);
       opts.forEach((o) => depth.appendChild(el("option", { value: o.depth },
-        depthNames[o.depth] + ": up to " + o.maxSearches + " searches, " + (o.measured ? "" : "about ") + usd(o.usd)
-        + (o.measured ? " on average" : "") + " (" + depthNotes[o.depth] + ")")));
+        // Price first, so it still shows when a phone cuts the end off.
+        depthNames[o.depth] + ", " + (o.measured ? "" : "about ") + usd(o.usd) + (o.measured ? " on average" : "")
+        + ": up to " + o.maxSearches + " searches (" + depthNotes[o.depth] + ")")));
       let saved = null;
       try { saved = localStorage.getItem("crm.searchDepth"); } catch (e) { /* private window */ }
       depth.value = opts.some((o) => o.depth === saved) ? saved : "STANDARD";
@@ -1166,8 +1206,8 @@
       : el("p", { class: "small muted" }, "Tip: connect Facebook on the Settings page to look up any brand's Instagram (followers, bio, creators they work with) and add it here.");
     return card("Find brands to pitch",
       el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
-      el("div", { class: "row" }, el("div", { class: "spacer" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
-      el("div", { class: "row" }, el("span", { class: "small muted" }, "Search depth:"), depth),
+      el("div", { class: "row find-brands" }, el("div", { class: "query" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
+      el("div", { class: "row find-depth" }, el("span", { class: "small muted" }, "Search depth:"), depth),
       status,
       lookupRow,
       leads.length ? el("div", {}, leads.map((l) => leadItem(root, l, ig && ig.facebookConnected))) : null);
