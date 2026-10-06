@@ -19,6 +19,19 @@
     ]
   },
   {
+    "version": "1.30.0",
+    "title": "Drafts as an inbox",
+    "features": [
+      {
+        "id": "drafts-inbox",
+        "title": "One draft at a time",
+        "body": "Drafts now works like your email inbox. A short list on the left shows each brand, what kind of message it is, its first line, and a yellow tag if it still has a blank to fill in. Press one to open it beside the list. On your phone, the list fills the screen; press a draft to read it, and All drafts to go back. When you write a draft from a deal, an invoice or Today, it opens straight away.",
+        "video": "drafts-inbox.webm",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.29.0",
     "title": "Emails that look like emails",
     "features": [

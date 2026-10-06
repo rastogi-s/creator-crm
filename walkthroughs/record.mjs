@@ -89,6 +89,19 @@ async function goTo(page, tab, settingsTab) {
   if (settingsTab) await click(page.locator(`[data-settings-tab=${settingsTab}]`));
 }
 
+// Drafts is an inbox: the list, and the one draft that's open (the others are built but hidden).
+function openCard(page) {
+  return page.locator("#view-drafts .inbox-detail .card:not(.hidden)");
+}
+
+async function openDraft(page, ...texts) {
+  const { click } = helpers(page);
+  let row = page.locator("#view-drafts .inbox-row");
+  for (const t of texts) row = row.filter({ hasText: t });
+  await click(row.first());
+  return openCard(page);
+}
+
 // One entry per video. Keep each under a minute: what it does, where it is, one click to try it.
 const scenarios = {
   async updates(page) {
@@ -125,8 +138,8 @@ const scenarios = {
     await point(drawer.getByRole("button", { name: "Preview PDF" }));
     await say("Preview PDF shows exactly what the brand gets.", 3000);
     await click(drawer.getByRole("button", { name: "Email invoice" }));
-    await page.locator("#view-drafts").getByText("is attached").first().waitFor();
-    await point(page.locator("#view-drafts").getByText("Invoice PDF").first());
+    await openCard(page).getByText("is attached").waitFor();
+    await point(openCard(page).getByText("Invoice PDF"));
     await say("A short note with the PDF attached waits in Drafts. Nothing is sent until you press Send.", 4400);
     await click(page.locator(".tab[data-tab=money]"));
     const late = page.locator("#view-money tr", { hasText: "Juniper Juice" });
@@ -305,7 +318,7 @@ const scenarios = {
     await point(box.locator("input.amount"));
     await say("Change the number if you like, then press Draft counter.", 3200);
     await click(box.getByRole("button", { name: "Draft counter" }));
-    const draft = page.locator("#view-drafts .card", { hasText: "Fern & Field" }).first();
+    const draft = openCard(page).filter({ hasText: "Fern & Field" });
     await draft.waitFor();
     await point(draft.locator("textarea"));
     await say("A friendly counter-offer quoting exactly your amount waits here. Nothing is sent until you approve it.", 4600);
@@ -333,7 +346,7 @@ const scenarios = {
     await click(page.getByRole("button", { name: /Decline selected/ }));
     const bar = page.locator("#send-declines");
     await bar.waitFor();
-    const decline = page.locator("#view-drafts .card", { hasText: "Tiny Treats — Decline" }).first();
+    const decline = await openDraft(page, "Tiny Treats", "Decline");
     await point(decline.locator("textarea"));
     await say("A short, polite no-thanks is written for each one. Read them, and change anything you like.", 4400);
     await point(page.locator("#send-declines").getByRole("button", { name: "Approve all declines" }));
@@ -367,9 +380,9 @@ const scenarios = {
   async "ask-claude"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");
-    await page.locator("#view-drafts .card h3").first().waitFor();
+    await page.locator("#view-drafts .inbox-row").first().waitFor();
     await pause(2500); // let the first refresh settle so the card isn't replaced mid-shot
-    const draft = page.locator("#view-drafts .card", { hasText: "Glowberry Skin — Reply" }).first();
+    const draft = await openDraft(page, "Glowberry Skin", "Reply");
     const box = draft.locator(".ask-claude");
     await point(box);
     await say("Under every draft you can now ask Claude to change it.", 3400);
@@ -464,7 +477,7 @@ const scenarios = {
     await point(rebook.locator(".item", { hasText: "Petal & Pine" }));
     await say("Petal & Pine sent a gifted collab. Three weeks after your post, it suggests a paid one this time.", 4600);
     await click(coastline.getByRole("button", { name: "Review re-pitch" }));
-    const draft = page.locator("#view-drafts .card", { hasText: "Coastline Coffee — Re-pitch" }).first();
+    const draft = openCard(page).filter({ hasText: "Coastline Coffee — Re-pitch" });
     await draft.waitFor();
     await point(draft.locator("textarea"));
     await say("It mentions your last collab and one new idea. Edit anything, then press Send.", 4200);
@@ -501,6 +514,25 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "drafts-inbox"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#drafts");
+    const list = page.locator("#view-drafts .inbox-list");
+    await list.locator(".inbox-row").first().waitFor();
+    await say("Drafts now works like your email inbox.", 3200);
+    await point(list);
+    await say("The list shows each brand, the kind of message, and its first line.", 4000);
+    await point(list.locator(".inbox-row", { hasText: "Has a blank" }).first());
+    await say("A yellow tag means Claude left a blank for you to fill in.", 3600);
+    const draft = await openDraft(page, "Glowberry Skin", "Reply");
+    await point(draft.locator("textarea"));
+    await say("Press a draft to open it beside the list. Edit it, ask Claude to change it, or send it.", 4600);
+    await click(list.locator(".inbox-row").first());
+    await say("Anything you typed in the other draft is kept while you look at this one.", 4000);
+    await say("On your phone, the list fills the screen. Press a draft to read it, and All drafts to go back.", 4600);
+    await say("", 600);
+  },
+
   async "full-emails"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");
@@ -525,8 +557,8 @@ const scenarios = {
   async "safer-sending"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");
-    const draft = page.locator("#view-drafts .card", { hasText: "Peak Trail Co" }).first();
-    await draft.waitFor();
+    await page.locator("#view-drafts .inbox-row").first().waitFor();
+    const draft = await openDraft(page, "Peak Trail Co");
     await say("Sometimes Claude doesn't know a number yet, like your rate for one Reel. It leaves a blank for you.", 4400);
     const note = draft.locator(".alert.warn");
     await point(note);
@@ -549,7 +581,7 @@ const scenarios = {
     await point(late);
     await say("A polite reminder with the invoice attached is already written. It gets a little firmer each time.", 4400);
     await click(late.getByRole("button", { name: "Review reminder" }));
-    const draft = page.locator("#view-drafts .card", { hasText: "Payment reminder" }).first();
+    const draft = openCard(page).filter({ hasText: "Payment reminder" });
     await draft.waitFor();
     await point(draft.locator("textarea"));
     await say("Check it, change anything you like, then press Send. Reminders never go out without you.", 4400);

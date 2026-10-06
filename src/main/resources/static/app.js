@@ -283,7 +283,7 @@
         el("ul", { class: "list" }, t.approvals.map((a) => el("li", { class: "item" },
           el("div", { class: "body" }, el("div", { class: "title" }, a.brand + " — " + pretty(a.type)),
             el("div", { class: "detail" }, a.preview)),
-          el("div", { class: "actions" }, el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review")))))));
+          el("div", { class: "actions" }, el("button", { class: "small primary", onclick: () => showDraft({ id: a.draftId }) }, "Review")))))));
     }
 
     const o = t.newOpportunities;
@@ -302,7 +302,7 @@
       el("ul", { class: "list" }, items.map((it) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, it.title), el("div", { class: "detail" }, it.detail)),
         el("div", { class: "actions" },
-          el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review re-pitch"),
+          el("button", { class: "small primary", onclick: () => showDraft({ id: it.refId }) }, "Review re-pitch"),
           el("button", { class: "small", title: "Skip this brand for now", onclick: action(async () => {
             await api("POST", "/api/drafts/" + it.refId + "/discard"); route();
           }, "Skipped") }, "Not now"),
@@ -362,7 +362,7 @@
         it.kind === "TASK" ? emailButtons(it.opportunityId, it.task) : null,
         it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
         it.kind === "DEADLINE" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/deadlines/" + it.refId + "/done"); route(); }, "Deadline cleared") }, "Done") : null,
-        it.kind === "INVOICE" && /reminder ready/.test(it.detail) ? el("button", { class: "small primary", onclick: () => { location.hash = "#drafts"; } }, "Review reminder") : null,
+        it.kind === "INVOICE" && /reminder ready/.test(it.detail) ? el("button", { class: "small primary", onclick: () => { location.hash = "#drafts?invoice=" + it.refId; } }, "Review reminder") : null,
         it.kind === "INVOICE" ? el("button", { class: "small", title: "The money arrived", onclick: action(async () => {
           if (!confirm("Mark this invoice as paid today?")) return;
           await api("POST", "/api/invoices/" + it.refId + "/paid"); route();
@@ -378,8 +378,8 @@
         el("div", { class: "detail" }, it.overdueDays > 0 ? el("span", { class: "badge overdue" }, it.detail) : it.detail)),
       el("div", { class: "actions" },
         el("button", { class: "small", title: "Write a follow-up draft", onclick: action(async () => {
-          await api("POST", "/api/opportunities/" + it.opportunityId + "/drafts", { type: "FOLLOW_UP", instructions: it.title });
-          location.hash = "#drafts";
+          const made = await api("POST", "/api/opportunities/" + it.opportunityId + "/drafts", { type: "FOLLOW_UP", instructions: it.title });
+          showDraft(made);
         }, "Draft created") }, "Draft"),
         el("button", { class: "small", title: "I already sent it", onclick: action(async () => {
           await api("POST", "/api/opportunities/" + it.opportunityId + "/followups/sent"); route();
@@ -622,10 +622,10 @@
             await api("POST", "/api/invoices/" + id + "/paid", { paidDate: paidOn.value || null }); refresh();
           }, "Marked paid 🎉") }, "Mark paid"),
           el("button", { class: "small", title: "A polite payment reminder with the invoice attached, for you to check in Drafts", onclick: action(async () => {
-            await api("POST", "/api/invoices/" + id + "/reminder"); closeDrawer(); location.hash = "#drafts"; route();
+            const made = await api("POST", "/api/invoices/" + id + "/reminder"); closeDrawer(); showDraft(made);
           }, "Payment reminder is in Drafts") }, "Write a reminder"),
           el("button", { class: "small", title: "Put the invoice email in Drafts again", onclick: action(async () => {
-            await api("POST", "/api/invoices/" + id + "/email"); closeDrawer(); location.hash = "#drafts"; route();
+            const made = await api("POST", "/api/invoices/" + id + "/email"); closeDrawer(); showDraft(made);
           }, "Invoice email is in Drafts") }, "Email again"),
           el("div", { class: "spacer" }),
           el("button", { class: "small danger", onclick: action(async () => {
@@ -687,8 +687,8 @@
       el("div", { class: "row" },
         el("button", { class: "primary", onclick: action(async () => {
           await save();
-          await api("POST", "/api/invoices/" + id + "/email");
-          closeDrawer(); location.hash = "#drafts"; route();
+          const made = await api("POST", "/api/invoices/" + id + "/email");
+          closeDrawer(); showDraft(made);
         }, "Invoice email is in Drafts. Check it, then press Send.") }, "Email invoice"),
         el("button", { onclick: action(async () => { await save(); window.open(pdfUrl, "_blank", "noopener"); }) }, "Preview PDF"),
         el("button", { onclick: action(async () => { await save(); refresh(); }, "Saved") }, "Save"),
@@ -736,8 +736,8 @@
         r && r.mediaId ? el("button", { class: "small", onclick: action(async () => { await api("POST", base + "/fetch"); refresh(); }, "Numbers updated from Instagram") }, "Get numbers now") : null,
         has ? el("button", { class: "small", onclick: () => window.open(base + "/pdf", "_blank", "noopener") }, "Preview PDF") : null,
         has ? el("button", { class: "primary small", onclick: action(async () => {
-          await api("POST", base + "/recap");
-          closeDrawer(); location.hash = "#drafts"; route();
+          const made = await api("POST", base + "/recap");
+          closeDrawer(); showDraft(made);
         }, "Recap email is in Drafts. Check it, then press Send.") }, r.recapDraftedAt ? "Draft recap again" : "Draft recap email") : null),
       el("p", { class: "small muted" }, "The recap thanks the brand, shares these numbers with a one-page PDF attached, and suggests working together again. It waits in Drafts until you send it."));
   }
@@ -862,8 +862,8 @@
             el("button", { class: "primary small", onclick: action(async () => {
               const n = Number(amount.value);
               if (!(n > 0)) { toast("Enter the amount to ask for", true); return; }
-              await api("POST", "/api/opportunities/" + id + "/counter", { amount: n });
-              closeDrawer(); location.hash = "#drafts"; route();
+              const made = await api("POST", "/api/opportunities/" + id + "/counter", { amount: n });
+              closeDrawer(); showDraft(made);
             }, "Counter-offer drafted — review it before sending") }, "Draft counter")),
           el("p", { class: "small muted" }, "The draft quotes only the amount above, and waits in Drafts until you send it.")));
       }
@@ -929,8 +929,8 @@
       drawer.appendChild(card("Work together again",
         el("p", { class: "small muted" }, "Draft a short re-pitch that mentions this collab. Sending it starts a new pitch with " + d.summary.brand + "."),
         el("p", {}, el("button", { class: "small", onclick: action(async () => {
-          await api("POST", "/api/opportunities/" + id + "/repitch");
-          closeDrawer(); location.hash = "#drafts"; route();
+          const made = await api("POST", "/api/opportunities/" + id + "/repitch");
+          closeDrawer(); showDraft(made);
         }, "Re-pitch drafted — review it before sending") }, "Pitch them again"))));
     }
 
@@ -941,8 +941,8 @@
     drawer.appendChild(card("Write a message",
       el("div", { class: "row" }, typeSel, instr),
       el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
-        await api("POST", "/api/opportunities/" + id + "/drafts", { type: typeSel.value, instructions: instr.value });
-        closeDrawer(); location.hash = "#drafts"; route();
+        const made = await api("POST", "/api/opportunities/" + id + "/drafts", { type: typeSel.value, instructions: instr.value });
+        closeDrawer(); showDraft(made);
       }, "Draft created — review it before sending") }, "Draft with AI")),
       el("p", { class: "small muted" }, "Drafts are never sent until you approve them.")));
 
@@ -1244,8 +1244,8 @@
         contactEdit),
       el("div", { class: "actions" },
         el("button", { class: "small primary", onclick: action(async () => {
-          await api("POST", "/api/leads/" + l.id + "/pitch");
-          location.hash = "#drafts"; route();
+          const made = await api("POST", "/api/leads/" + l.id + "/pitch");
+          showDraft(made);
         }, "Pitch drafted. Review it in Drafts") }, "Draft pitch"),
         el("button", { class: "small", onclick: () => contactEdit.classList.toggle("hidden") }, "Edit contact"),
         canLookUp && l.instagram ? el("button", { class: "small", onclick: action(async () => {
@@ -1467,6 +1467,12 @@
 
   // ---------- Drafts ----------
 
+  /** Go to Drafts with this draft open (any object with an id, e.g. what the API returns after writing one). */
+  function showDraft(draft) {
+    const h = "#drafts" + (draft && draft.id ? "?id=" + draft.id : "");
+    if (location.hash === h) route(); else location.hash = h;
+  }
+
   const draftsFilter = loadPrefs("drafts", { q: "", type: "all", order: "oldest" });
 
   /**
@@ -1525,13 +1531,14 @@
   async function renderDrafts(root) {
     const list = await api("GET", "/api/drafts");
     clear(root);
+    root.classList.remove("reading-draft");
     root.appendChild(el("h1", {}, "Drafts awaiting approval"));
     root.appendChild(el("p", { class: "muted" }, "Nothing is sent until you press Send. Edit freely first."));
     if (!list.length) { root.appendChild(card(null, emptyLine("No drafts waiting."))); return; }
     const declines = list.filter((x) => x.draft.type === "DECLINE");
     if (declines.length > 1) {
       root.appendChild(el("div", { class: "row card", id: "send-declines" },
-        el("span", {}, declines.length + " polite declines are ready below. Read them, then send them all at once."),
+        el("span", {}, declines.length + " polite declines are ready in the list. Read them, then send them all at once."),
         el("div", { class: "spacer" }),
         el("button", { class: "primary small", onclick: action(async () => {
           if (!confirm("Send all " + declines.length + " declines now? Each deal is closed as declined.")) return;
@@ -1540,7 +1547,8 @@
           route();
         }) }, "Approve all declines")));
     }
-    // Filtering hides cards and sorting moves them, so text typed into a draft is never lost.
+    // An inbox: a short list, with one draft open beside it (full screen on a phone). Every draft's card is built once
+    // and only hidden, so text typed into a draft survives filtering, sorting and opening another one.
     const df = draftsFilter;
     const save = () => savePrefs("drafts", df);
     const groups = {
@@ -1558,9 +1566,19 @@
     const order = el("select", { "aria-label": "Order", onchange: (e) => { df.order = e.target.value; save(); draw(); } },
       [["oldest", "Oldest first"], ["newest", "Newest first"], ["brand", "Brand A–Z"]].map(([v, l]) => el("option", { value: v, selected: df.order === v }, l)));
     const shownAt = el("div", {});
+    const rows = el("ul", { class: "inbox-rows", "aria-label": "Drafts" });
     const holder = el("div", {});
+    const inbox = el("div", { class: "inbox" },
+      el("nav", { class: "inbox-list" }, rows),
+      el("section", { class: "inbox-detail" },
+        el("button", { class: "small inbox-back", onclick: () => { reading(false); history.replaceState(null, "", "#drafts"); window.scrollTo(0, 0); } },
+          "← All drafts"),
+        holder));
     if (list.length > 1) root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), chips, order));
-    root.append(shownAt, holder);
+    root.append(shownAt, inbox);
+    // On a phone, an open draft fills the screen: the heading, filters and list step aside until Back.
+    const reading = (on) => { inbox.classList.toggle("showing-detail", on); root.classList.toggle("reading-draft", on); };
+    reading(false);
     const cards = [];
     for (const { draft: d, brand, blockedReason } of list) {
       const subject = el("input", { value: d.subject || "", maxlength: "1000" });
@@ -1575,8 +1593,19 @@
         blanksNote.classList.toggle("hidden", !found.length);
         return found;
       };
-      body.addEventListener("input", checkBlanks);
+      const preview = el("span", { class: "inbox-preview" });
+      const blankMark = el("span", { class: "badge medium hidden" }, "Has a blank");
+      const showPreview = () => {
+        preview.textContent = body.value.replace(/\s+/g, " ").trim().slice(0, 140);
+        blankMark.classList.toggle("hidden", !blanksIn(body.value).length);
+      };
+      body.addEventListener("input", () => { checkBlanks(); showPreview(); });
       checkBlanks();
+      showPreview();
+      const row = el("li", {}, el("button", { class: "inbox-row", onclick: () => select(d.id, true) },
+        el("span", { class: "inbox-top" }, el("strong", {}, brand), el("span", { class: "small muted" }, fmtDate(d.createdAt))),
+        el("span", { class: "inbox-type small" }, pretty(d.type) + (d.channel === "EMAIL" ? "" : " · Instagram"), blankMark),
+        preview));
       const node = holder.appendChild(card(null,
         el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
           el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
@@ -1602,20 +1631,55 @@
           el("div", { class: "spacer" }),
           el("button", { class: "danger", onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/discard"); route(); }, "Discarded") }, "Discard"),
           el("button", { onclick: () => openDeal(d.opportunityId) }, "Open deal"))));
-      cards.push({ node, d, brand, subject, body });
+      cards.push({ node, row, d, brand, subject, body });
+    }
+
+    // Which draft opens first: the one asked for (#drafts?id=, or ?invoice= for its reminder), else the top of the list.
+    // On a phone, the list shows first unless a particular draft was asked for.
+    const q = new URLSearchParams(location.hash.split("?")[1] || "");
+    const byId = (id) => cards.find((c) => String(c.d.id) === String(id));
+    const asked = q.has("id") ? byId(q.get("id"))
+      : q.has("invoice") ? cards.find((c) => String(c.d.invoiceId) === q.get("invoice") && c.d.type === "PAYMENT_REMINDER")
+      : null;
+    let selected = asked ? asked.d.id : null;
+    if (asked) {
+      reading(true);
+      if (!(groups[df.type](asked.d) && matchesQuery(df.q, asked.brand, pretty(asked.d.type), asked.subject.value, asked.body.value, asked.d.toAddress))) {
+        df.q = ""; df.type = "all"; search.value = ""; save();
+      }
+    }
+
+    function select(id, opened) {
+      selected = id;
+      for (const c of cards) {
+        const on = c.d.id === id;
+        c.node.classList.toggle("hidden", !on);
+        c.row.firstChild.classList.toggle("active", on);
+        if (on) c.row.firstChild.setAttribute("aria-current", "true"); else c.row.firstChild.removeAttribute("aria-current");
+      }
+      if (opened) {
+        reading(true);
+        // Remembered in the address so a refresh keeps it open. replaceState doesn't fire hashchange, so nothing is rebuilt.
+        history.replaceState(null, "", "#drafts?id=" + id);
+        if (matchMedia("(max-width: 760px)").matches) window.scrollTo(0, 0);
+      }
     }
 
     function draw() {
       clear(chips).appendChild(chipRow(present.map((g) => [g, groupNames[g]]), df.type, (v) => { df.type = v; save(); draw(); }, "Draft type"));
       const sorted = sortRows(cards, df.order === "brand" ? { by: "brand", dir: "asc" } : { by: "at", dir: df.order === "newest" ? "desc" : "asc" },
         { brand: (c) => c.brand, at: (c) => c.d.createdAt });
-      let shown = 0;
+      const visible = [];
       for (const c of sorted) {
         const keep = groups[df.type](c.d) && matchesQuery(df.q, c.brand, pretty(c.d.type), c.subject.value, c.body.value, c.d.toAddress);
-        c.node.classList.toggle("hidden", !keep);
-        if (keep) shown++;
-        holder.appendChild(c.node);
+        c.row.classList.toggle("hidden", !keep);
+        if (keep) visible.push(c);
+        rows.appendChild(c.row);
       }
+      const shown = visible.length;
+      // When the filters hide the open draft, the first one still shown opens instead
+      select(visible.some((c) => c.d.id === selected) ? selected : visible.length ? visible[0].d.id : null, false);
+      inbox.classList.toggle("hidden", !shown);
       clear(shownAt);
       const line = shownLine(shown, cards.length, "drafts", () => { df.q = ""; df.type = "all"; search.value = ""; save(); draw(); });
       if (line) shownAt.appendChild(line);
