@@ -12,6 +12,19 @@
     ]
   },
   {
+    "version": "1.38.0",
+    "title": "Practice with sample brands",
+    "features": [
+      {
+        "id": "practice-mode",
+        "title": "Try anything without touching your real deals",
+        "body": "Open More and press Start practice. A copy of the app opens with made-up brands like Bloomleaf Tea and Juniper Juice, so you can answer emails, send invoices, ask Claude for drafts and move deals along to see what happens. An orange bar at the top says you're practising. Nothing there is real: Send only pretends, and your own deals, emails and accounts are never in it. Press Leave practice to go back. Each time you start, the sample brands begin fresh.",
+        "video": "practice-mode.webm",
+        "tryIt": "#more"
+      }
+    ]
+  },
+  {
     "version": "1.37.0",
     "title": "Is everything working?",
     "features": [

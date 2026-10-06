@@ -1681,7 +1681,8 @@
         el("div", { class: "row" },
           blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
             if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
-            if (!confirm("Send this " + (d.channel === "EMAIL" ? "email" : "DM") + " to " + brand + " now?")) return;
+            if (!confirm("Send this " + (d.channel === "EMAIL" ? "email" : "DM") + " to " + brand + " now?"
+              + (practiceInside ? " (Practice: nothing is really sent.)" : ""))) return;
             await api("POST", "/api/drafts/" + d.id + "/send", edits()); route();
           }, "Sent ✓") }, "Send"),
           el("button", { onclick: action(async () => { await navigator.clipboard.writeText(body.value); }, "Copied") }, "Copy"),
@@ -2788,7 +2789,7 @@
   }
 
   async function maybeShowSetup() {
-    if (location.hash.replace(/^#/, "")) return; // a link or bookmark to a page wins
+    if (location.hash.replace(/^#/, "") || practiceInside) return; // a link or bookmark to a page wins
     try {
       const s = await api("GET", "/api/settings");
       if (!s.preferences.setupGuide && !(s.credentials.ANTHROPIC_API_KEY && s.channels.EMAIL.connected)) location.hash = "#setup";
@@ -2980,6 +2981,75 @@
     setTimeout(pollStatus, 1000);
   }, "Checking… new items appear as they're read");
 
+  // ---------- Practice mode ----------
+  // A separate copy of the app with made-up brands (see PracticeMode.java). Her real deals are never in it.
+
+  let practiceInside = false;
+  let practiceTimer = null;
+
+  async function leavePractice() {
+    const r = await api("POST", "/api/practice/leave");
+    location.href = r.returnUrl;
+  }
+
+  function practiceCard() {
+    const card = el("div", { class: "card practice-card" },
+      el("h2", {}, "Practice with sample brands"),
+      el("p", { class: "muted" }, "Try anything with made-up brands like Bloomleaf Tea and Juniper Juice: reply to emails, "
+        + "send invoices, move deals along. Nothing you do there touches your real deals, and nothing is really sent. "
+        + "Each time you start, the sample brands begin fresh."));
+    const body = el("div", { class: "row" });
+    card.appendChild(body);
+    if (practiceInside) {
+      body.appendChild(el("span", {}, "You're practising now."));
+      body.appendChild(el("button", { class: "primary", onclick: action(leavePractice) }, "Leave practice"));
+      return card;
+    }
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+      body.appendChild(el("span", { class: "muted" }, "Practice mode opens on the laptop where the app runs."));
+      return card;
+    }
+    const show = (s) => {
+      clearTimeout(practiceTimer);
+      clear(body);
+      if (s.state === "READY") {
+        body.appendChild(el("a", { class: "btn primary", href: s.url }, "Open practice"));
+        body.appendChild(el("button", { onclick: action(async () => show(await api("POST", "/api/practice/stop"))) }, "Close practice"));
+      } else if (s.state === "STARTING") {
+        body.appendChild(el("button", { class: "primary", disabled: true }, "Getting your sample brands ready…"));
+        practiceTimer = setTimeout(async () => {
+          if (!card.isConnected) return;
+          try {
+            const next = await api("GET", "/api/practice");
+            if (next.state === "READY") location.href = next.url; else show(next);
+          } catch (e) { show({ state: "FAILED", error: e.message }); }
+        }, 1500);
+      } else {
+        body.appendChild(el("button", { class: "primary", onclick: action(async () => show(await api("POST", "/api/practice/start"))) },
+          "Start practice"));
+        if (s.error) body.appendChild(el("span", { class: "alert error" }, s.error));
+      }
+    };
+    api("GET", "/api/practice").then(show).catch(() => show({ state: "OFF" }));
+    return card;
+  }
+
+  // Inside the practice copy: a banner on every page, so it's never mistaken for the real thing.
+  async function checkPractice() {
+    try {
+      const p = await api("GET", "/api/practice");
+      if (!p.inside) return;
+      practiceInside = true;
+      document.body.classList.add("practice");
+      document.title = "Practice · Creator CRM";
+      const banner = el("div", { id: "practice-banner", class: "update-banner warn practice-banner", role: "status" },
+        el("span", {}, el("strong", {}, "Practice mode. "), "These are sample brands. Nothing here is real, and nothing is sent."),
+        el("span", { class: "spacer" }),
+        el("button", { class: "small primary", onclick: action(leavePractice) }, "Leave practice"));
+      document.querySelector(".topbar").appendChild(banner);
+    } catch (e) { /* not important */ }
+  }
+
   async function renderMore(root) {
     clear(root);
     root.appendChild(el("h1", {}, "More"));
@@ -2993,10 +3063,11 @@
       link("setup", "Setup guide", "Connect Claude and Gmail one step at a time"),
       link("help", "Help", "Short videos for every feature, and Report a problem"),
       link("whatsnew", "What's new", "The latest changes to the app")));
+    root.appendChild(practiceCard());
     root.appendChild(el("div", { class: "row" },
       el("button", { onclick: syncNow, title: "New emails and DMs are also checked by themselves every 30 minutes" }, "Check for new messages now"),
       el("div", { class: "spacer" }),
-      el("button", { class: "danger", onclick: signOut }, "Sign out")));
+      practiceInside ? null : el("button", { class: "danger", onclick: signOut }, "Sign out")));
   }
 
   // ---------- Everything working? ----------
@@ -3244,5 +3315,5 @@
 
   refreshUpdate();
   setInterval(refreshUpdate, 30 * 60 * 1000);
-  maybeShowWhatsNew().then(maybeShowSetup).then(() => api("GET", "/api/statuses")).then((s) => { statuses = s; route(); });
+  checkPractice().then(maybeShowWhatsNew).then(maybeShowSetup).then(() => api("GET", "/api/statuses")).then((s) => { statuses = s; route(); });
 })();

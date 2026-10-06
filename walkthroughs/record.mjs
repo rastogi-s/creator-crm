@@ -620,6 +620,43 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "practice-mode"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#more");
+    const card = page.locator(".practice-card");
+    await card.locator(".row button, .row a.btn").first().waitFor();
+    // A practice copy left open by an earlier recording: close it off camera, so this one starts fresh.
+    const leftOpen = card.getByRole("button", { name: "Close practice" });
+    if (await leftOpen.count()) { await leftOpen.click(); await card.getByRole("button", { name: "Start practice" }).waitFor(); }
+    await say("Want to try something without touching your real deals? Practise with sample brands.", 4200);
+    await point(card);
+    await say("Practice mode is under More.", 2600);
+    await click(card.getByRole("button", { name: "Start practice" }));
+    await say("It takes a few seconds to set up a copy of the app with made-up brands.", 3600);
+    const banner = page.locator("#practice-banner");
+    await banner.waitFor({ timeout: 60000 });
+    await page.waitForTimeout(800);
+    await point(banner);
+    await say("This orange bar means you're practising. Nothing here is real, and nothing is sent.", 4400);
+    await click(page.locator(".tab[data-tab=drafts]"));
+    const row = page.locator("#view-drafts .inbox-row", { hasText: "Maple & Moss" }).first();
+    await row.waitFor();
+    await say("Everything works like the real app. Here are drafts for the sample brands.", 3800);
+    await click(row);
+    const send = page.locator("#view-drafts .inbox-detail .card:not(.hidden)").getByRole("button", { name: "Send" });
+    await point(send);
+    await say("Press Send to see what happens next. In practice, Send only pretends.", 4000);
+    page.once("dialog", (d) => d.accept());
+    await click(send);
+    await say("The deal moves on, just like a real send. Your real brands never see it.", 4200);
+    await point(banner.getByRole("button", { name: "Leave practice" }));
+    await say("When you're done, press Leave practice to go back to your own deals.", 3800);
+    await click(banner.getByRole("button", { name: "Leave practice" }));
+    await page.locator(".practice-card").waitFor();
+    await say("Starting again gives you fresh sample brands.", 3200);
+    await say("", 600);
+  },
+
   async "setup-guide"(page) {
     const { say, point, click } = helpers(page);
     const step = page.locator(".setup-step");
