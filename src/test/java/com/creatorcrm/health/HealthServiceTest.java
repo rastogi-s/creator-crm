@@ -31,7 +31,7 @@ class HealthServiceTest {
         Check c = HealthService.claude(new ClaudeFacts(false, null, null, null), NOW);
         assertThat(c.state()).isEqualTo(State.off);
         assertThat(c.summary()).startsWith("Not set up yet");
-        assertThat(c.fix().target()).isEqualTo("#settings");
+        assertThat(c.fix().target()).isEqualTo("#settings?tab=accounts");
     }
 
     @Test
@@ -119,7 +119,7 @@ class HealthServiceTest {
         assertThat(c.state()).isEqualTo(State.problem);
         assertThat(c.headline()).isEqualTo("Instagram needs reconnecting");
         assertThat(c.fix().kind()).isEqualTo(FixKind.link);
-        assertThat(c.fix().target()).isEqualTo("#settings");
+        assertThat(c.fix().target()).isEqualTo("#settings?tab=accounts");
     }
 
     @Test

@@ -63,7 +63,7 @@ public class HealthService {
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
 
-    private static final Fix SETTINGS = new Fix("Open Settings", FixKind.link, "#settings");
+    private static final Fix SETTINGS = new Fix("Open Settings", FixKind.link, "#settings?tab=app");
     private static final Fix SYNC_NOW = new Fix("Check now", FixKind.post, "/api/sync");
 
     private final IngestionService ingestion;
@@ -129,7 +129,7 @@ public class HealthService {
         if (!f.configured()) {
             return new Check(id, name, State.off, "Claude isn't set up",
                     "Not set up yet. Add your Claude key so new messages get read and drafts get written.", null,
-                    new Fix("Set up", FixKind.link, "#settings"));
+                    new Fix("Set up", FixKind.link, "#settings?tab=accounts"));
         }
         Fix credits = new Fix("Top up", FixKind.link, "#settings?spend");
         if (f.outOfCreditsSince() != null) {
@@ -143,7 +143,7 @@ public class HealthService {
             if (BAD_KEY.matcher(reason).find()) {
                 return new Check(id, name, State.problem, "Claude's key stopped working",
                         "The Claude key stopped working" + (at == null ? "" : " " + day(at, now))
-                                + ". Paste a new key in Settings.", null, new Fix("Update key", FixKind.link, "#settings"));
+                                + ". Paste a new key in Settings.", null, new Fix("Update key", FixKind.link, "#settings?tab=accounts"));
             }
             return new Check(id, name, State.warn, "Claude had trouble reading a message",
                     "Had trouble reading a message" + (at == null ? "" : " " + day(at, now))
@@ -169,10 +169,10 @@ public class HealthService {
                                  ChannelFacts f, ZonedDateTime now) {
         if (!f.connected()) {
             return new Check(id, name, State.off, name + " isn't set up", "Not set up yet.", null,
-                    new Fix("Set up", FixKind.link, "#settings"));
+                    new Fix("Set up", FixKind.link, "#settings?tab=accounts"));
         }
         Fix reconnect = f.canSignIn() ? new Fix("Reconnect", FixKind.oauth, oauthStart)
-                : new Fix("Reconnect", FixKind.link, "#settings");
+                : new Fix("Reconnect", FixKind.link, "#settings?tab=accounts");
         OffsetDateTime last = parse(f.lastSync());
         OffsetDateTime failing = parse(f.failingSince());
         OffsetDateTime expires = parse(f.tokenExpiresAt());
