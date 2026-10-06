@@ -190,7 +190,9 @@
 
   const views = { today: renderToday, pipeline: renderPipeline, money: renderMoney, outreach: renderOutreach, links: renderLinks,
                   drafts: renderDrafts, summary: renderSummary, settings: renderSettings,
-                  help: renderHelp, whatsnew: renderWhatsNew };
+                  help: renderHelp, whatsnew: renderWhatsNew, more: renderMore };
+  // Five places in the tab bar; the other pages live under Deals or More, and keep their own addresses.
+  const NAV_OF = { outreach: "pipeline", links: "more", summary: "more", settings: "more", help: "more", whatsnew: "more" };
   let statuses = {};
 
   function currentTab() {
@@ -200,7 +202,11 @@
 
   async function route() {
     const tab = currentTab();
-    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    const nav = NAV_OF[tab] || tab;
+    document.querySelectorAll(".tab").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === nav);
+      if (b.dataset.tab === nav) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
     document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + tab));
     const q = new URLSearchParams(location.hash.split("?")[1] || "");
     const notes = {
@@ -251,12 +257,20 @@
       { weekday: "long", month: "long", day: "numeric" })));
 
     const pipelineTotal = Object.values(t.pipeline).reduce((a, b) => a + b, 0);
-    root.appendChild(el("div", { class: "stats card" },
-      stat(t.urgent.length, "High priority"), stat(t.followUps.length, "Follow-ups due"),
-      stat(t.approvals.length, "Drafts to approve"), stat(pipelineTotal, "Deals in pipeline"),
-      stat(t.openPipelineValue ? "$" + Number(t.openPipelineValue).toLocaleString() : "—", "Open pipeline value")));
+    root.appendChild(el("p", { class: "today-sums" }, pipelineTotal + " open deal" + (pipelineTotal === 1 ? "" : "s")
+      + (t.openPipelineValue ? " worth $" + Number(t.openPipelineValue).toLocaleString() : "") + " · "
+      + t.followUps.length + " follow-up" + (t.followUps.length === 1 ? "" : "s") + " due · ",
+      el("a", { href: "#drafts" }, t.approvals.length + " draft" + (t.approvals.length === 1 ? "" : "s") + " to approve")));
 
-    root.appendChild(card("🔥 Today — high priority", itemList(t.urgent, "Nothing urgent. Nice.", true)));
+    // The list is already ranked (money, lateness, priority). Three things are a plan; thirteen are a pile.
+    const first = t.urgent.slice(0, 3);
+    const rest = t.urgent.slice(3);
+    root.appendChild(card("Do these first", itemList(first, "Nothing urgent. Nice.", true)));
+    if (rest.length) {
+      root.appendChild(el("details", { class: "card more-items" },
+        el("summary", {}, el("h3", {}, "Everything else for today (" + rest.length + ")")),
+        itemList(rest, "", false)));
+    }
     root.appendChild(card("📌 Follow-ups", followUpList(t.followUps)));
     if (t.rebook && t.rebook.length) root.appendChild(rebookCard(t.rebook));
 
@@ -337,7 +351,8 @@
           it.overdueDays > 0 ? el("span", { class: "badge overdue" }, "Overdue " + it.overdueDays + "d") : null, " ",
           it.priority === "HIGH" && !it.overdueDays ? el("span", { class: "badge high" }, "High") : null, " ",
           it.lead ? leadBadge(it.lead, it.leadWhy) : null, it.lead ? " " : null,
-          it.detail),
+          // The Overdue badge already says it; the text version is for emails and Claude.
+          it.overdueDays > 0 ? (it.detail || "").replace(/\s*·?\s*⚠️ OVERDUE by \d+ days?/, "") : it.detail),
         it.task ? taskAbout(it.task.brief, it.task.links) : null),
       el("div", { class: "actions" },
         it.kind === "TASK" ? emailButtons(it.opportunityId, it.task) : null,
@@ -368,6 +383,13 @@
         el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open")))));
   }
 
+  // Deals has two halves: brands already talking to her, and brands she is pitching.
+  function dealsSwitch(active) {
+    return el("nav", { class: "segmented", "aria-label": "Deals" },
+      [["pipeline", "Your deals"], ["outreach", "Pitching brands"]].map(([tab, label]) =>
+        el("a", { href: "#" + tab, class: tab === active ? "on" : "", "aria-current": tab === active ? "page" : null }, label)));
+  }
+
   // ---------- Pipeline ----------
 
   const PIPELINE_DEFAULTS = { q: "", status: "", comp: "", lead: "", closed: false, sort: { by: "updatedAt", dir: "desc" } };
@@ -390,7 +412,8 @@
     const leadSelect = el("select", { id: "lead-filter", "aria-label": "Leads", onchange: (e) => { f.lead = e.target.value; save(); draw(); } },
       [["", "All deals"], ["LEADS", "Leads only"], ["LOW", "Low-value leads"]].map(([v, t]) => el("option", { value: v, selected: f.lead === v }, t)));
     const search = searchBox(f.q, "Search brand, contact, campaign…", (v) => { f.q = v; save(); draw(); });
-    root.appendChild(el("div", { class: "row" }, el("h1", {}, "Pipeline"), el("div", { class: "spacer" }),
+    root.appendChild(dealsSwitch("pipeline"));
+    root.appendChild(el("div", { class: "row" }, el("h1", {}, "Deals"), el("div", { class: "spacer" }),
       el("label", { class: "check" }, closedBox, "Show closed")));
     root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), leadSelect, statusSelect, compSelect));
     const chips = el("div", { class: "row card" });
@@ -973,7 +996,8 @@
     const [rows, leads, ig] = await Promise.all([api("GET", "/api/pitches"), api("GET", "/api/leads"),
       api("GET", "/api/leads/instagram").catch(() => null)]);
     clear(root);
-    root.appendChild(el("h1", {}, "Outreach"));
+    root.appendChild(dealsSwitch("outreach"));
+    root.appendChild(el("h1", {}, "Pitching brands"));
     root.appendChild(el("p", { class: "muted" }, "Every brand you've pitched, with automatic follow-up dates. Pitches you send from Gmail are detected automatically; log the rest here."));
     if (ig && ig.instagramConnected) root.appendChild(engagingBrandsCard(root, ig));
     root.appendChild(findBrandsCard(root, leads, ig));
@@ -1755,7 +1779,7 @@
     const webhookOut = el("div", { class: "code hidden" });
     steps.appendChild(el("li", { class: channel.INSTAGRAM.connected ? "done" : "" },
       el("h3", {}, "Connect Instagram (optional)"),
-      el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions (add instagram_business_manage_insights to show your reach, and instagram_business_manage_comments so brands commenting on your posts show up on Outreach). Add yourself as a tester; App Review is only needed if other people's accounts will use your app. Added a permission? Press Reconnect Instagram once."),
+      el("p", { class: "small muted" }, "Needs an Instagram Business or Creator account and a Meta app using “Instagram API with Instagram login” with the instagram_business_basic and instagram_business_manage_messages permissions (add instagram_business_manage_insights to show your reach, and instagram_business_manage_comments so brands commenting on your posts show up under Deals, Pitching brands). Add yourself as a tester; App Review is only needed if other people's accounts will use your app. Added a permission? Press Reconnect Instagram once."),
       el("p", { class: "small muted" }, "OAuth redirect URI (Meta requires https — deploy the app or use a tunnel):"),
       el("div", { class: "code" }, s.instagramRedirectUri),
       igBox,
@@ -2518,15 +2542,42 @@
     } catch (e) { /* not important */ }
   }
 
+  // ---------- More ----------
+  // Everything that isn't daily work, one tap from the tab bar.
+
+  async function signOut() {
+    await fetch("/logout", { method: "POST", credentials: "same-origin", headers: { "X-XSRF-TOKEN": csrf() } });
+    location.replace("/login.html?logout");
+  }
+
+  const syncNow = action(async () => {
+    await api("POST", "/api/sync");
+    setTimeout(pollStatus, 1000);
+  }, "Checking… new items appear as they're read");
+
+  async function renderMore(root) {
+    clear(root);
+    root.appendChild(el("h1", {}, "More"));
+    const link = (tab, title, detail) => el("a", { class: "more-link", href: "#" + tab, "data-tab": tab },
+      el("span", { class: "title" }, title), el("span", { class: "detail" }, detail));
+    root.appendChild(el("div", { class: "card more-list" },
+      link("summary", "Day summary", "What you got done today and what's lined up for tomorrow"),
+      link("links", "My links", "Your Instagram, TikTok, website and media kit, used in drafts"),
+      link("settings", "Settings", "Accounts, your rates and voice, follow-ups, backups"),
+      link("help", "Help", "Short videos for every feature, and Report a problem"),
+      link("whatsnew", "What's new", "The latest changes to the app")));
+    root.appendChild(el("div", { class: "row" },
+      el("button", { onclick: syncNow, title: "New emails and DMs are also checked by themselves every 30 minutes" }, "Check for new messages now"),
+      el("div", { class: "spacer" }),
+      el("button", { class: "danger", onclick: signOut }, "Sign out")));
+  }
+
   // ---------- boot ----------
 
   document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => { location.hash = "#" + b.dataset.tab; }));
   document.getElementById("drawer-backdrop").addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
-  document.getElementById("sync-btn").addEventListener("click", action(async () => {
-    await api("POST", "/api/sync");
-    setTimeout(pollStatus, 1000);
-  }, "Syncing… new items appear as they're analyzed"));
+  document.getElementById("sync-btn").addEventListener("click", syncNow);
 
   // ---------- header search ----------
   // Finds deals by brand or contact, past emails and DMs, and invoices. "/" jumps to it from anywhere.
@@ -2675,10 +2726,6 @@
     statusTimer = setTimeout(pollStatus, busy ? 4000 : 60000);
   }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollStatus(); });
-  document.getElementById("logout-btn").addEventListener("click", async () => {
-    await fetch("/logout", { method: "POST", credentials: "same-origin", headers: { "X-XSRF-TOKEN": csrf() } });
-    location.replace("/login.html?logout");
-  });
   window.addEventListener("hashchange", route);
   pollStatus();
   refreshCredits();

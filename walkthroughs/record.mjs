@@ -57,6 +57,12 @@ function helpers(page) {
     let box = null;
     for (let i = 0; i < 10 && !box; i++) {
       try {
+        // Today folds everything past the first three items; open the fold the way she would.
+        // (Not for the fold's own header: clicking that is how a video opens it.)
+        await locator.evaluate((n) => {
+          const start = n.closest("summary") ? n.closest("summary").parentElement.parentElement : n;
+          for (let d = start && start.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
+        }, null, { timeout: 2000 });
         await locator.scrollIntoViewIfNeeded({ timeout: 2000 });
         box = await locator.boundingBox();
       } catch (e) {
@@ -72,6 +78,15 @@ function helpers(page) {
   return { pause, say, point, click };
 }
 
+// Pages that aren't in the tab bar (Settings, Help, …) are one tap further, under More.
+async function goTo(page, tab) {
+  const { click } = helpers(page);
+  const direct = page.locator(`.tab[data-tab=${tab}]`);
+  if (await direct.count()) return click(direct);
+  await click(page.locator(".tab[data-tab=more]"));
+  await click(page.locator(`.more-link[data-tab=${tab}]`));
+}
+
 // One entry per video. Keep each under a minute: what it does, where it is, one click to try it.
 const scenarios = {
   async updates(page) {
@@ -85,7 +100,7 @@ const scenarios = {
     page.once("dialog", (d) => d.accept());
     await click(banner.getByRole("button", { name: "Update now" }));
     await say("Nothing is ever installed without your click. Afterwards, What's New shows what changed.", 4200);
-    await click(page.locator(".tab[data-tab=settings]"));
+    await goTo(page, "settings");
     const card = page.locator(".card", { has: page.getByRole("heading", { name: "Updates" }) });
     await card.scrollIntoViewIfNeeded();
     await say("Under Settings, Updates you can check by hand, or turn automatic checks off.", 3600);
@@ -182,7 +197,7 @@ const scenarios = {
     const drawer = page.locator("#drawer");
     await page.goto(BASE + "/#today");
     const task = page.locator("#view-today .item", { hasText: "Sparkle Socks" }).filter({ has: page.locator(".task-about") }).first();
-    await task.waitFor();
+    await task.waitFor({ state: "attached" }); // may be in the folded part of Today; point() opens it
     await task.scrollIntoViewIfNeeded();
     await say("To-dos that come from an email now tell you what it's about.", 3400);
     await point(task.locator(".brief"));
@@ -195,7 +210,7 @@ const scenarios = {
     await drawer.locator(".msg.focus").first().waitFor();
     await say("Here it is, highlighted. For Gmail emails, Open in Gmail jumps to the original.", 4200);
     await click(drawer.getByRole("button", { name: "Close" }));
-    await click(page.locator(".tab[data-tab=settings]"));
+    await goTo(page, "settings");
     const rules = page.locator("#task-rules");
     await rules.waitFor();
     await rules.scrollIntoViewIfNeeded();
@@ -210,7 +225,7 @@ const scenarios = {
     await page.goto(BASE + "/#pipeline");
     await page.locator("#view-pipeline tr").first().waitFor();
     await say("Your deal dates can now go on your Google Calendar.", 3400);
-    await click(page.locator(".tab[data-tab=settings]"));
+    await goTo(page, "settings");
     const step = page.locator("#settings-calendar");
     await step.waitFor();
     await step.scrollIntoViewIfNeeded();
@@ -259,7 +274,7 @@ const scenarios = {
     await point(box.locator("summary"));
     await say("Contract on DocuSign? Paste its text here and it's checked the same way.", 4200);
     await click(drawer.getByRole("button", { name: "Close" }));
-    await click(page.locator(".tab[data-tab=settings]"));
+    await goTo(page, "settings");
     const limits = page.locator("#settings-contracts");
     await limits.waitFor();
     await limits.scrollIntoViewIfNeeded();
@@ -390,7 +405,7 @@ const scenarios = {
     await page.keyboard.press("Escape");
     const tabSearch = page.locator("#view-pipeline input[type=search]");
     await point(tabSearch);
-    await say("Each list has its own search and filters too. Pipeline, Outreach, Money and Drafts all have them.", 4400);
+    await say("Each list has its own search and filters too. Deals, Pitching brands, Money and Drafts all have them.", 4400);
     await tabSearch.pressSequentially("glow", { delay: 90 });
     await pause(600);
     await tabSearch.fill("");
@@ -453,12 +468,34 @@ const scenarios = {
     await say("It mentions your last collab and one new idea. Edit anything, then press Send.", 4200);
     await point(draft.getByText("Sending it adds a new pitch"));
     await say("Sending it adds a new pitch to your pipeline, with follow-ups like any other.", 4000);
-    await click(page.locator(".tab[data-tab=settings]"));
+    await goTo(page, "settings");
     const step = page.locator("#settings-rebook");
     await step.waitFor();
     await step.scrollIntoViewIfNeeded();
     await point(step.locator("input").first());
     await say("Under Settings, choose how long a brand must be quiet, and how many re-pitches you'd like each week.", 4600);
+    await say("", 600);
+  },
+
+  async "new-layout"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await page.locator("#view-today h1").waitFor();
+    await point(page.locator(".tabs"));
+    await say("The top bar now has five places: Today, Drafts, Deals, Money and More.", 4200);
+    const first = page.locator("#view-today .card", { hasText: "Do these first" });
+    await point(first);
+    await say("Today starts with the three things to do first, picked by money and how late they are.", 4400);
+    const rest = page.locator("#view-today details.more-items summary");
+    await click(rest);
+    await say("The rest of today's list is folded underneath, one tap away.", 3600);
+    await click(page.locator(".tab[data-tab=pipeline]"));
+    await point(page.locator("#view-pipeline .segmented"));
+    await say("Deals has your deals and, next door, the brands you're pitching.", 4000);
+    await click(page.locator(".tab[data-tab=more]"));
+    await point(page.locator("#view-more .more-list"));
+    await say("More has your day summary, your links, Settings and Help.", 4000);
+    await say("On your phone, the five places sit at the bottom of the screen.", 3600);
     await say("", 600);
   },
 
@@ -484,7 +521,7 @@ const scenarios = {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");
     const late = page.locator("#view-today .item", { hasText: "Maple & Moss: payment" });
-    await late.waitFor();
+    await late.waitFor({ state: "attached" });
     await say("When a brand pays late, Today tells you how late, and how many reminders you've already sent.", 4400);
     await point(late);
     await say("A polite reminder with the invoice attached is already written. It gets a little firmer each time.", 4400);
@@ -493,7 +530,7 @@ const scenarios = {
     await draft.waitFor();
     await point(draft.locator("textarea"));
     await say("Check it, change anything you like, then press Send. Reminders never go out without you.", 4400);
-    await click(page.locator(".tab[data-tab=settings]"));
+    await goTo(page, "settings");
     const days = page.getByText("Payment reminders: days after the due date");
     await point(days);
     await say("Under Settings, Invoices, pick the days: 3, 7 and 14 after the due date to start with.", 4200);
@@ -540,7 +577,7 @@ const scenarios = {
     if (await clip.isVisible()) await clip.evaluate((v) => v.pause()).catch(() => {});
     await point(page.locator("#view-whatsnew .feature a.btn").first());
     await say("Try it takes you straight to the feature.", 3000);
-    await click(page.locator(".tab[data-tab=help]"));
+    await goTo(page, "help");
     await page.locator("#view-help h1").waitFor();
     await say("Help keeps every walkthrough video, newest first, to rewatch any time.", 4000);
     await say("", 600);
