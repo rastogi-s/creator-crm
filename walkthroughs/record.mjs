@@ -673,6 +673,56 @@ const scenarios = {
     await say("Help keeps every walkthrough video, newest first, to rewatch any time.", 4000);
     await say("", 600);
   },
+
+  async "health-check"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    const strip = page.locator("#view-today .health-strip");
+    await strip.locator("a, button").first().waitFor();
+    await say("Today now tells you in one line when something in the app needs you.", 3800);
+    const stripFix = strip.locator(".btn, button").first();
+    if (await stripFix.count()) {
+      await point(stripFix);
+      await say("It comes with one button that fixes it.", 3000);
+    }
+    await goTo(page, "more");
+    const card = page.locator("#health");
+    await card.locator(".health-row").first().waitFor();
+    await say("Everything working? is at the top of More: Claude, Gmail, Instagram, backups and updates.", 4400);
+    await point(card.locator(".health-row.ok").first());
+    await say("A tick means it's working.", 2600);
+    await point(card.locator(".health-row", { hasText: "Gmail" }));
+    await say("If Gmail or Instagram stops connecting, it says since when, and Reconnect signs you in again.", 4600);
+    // Demo mode starts with automatic backups off: a real thing to fix on camera. (Skipped if an earlier video turned them on.)
+    const turnOn = card.locator(".health-row", { hasText: "Backups" }).getByRole("link", { name: "Turn on" });
+    if (await turnOn.count()) {
+      await point(card.locator(".health-row", { hasText: "Backups" }));
+      await say("Here, automatic backups are off. Turn on goes straight to the right place.", 3800);
+      await click(turnOn);
+      const backup = page.locator("#backup");
+      await backup.waitFor();
+      const pw = backup.locator("input[type=password]");
+      await pw.nth(0).fill(process.env.CRM_PASSWORD || "demo-password-123");
+      await pw.nth(1).pressSequentially("my secret backup phrase", { delay: 30 });
+      await pw.nth(2).pressSequentially("my secret backup phrase", { delay: 30 });
+      page.once("dialog", (d) => d.accept());
+      await click(backup.getByRole("button", { name: "Save and turn on" }));
+      await page.locator("#backup").getByRole("button", { name: "Back up now" }).waitFor();
+      await goTo(page, "more");
+    }
+    const backups = page.locator("#health .health-row", { hasText: "Backups" });
+    const now = backups.getByRole("button", { name: "Back up now" });
+    if (await now.count()) {
+      await say("No backup yet, so: Back up now.", 2600);
+      await click(now);
+      await page.locator("#health .health-row.ok", { hasText: "Backups" }).waitFor();
+      await point(page.locator("#health .health-row", { hasText: "Backups" }));
+      await say("Fixed: a tick, and when it was saved.", 3200);
+    }
+    await point(page.locator("#health").getByRole("button", { name: "Check again" }));
+    await say("Check again looks for a new version once more. Everything else is always up to date.", 4200);
+    await say("", 600);
+  },
 };
 
 async function signIn(page) {

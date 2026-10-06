@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.37.0",
+    "title": "Is everything working?",
+    "features": [
+      {
+        "id": "health-check",
+        "title": "Everything working? in one place",
+        "body": "The top of More now shows one card that answers it: Claude, Gmail, Instagram, backups and updates, each with a tick or a short sentence in plain words, like \"Connected, last checked 9:30 AM\" or \"Stopped connecting on Tuesday\". Anything that needs you gets one button that fixes it: Reconnect, Back up now, Update now. Today shows the same thing on one line, only when something needs a look. Google asks you to sign in again every 7 days while your Google app is in testing, so this is where you'll see it first.",
+        "video": "health-check.webm",
+        "tryIt": "#more"
+      }
+    ]
+  },
+  {
     "version": "1.34.0",
     "title": "An app icon on your phone and laptop",
     "features": [
