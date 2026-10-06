@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.28.0",
+    "version": "1.29.0",
     "title": "Emails that look like emails",
     "features": [
       {
@@ -9,6 +9,18 @@
         "body": "Brand emails in a deal now show the way they did in Gmail: their pictures, colours and buttons, with every link clickable. Long emails are folded until you tap Show the whole email, and earlier messages in the thread sit behind Show earlier messages. Emails are cleaned before they're shown, so nothing in them can run inside the app.",
         "video": "full-emails.webm",
         "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
+    "version": "1.28.0",
+    "title": "Pitching brands fits your phone",
+    "features": [
+      {
+        "id": "outreach-phone",
+        "title": "A tidier Pitching brands page on your phone",
+        "body": "Finding brands to pitch now fits your phone screen: the search box gets its own line, the search depth choice stays inside the card with its price showing first, and the Draft pitch, Edit contact and Dismiss buttons line up under each brand. No more grey strip down the side.",
+        "tryIt": "#outreach"
       }
     ]
   },

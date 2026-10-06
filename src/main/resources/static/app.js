@@ -1168,8 +1168,9 @@
     const fillDepth = (opts) => {
       clear(depth);
       opts.forEach((o) => depth.appendChild(el("option", { value: o.depth },
-        depthNames[o.depth] + ": up to " + o.maxSearches + " searches, " + (o.measured ? "" : "about ") + usd(o.usd)
-        + (o.measured ? " on average" : "") + " (" + depthNotes[o.depth] + ")")));
+        // Price first, so it still shows when a phone cuts the end off.
+        depthNames[o.depth] + ", " + (o.measured ? "" : "about ") + usd(o.usd) + (o.measured ? " on average" : "")
+        + ": up to " + o.maxSearches + " searches (" + depthNotes[o.depth] + ")")));
       let saved = null;
       try { saved = localStorage.getItem("crm.searchDepth"); } catch (e) { /* private window */ }
       depth.value = opts.some((o) => o.depth === saved) ? saved : "STANDARD";
@@ -1205,8 +1206,8 @@
       : el("p", { class: "small muted" }, "Tip: connect Facebook on the Settings page to look up any brand's Instagram (followers, bio, creators they work with) and add it here.");
     return card("Find brands to pitch",
       el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
-      el("div", { class: "row" }, el("div", { class: "spacer" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
-      el("div", { class: "row" }, el("span", { class: "small muted" }, "Search depth:"), depth),
+      el("div", { class: "row find-brands" }, el("div", { class: "query" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
+      el("div", { class: "row find-depth" }, el("span", { class: "small muted" }, "Search depth:"), depth),
       status,
       lookupRow,
       leads.length ? el("div", {}, leads.map((l) => leadItem(root, l, ig && ig.facebookConnected))) : null);
