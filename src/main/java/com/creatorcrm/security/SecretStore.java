@@ -14,7 +14,18 @@ public class SecretStore {
 
     public static class MissingCredentialException extends RuntimeException {
         public MissingCredentialException(SecretName name) {
-            super("Missing credential " + name + ". Add it on the Settings page.");
+            super(plain(name));
+        }
+
+        /** What to do about it, in her words: which account to connect, and where. */
+        static String plain(SecretName name) {
+            String n = name.name();
+            if (name == SecretName.ANTHROPIC_API_KEY) return "Claude isn't connected yet. Add your Claude key in Settings, Accounts.";
+            if (n.startsWith("GOOGLE_") || n.startsWith("GMAIL_")) return "Gmail isn't connected yet. Connect it in Settings, Accounts.";
+            if (n.startsWith("INSTAGRAM_")) return "Instagram isn't connected yet. Connect it in Settings, Accounts.";
+            if (n.startsWith("FACEBOOK_")) return "Facebook isn't connected yet. Connect it in Settings, Advanced.";
+            if (name == SecretName.BACKUP_PASSPHRASE) return "Choose a backup passphrase first, in Settings, App.";
+            return "This needs setting up first, in Settings, Advanced.";
         }
     }
 

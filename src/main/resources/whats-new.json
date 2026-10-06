@@ -13,6 +13,30 @@
     ]
   },
   {
+    "version": "1.33.0",
+    "title": "Clearer messages when something goes wrong",
+    "features": [
+      {
+        "id": "plain-errors",
+        "title": "Problems explained in plain words",
+        "body": "When Gmail, Instagram, Claude or a backup runs into trouble, the app now says what happened and what to do, such as \"Gmail needs you to sign in again. Press Reconnect Gmail.\" or \"Couldn't reach Instagram. Check this computer is online.\" The technical details are still there under Details if someone helping you needs them. The status line at the top also says \"Checking for new messages\" and \"Claude is reading 3 messages\" instead of computer words.",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
+    "version": "1.32.0",
+    "title": "A clearer bar at the bottom of your phone",
+    "features": [
+      {
+        "id": "phone-nav-polish",
+        "title": "Bigger, clearer buttons along the bottom",
+        "body": "On your phone the five buttons at the bottom are bigger and easier to read, and the place you're in now sits in a soft orange pill, so you always know where you are. The grey box that used to stay stuck on the last button you tapped is gone, the bar keeps clear of the iPhone's home line, and the top of the screen has the app's logo and a rounder search box. Today's greeting is a little smaller so your list starts higher up.",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.31.0",
     "title": "Easier setup, tidier Settings",
     "features": [
