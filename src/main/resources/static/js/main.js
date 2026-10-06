@@ -18,13 +18,21 @@ function currentTab() {
   return views[h] ? h : "today";
 }
 
-async function route() {
+// Lights up the open place. On a laptop the sidebar has its own entry for pages under More, so that lights up instead.
+function markNav() {
   const tab = currentTab();
-  const nav = NAV_OF[tab] || tab;
+  const own = [...document.querySelectorAll(".tab")].some((b) => b.dataset.tab === tab && b.getClientRects().length);
+  const nav = own ? tab : NAV_OF[tab] || tab;
   document.querySelectorAll(".tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === nav);
     if (b.dataset.tab === nav) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
+}
+matchMedia("(min-width: 1024px)").addEventListener("change", markNav);
+
+async function route() {
+  const tab = currentTab();
+  markNav();
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + tab));
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
   if (tab === "settings" && q.has("gmail") && oauthReturnsToSetup()) {

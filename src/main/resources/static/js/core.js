@@ -247,8 +247,8 @@ function sortRows(rows, sort, keys) {
 
 /** cols: [[label, sortKey or null, first direction]]. Clicking the sorted column again flips it. */
 function sortableHead(cols, sort, onSort) {
-  return el("thead", {}, el("tr", {}, cols.map(([label, key, firstDir]) => {
-    if (!key) return el("th", {}, label);
+  return el("thead", {}, el("tr", {}, cols.map(([label, key, firstDir, cls]) => {
+    if (!key) return el("th", { class: cls || null }, label);
     const active = sort.by === key;
     return el("th", { "aria-sort": active ? (sort.dir === "asc" ? "ascending" : "descending") : "none" },
       el("button", { class: "th-sort", title: "Sort by " + label.toLowerCase(),

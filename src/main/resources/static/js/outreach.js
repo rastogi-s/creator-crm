@@ -85,17 +85,33 @@ async function renderOutreach(root) {
     if (!shown.length) { list.appendChild(card(null, emptyLine("No pitches match."))); return; }
     list.appendChild(el("div", { class: "card table-wrap" }, el("table", {},
       sortableHead([["Brand", "brand"], ["Contact", null], ["Pitched", "pitchedAt", "desc"], ["Platform", null], ["Opportunity", null], ["Response", null]]
-        .concat(Array.from({ length: n }, (_, i) => ["FU #" + (i + 1), null]))
+        .concat(Array.from({ length: n }, (_, i) => ["FU #" + (i + 1), null, null, "fu-col"]))
+        .concat([["Follow-ups", null, null, "fu-sum"]])
         .concat([["Next due", "nextFollowUp", "asc"], ["Status", "status"]]),
       pf.sort, (s) => { pf.sort = s; save(); draw(); }),
       el("tbody", {}, shown.map((r) => el("tr", { class: "clickable", onclick: () => openDeal(r.opportunityId) },
-        el("td", {}, el("strong", {}, r.brand)), el("td", {}, r.contact || ""), el("td", {}, fmtDate(r.pitchedAt)),
-        el("td", {}, pretty(r.platform)), el("td", {}, r.opportunity || ""), el("td", {}, r.initialResponse ? pretty(r.initialResponse) : "—"),
-        r.followUps.map((x) => el("td", { class: x.startsWith("due") ? "" : "muted" }, x || "")),
-        el("td", {}, r.nextFollowUp ? fmtDate(r.nextFollowUp) : "—"),
-        el("td", {}, r.status)))))));
+        el("td", { class: "brand-cell" }, el("strong", {}, r.brand)), el("td", { class: "clip", title: r.contact || null }, r.contact || ""),
+        el("td", { class: "nowrap" }, fmtDate(r.pitchedAt)),
+        el("td", { class: "nowrap" }, pretty(r.platform)), el("td", { class: "opp-cell" }, r.opportunity || ""), el("td", {}, r.initialResponse ? pretty(r.initialResponse) : "—"),
+        r.followUps.map((x) => el("td", { class: "fu-col nowrap" + (x.startsWith("due") ? "" : " muted") }, shortFollowUp(x))),
+        el("td", { class: "fu-sum" }, followUpDots(r.followUps)),
+        el("td", { class: "nowrap" }, r.nextFollowUp ? fmtDate(r.nextFollowUp) : "—"),
+        el("td", { class: "nowrap" }, r.status)))))));
   }
   draw();
+}
+
+// A follow-up cell from the server reads "due 2026-10-09" or "✓ 2026-10-05": show the date the way the rest of the app does.
+function shortFollowUp(x) {
+  return (x || "").replace(/\d{4}-\d{2}-\d{2}/, (d) => fmtDate(d));
+}
+
+// Laptop: the five follow-ups as one row of dots (sent, due, not yet), with each one's date on hover.
+function followUpDots(list) {
+  const sent = list.filter((x) => x.startsWith("✓")).length;
+  return el("span", { class: "fu-dots", title: list.map((x, i) => "#" + (i + 1) + ": " + (shortFollowUp(x) || "—")).join("\n") },
+    list.map((x) => el("span", { class: "fu-dot" + (x.startsWith("✓") ? " sent" : x.startsWith("due") ? " due" : ""), "aria-hidden": "true" })),
+    el("span", { class: "fu-text" }, sent + " of " + list.length + " sent"));
 }
 
 const compactNum = (n) => Number(n).toLocaleString(undefined, { notation: "compact", maximumFractionDigits: 1 });

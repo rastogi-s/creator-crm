@@ -347,6 +347,8 @@ button.link:hover { background: none; color: var(--text); }
 }
 
 .tab .ico { display: none; }
+/* Sidebar-only places (see desktop.css), and the laptop's one-column follow-ups on Pitching brands. */
+.tab.desk, .fu-sum { display: none; }
 .tab .badge { margin-left: .15rem; }
 
 /* Phones: the five places move to a bar at the bottom, in thumb reach; the header keeps the name and search. */

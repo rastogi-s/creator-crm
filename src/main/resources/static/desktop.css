@@ -1,0 +1,76 @@
+/*
+ * Laptop and desktop look (1024px and wider). index.html loads this file with media="(min-width: 1024px)",
+ * so nothing here can touch the phone layout in app.css. Phone-only rules live in app.css under max-width: 640px.
+ */
+
+:root { --side: 232px; --topbar-h: 3.6rem; }
+
+/* ---------- sidebar: every place one click away, no More detour ---------- */
+.topbar { padding-left: calc(var(--side) + 1.5rem); min-height: var(--topbar-h); }
+.brand {
+  position: fixed; top: 0; left: 0; z-index: 12; width: var(--side); height: var(--topbar-h);
+  padding: 0 1.25rem; background: var(--surface); border-right: 1px solid var(--border); font-size: 1.05rem;
+}
+.brand-mark { width: 28px; height: 28px; border-radius: 8px; }
+.tabs {
+  position: fixed; top: var(--topbar-h); left: 0; bottom: 0; z-index: 11; width: var(--side);
+  display: flex; flex-direction: column; gap: .15rem; overflow-y: auto;
+  padding: .75rem .75rem 1rem; background: var(--surface); border-right: 1px solid var(--border);
+}
+.tabs .tab, .tabs .tab.desk {
+  display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left;
+  padding: .55rem .75rem; border-radius: 8px; font-size: .95rem;
+}
+.tab .ico {
+  display: block; flex-shrink: 0; width: 20px; height: 20px;
+  fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+}
+.tab.active .ico { stroke-width: 2.2; }
+.tab .badge { margin-left: auto; }
+/* The everyday four, a quiet line, the pages that used to sit under More, and More itself at the bottom
+   (Everything working?, practice mode, Setup guide, Sign out). */
+.tab.desk[data-tab=summary] { margin-top: .75rem; position: relative; }
+.tab.desk[data-tab=summary]::before {
+  content: ""; position: absolute; top: -.45rem; left: .75rem; right: .75rem; border-top: 1px solid var(--border);
+}
+.tab[data-tab=more] { order: 99; margin-top: auto; }
+.tab[data-tab=more] .ico { stroke-width: 3.2; }
+
+/* The header keeps search, Check for new messages and the banners, next to the sidebar. */
+.global-search { flex: 1 1 auto; max-width: 30rem; }
+.global-search input, .global-search input:focus, .global-search input:not(:placeholder-shown) { width: 100%; }
+.topbar #sync-btn { margin-left: auto; }
+
+/* ---------- pages use the screen ---------- */
+main { max-width: none; margin: 0 0 0 var(--side); padding: 1.5rem 2rem 4rem; }
+main > .view { max-width: 1180px; margin: 0 auto; }
+/* Pages built round a table or a list-and-detail get the full width of a big screen. */
+main > #view-pipeline, main > #view-outreach, main > #view-money, main > #view-drafts { max-width: 1600px; }
+
+/* ---------- tables: one line per row, nothing squeezed ---------- */
+.table-wrap { padding: .5rem .75rem; }
+th, td { padding: .6rem .6rem; vertical-align: middle; }
+.nowrap { white-space: nowrap; }
+td.clip { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.brand-cell { white-space: nowrap; }
+td.opp-cell { min-width: 9rem; }
+
+/* Pitching brands: five follow-up columns become one, as dots. */
+.fu-col { display: none; }
+.fu-sum { display: table-cell; white-space: nowrap; }
+.fu-dots { display: inline-flex; align-items: center; gap: .3rem; cursor: help; }
+.fu-dot { width: .6rem; height: .6rem; border-radius: 50%; border: 1.5px solid var(--border); background: var(--surface); }
+.fu-dot.sent { background: var(--ok); border-color: var(--ok); }
+.fu-dot.due { border-color: var(--accent); background: var(--accent-soft); }
+.fu-text { margin-left: .4rem; color: var(--muted); font-size: .85rem; }
+
+/* Smaller laptops (1024 to 1279px): a narrower sidebar and tighter tables. */
+@media (max-width: 1279px) {
+  :root { --side: 204px; }
+  main { padding-left: 1.5rem; padding-right: 1.5rem; }
+  .fu-text { display: none; }
+  td.clip { max-width: 10rem; }
+  th, td { padding: .55rem .4rem; }
+  td.brand-cell { white-space: normal; }
+  .table-wrap { padding: .4rem .5rem; }
+}
