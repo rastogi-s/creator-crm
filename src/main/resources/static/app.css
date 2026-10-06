@@ -62,13 +62,17 @@ p { margin: .25rem 0 .75rem; }
   padding: .75rem 1.25rem;
   background: var(--surface); border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+.brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+.brand-mark { display: block; width: 26px; height: 26px; border-radius: 7px; }
 .tabs { display: flex; gap: .25rem; overflow-x: auto; flex: 1; }
 .tab {
   border: 0; background: none; color: var(--muted); cursor: pointer;
   padding: .45rem .65rem; border-radius: 8px; font: inherit; white-space: nowrap;
 }
-.tab:hover { background: var(--surface-2); color: var(--text); }
+.tab { -webkit-tap-highlight-color: transparent; }
+/* Hover only where there's a mouse: on a phone :hover sticks to the last tapped tab. */
+.tab:hover { background: none; }
+@media (hover: hover) { .tab:hover { background: var(--surface-2); color: var(--text); } }
 .tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 main { max-width: 1100px; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
 
@@ -221,30 +225,113 @@ label.check input { width: auto; }
 }
 .steps > li.done::before { content: "✓"; background: var(--ok-soft); color: var(--ok); }
 
+/* ---------- Settings tabs ---------- */
+.settings-tabs { display: flex; gap: .25rem; overflow-x: auto; border-bottom: 1px solid var(--border); margin: .5rem 0 1rem; }
+.settings-tab {
+  border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted);
+  padding: .55rem .8rem; white-space: nowrap; margin-bottom: -1px;
+}
+.settings-tab:hover { background: none; color: var(--text); }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.setup-callout {
+  display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; justify-content: space-between;
+  background: var(--accent-soft); border-radius: var(--radius); padding: .75rem 1rem; margin-bottom: 1rem;
+}
+.setup-callout.quiet { background: var(--surface-2); color: var(--muted); font-size: .9rem; }
+a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
+/* ---------- Setup guide ---------- */
+.setup-progress { display: flex; list-style: none; padding: 0; margin: .25rem auto 1rem; max-width: 720px; gap: .25rem; }
+.setup-progress li { flex: 1; text-align: center; font-size: .82rem; border-top: 4px solid var(--border); padding-top: .4rem; min-width: 0; }
+.setup-progress li a { color: var(--muted); text-decoration: none; }
+.setup-progress li.past { border-top-color: var(--ok); }
+.setup-progress li.now { border-top-color: var(--accent); }
+.setup-progress li.now a { color: var(--accent); font-weight: 700; }
+.setup-step { max-width: 720px; margin: 0 auto; padding: 1.5rem 1.75rem; }
+.setup-step h1 { margin-top: 0; }
+.setup-step .lede { font-size: 1.05rem; }
+.setup-why { background: var(--surface-2); border-radius: 8px; padding: .6rem .8rem; }
+.setup-ok { color: var(--ok); font-weight: 600; }
+.setup-howto { padding-left: 1.3rem; }
+.setup-howto li { margin: .55rem 0; line-height: 1.5; }
+.setup-howto .copy-row { margin-top: .35rem; flex-wrap: nowrap; }
+.setup-howto .copy-row code { flex: 1; min-width: 0; }
+.setup-checklist, .setup-extras { list-style: none; padding: 0; }
+.setup-checklist li { padding: .35rem 0; }
+.setup-checklist .mark { display: inline-block; width: 1.4rem; color: var(--muted); font-weight: 700; }
+.setup-checklist li.ok .mark { color: var(--ok); }
+.setup-extras li { padding: .3rem 0; }
+.setup-nav { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+button.link { border: 0; background: none; color: var(--muted); text-decoration: underline; padding: .45rem .4rem; }
+button.link:hover { background: none; color: var(--text); }
+@media (max-width: 640px) {
+  .setup-step { padding: 1rem; }
+  .setup-progress li { font-size: .72rem; }
+  .setup-howto .copy-row { flex-wrap: wrap; }
+  /* All five tabs stay in view on a phone, as pills over two rows, so Advanced isn't hidden off the edge. */
+  .settings-tabs { flex-wrap: wrap; border-bottom: 0; gap: .35rem; }
+  .settings-tab { border: 1px solid var(--border); border-radius: 999px; padding: .35rem .75rem; margin: 0; }
+  .settings-tab.active { background: var(--accent-soft); border-color: transparent; }
+  .setup-nav .primary { flex: 1 1 100%; }
+}
+
 .tab .ico { display: none; }
 .tab .badge { margin-left: .15rem; }
 
 /* Phones: the five places move to a bar at the bottom, in thumb reach; the header keeps the name and search. */
 @media (max-width: 640px) {
-  .topbar { flex-wrap: wrap; padding: .5rem 1rem; gap: .5rem .75rem; }
-  .global-search { flex: 1; min-width: 0; }
+  .topbar {
+    flex-wrap: wrap; gap: .5rem .75rem;
+    padding: calc(.55rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) .55rem calc(1rem + env(safe-area-inset-left, 0px));
+  }
+  .brand { font-size: 1.05rem; }
+  .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
+  .topbar .global-search { flex: 1 1 0; min-width: 0; }
+  .topbar .global-search input {
+    width: 100%; border-color: transparent; background: var(--surface-2); border-radius: 999px;
+    padding: .45rem .85rem .45rem 2.1rem; font-size: 1rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b665e' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m16 16 4 4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: .7rem center; background-size: 1rem;
+  }
   #sync-btn { display: none; }
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
-    background: var(--surface); border-top: 1px solid var(--border);
-    padding: .3rem .25rem calc(.3rem + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
+    border-top: 1px solid var(--border); box-shadow: 0 -4px 20px rgba(0,0,0,.05);
+    padding: .4rem calc(.25rem + env(safe-area-inset-right, 0px)) calc(.4rem + env(safe-area-inset-bottom, 0px)) calc(.25rem + env(safe-area-inset-left, 0px));
   }
-  .tab { display: flex; flex-direction: column; align-items: center; gap: .1rem; padding: .3rem 0; font-size: .72rem; position: relative; }
-  .tab.active { background: none; }
-  .tab .ico { display: block; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  .tab[data-tab=more] .ico { stroke-width: 3.2; }
-  .tab .badge { position: absolute; top: 0; left: 55%; font-size: .66rem; padding: 0 .35rem; }
-  main { padding-bottom: 6rem; }
-  .toast { bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; gap: .2rem; padding: .15rem 0; min-height: 3.4rem;
+    font-size: .78rem; font-weight: 500; position: relative; border-radius: 0;
+  }
+  .tab.active { background: none; color: var(--accent); font-weight: 700; }
+  .tab:focus-visible { outline: none; }
+  .tab:focus-visible .ico { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* The icon sits in a pill that fills in for the open place. */
+  .tab .ico {
+    display: block; box-sizing: content-box; width: 26px; height: 26px; padding: 4px 18px; border-radius: 999px;
+    fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+    transition: background-color .15s;
+  }
+  .tab.active .ico { background: var(--accent-soft); stroke-width: 2.3; }
+  .tab:active .ico { background: var(--surface-2); }
+  .tab.active:active .ico { background: var(--accent-soft); }
+  .tab[data-tab=more] .ico { stroke-width: 3.4; }
+  .tab .badge {
+    position: absolute; top: -.1rem; left: calc(50% + 6px); font-size: .68rem; font-weight: 700; line-height: 1.25rem;
+    min-width: 1.25rem; padding: 0 .35rem; text-align: center; background: var(--accent); color: var(--surface);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  main { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)); }
+  .toast { bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
+  /* A greeting, not a banner: keep it in proportion with the rest of the page. */
+  #view-today > h1 { font-size: 1.3rem; letter-spacing: -.01em; }
   .item { flex-wrap: wrap; }
   .item .actions { width: 100%; padding-left: 2.25rem; }
 }
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) { .tab .ico { transition: none; } }
 
 /* ---------- Today, Deals, More ---------- */
 .today-sums { color: var(--muted); margin: -.25rem 0 1rem; }

@@ -20,3 +20,36 @@ jobs:
           cache: maven
       - name: Build and test
         run: bash ./mvnw -B verify
+
+  smoke:
+    # Opens every page of a demo-mode copy of the app at laptop and phone size, and fails on errors.
+    # See walkthroughs/smoke.mjs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build
+        run: bash ./mvnw -B -q -DskipTests package
+      - name: Install Chromium
+        working-directory: walkthroughs
+        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Start the app in demo mode
+        run: |
+          CRM_DATA_DIR="$RUNNER_TEMP/demo" nohup java -jar target/creator-manager-*.jar --spring.profiles.active=demo > "$RUNNER_TEMP/demo.log" 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://localhost:8080/api/setup/status && exit 0; sleep 2; done
+          cat "$RUNNER_TEMP/demo.log"; exit 1
+      - name: Click through every page
+        working-directory: walkthroughs
+        run: node smoke.mjs
+      - if: failure()
+        run: cat "$RUNNER_TEMP/demo.log" || true
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-screenshots
+          path: walkthroughs/smoke-results/
+          if-no-files-found: ignore
