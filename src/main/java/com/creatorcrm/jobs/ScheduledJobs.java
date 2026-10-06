@@ -11,6 +11,7 @@ import com.creatorcrm.domain.Enums.FollowUpStatus;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.FollowUp;
 import com.creatorcrm.drafts.DraftService;
+import com.creatorcrm.drafts.SendQueue;
 import com.creatorcrm.drafts.Placeholders;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.invoices.PaymentReminders;
@@ -50,14 +51,16 @@ public class ScheduledJobs {
     private final InstagramEngagementService instagramEngagement;
     private final CalendarSync calendar;
     private final CampaignResults results;
+    private final SendQueue sendQueue;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
                          PaymentReminders paymentReminders, WinBack winBack,
                          InstagramEngagementService instagramEngagement, CalendarSync calendar,
-                         CampaignResults results) {
+                         CampaignResults results, SendQueue sendQueue) {
         this.results = results;
+        this.sendQueue = sendQueue;
         this.instagramEngagement = instagramEngagement;
         this.calendar = calendar;
         this.paymentReminders = paymentReminders;
@@ -156,7 +159,8 @@ public class ScheduledJobs {
             boolean stillDue = followUpRepo.findById(d.followupId)
                     .map(f -> f.status == FollowUpStatus.SCHEDULED && !f.scheduledDate.isAfter(today))
                     .orElse(false);
-            if (!stillDue || drafts.sendBlockedReason(d).isPresent()) continue;
+            // One she just pressed Send on is already on its way, after its undo window
+            if (!stillDue || sendQueue.isWaiting(d.id) || drafts.sendBlockedReason(d).isPresent()) continue;
             if (Placeholders.message(d.body) != null) {
                 log.info("Follow-up draft {} has blanks to fill in; leaving it in Drafts", d.id);
                 continue;

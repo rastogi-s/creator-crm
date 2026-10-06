@@ -18,6 +18,7 @@ import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
+import com.creatorcrm.drafts.SendQueue;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.jobs.ScheduledJobs;
 import com.creatorcrm.llm.Intent;
@@ -82,7 +83,17 @@ public class CrmController {
     public record MessageView(Long id, String direction, String from, String subject, String content,
                               OffsetDateTime sentAt, String type, String gmailUrl, boolean fullEmail) {}
 
-    public record DraftView(Draft draft, String brand, String blockedReason) {}
+    /**
+     * @param sendingAt when the draft goes out, while Send's undo window is open (null otherwise)
+     * @param sendError why its last send failed after the undo window, if it did
+     */
+    public record DraftView(Draft draft, String brand, String blockedReason, OffsetDateTime sendingAt, String sendError) {}
+
+    /** Send was pressed: the draft goes out at {@code sendAt} unless she presses Undo first. */
+    public record QueuedSend(Long draftId, OffsetDateTime sendAt, int undoSeconds) {}
+
+    /** @param state waiting (undo still possible), sent, failed (see error) or pending (back in Drafts) */
+    public record SendStatus(String state, String error) {}
 
     public record UpdateOpportunity(String status, @Size(max = 500) String budgetText,
                                     @Size(max = 2000) String deliverables, @Size(max = 1000) String usageRights,
@@ -110,6 +121,7 @@ public class CrmController {
     private final WorkflowEngine workflow;
     private final FollowUpEngine followUps;
     private final DraftService draftService;
+    private final SendQueue sendQueue;
     private final OutreachService outreach;
     private final IngestionService ingestion;
     private final ScheduledJobs jobs;
@@ -124,7 +136,8 @@ public class CrmController {
                          DraftService draftService, OutreachService outreach, IngestionService ingestion,
                          ScheduledJobs jobs, SettingsService settings,
                          @Qualifier("applicationTaskExecutor") TaskExecutor executor, LeadScoring scoring,
-                         GmailLinks gmailLinks) {
+                         GmailLinks gmailLinks, SendQueue sendQueue) {
+        this.sendQueue = sendQueue;
         this.scoring = scoring;
         this.gmailLinks = gmailLinks;
         this.digest = digest;
@@ -266,35 +279,58 @@ public class CrmController {
         List<DraftView> out = new ArrayList<>();
         for (Draft d : drafts.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING)) {
             String brand = opportunities.findById(d.opportunityId).map(workflow::brandName).orElse("");
-            out.add(new DraftView(d, brand, draftService.sendBlockedReason(d).orElse(null)));
+            out.add(new DraftView(d, brand, draftService.sendBlockedReason(d).orElse(null),
+                    sendQueue.waiting(d.id).map(SendQueue.Waiting::sendAt).orElse(null), sendQueue.failure(d.id).orElse(null)));
         }
         return out;
     }
 
     @PutMapping("/drafts/{id}")
     public Draft editDraft(@PathVariable Long id, @Valid @RequestBody DraftEdit e) {
+        sendQueue.requireNotWaiting(id);
         return draftService.edit(id, e.subject(), e.body());
     }
 
     /** Claude rewrites the draft as asked and saves it; it still waits for Send. */
     @PostMapping("/drafts/{id}/revise")
     public Draft reviseDraft(@PathVariable Long id, @Valid @RequestBody DraftRevision r) {
+        sendQueue.requireNotWaiting(id);
         return draftService.revise(id, r.subject(), r.body(), r.request());
     }
 
-    /** The only way a message leaves the app: an explicit, CSRF-protected click by the signed-in creator. */
+    /**
+     * The only way a message leaves the app: an explicit, CSRF-protected click by the signed-in creator, after she
+     * has seen the preview. It goes out after a short undo window (see {@link SendQueue}).
+     */
     @PostMapping("/drafts/{id}/send")
-    public Draft sendDraft(@PathVariable Long id, @Valid @RequestBody(required = false) DraftEdit e) {
-        return draftService.send(id, e == null ? null : e.subject(), e == null ? null : e.body());
+    public QueuedSend sendDraft(@PathVariable Long id, @Valid @RequestBody(required = false) DraftEdit e) {
+        SendQueue.Waiting w = sendQueue.send(id, e == null ? null : e.subject(), e == null ? null : e.body());
+        return new QueuedSend(w.draftId(), w.sendAt(), sendQueue.undoSeconds());
+    }
+
+    @PostMapping("/drafts/{id}/undo-send")
+    public Map<String, Boolean> undoSend(@PathVariable Long id) {
+        return Map.of("undone", sendQueue.cancel(id));
+    }
+
+    @GetMapping("/drafts/{id}/send-status")
+    public SendStatus sendStatus(@PathVariable Long id) {
+        if (sendQueue.isWaiting(id)) return new SendStatus("waiting", null);
+        Draft d = drafts.findById(id).orElseThrow(() -> new IllegalArgumentException("Unknown draft"));
+        if (d.status == DraftStatus.SENT) return new SendStatus("sent", null);
+        return sendQueue.failure(id).map(err -> new SendStatus("failed", err))
+                .orElse(new SendStatus(d.status == DraftStatus.PENDING ? "pending" : d.status.name().toLowerCase(java.util.Locale.ROOT), null));
     }
 
     @PostMapping("/drafts/{id}/sent-manually")
     public Draft sentManually(@PathVariable Long id) {
+        sendQueue.requireNotWaiting(id);
         return draftService.markSentManually(id);
     }
 
     @PostMapping("/drafts/{id}/discard")
     public Draft discard(@PathVariable Long id) {
+        sendQueue.requireNotWaiting(id);
         return draftService.discard(id);
     }
 
