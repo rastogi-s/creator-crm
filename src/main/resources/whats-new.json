@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.28.0",
+    "title": "Pitching brands fits your phone",
+    "features": [
+      {
+        "id": "outreach-phone",
+        "title": "A tidier Pitching brands page on your phone",
+        "body": "Finding brands to pitch now fits your phone screen: the search box gets its own line, the search depth choice stays inside the card with its price showing first, and the Draft pitch, Edit contact and Dismiss buttons line up under each brand. No more grey strip down the side.",
+        "tryIt": "#outreach"
+      }
+    ]
+  },
+  {
     "version": "1.27.0",
     "title": "A calmer, simpler layout",
     "features": [
