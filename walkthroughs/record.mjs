@@ -26,7 +26,7 @@ const overlay = () => {
       position: "fixed", left: "50%", bottom: "28px", transform: "translateX(-50%)", zIndex: 99999,
       maxWidth: "980px", padding: "12px 20px", borderRadius: "12px", background: "rgba(20,18,16,.88)",
       color: "#fff", font: "600 22px/1.35 system-ui, sans-serif", textAlign: "center", opacity: "0",
-      transition: "opacity .25s",
+      transition: "opacity .25s", pointerEvents: "none", // never in the way of a click, however it wraps
     });
     const dot = document.createElement("div");
     dot.id = "wt-cursor";
