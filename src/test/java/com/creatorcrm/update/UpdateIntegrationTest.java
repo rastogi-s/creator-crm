@@ -52,6 +52,13 @@ class UpdateIntegrationTest {
                 ex.getResponseBody().write(b);
                 ex.close();
             });
+            // 1.30.0 never got a release of its own; the newest release carries its video.
+            s.createContext("/acme/crm/releases/latest/download/drafts-inbox.webm", ex -> {
+                byte[] b = "latest-video".getBytes(StandardCharsets.UTF_8);
+                ex.sendResponseHeaders(200, b.length);
+                ex.getResponseBody().write(b);
+                ex.close();
+            });
             s.start();
             return s;
         } catch (Exception e) {
@@ -117,5 +124,11 @@ class UpdateIntegrationTest {
         assertThat(videoRequests).isEqualTo(1);
         assertThatThrownBy(() -> videos.get("1.1.0", "../../secret.webm")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> videos.get("1.1.0", "unlisted.webm")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aVideoMissingFromItsReleaseComesFromTheNewestRelease() throws Exception {
+        assertThat(Files.readString(videos.get("1.30.0", "drafts-inbox.webm"))).isEqualTo("latest-video");
+        assertThatThrownBy(() -> videos.get("1.31.0", "setup-guide.webm")).isInstanceOf(java.io.IOException.class);
     }
 }

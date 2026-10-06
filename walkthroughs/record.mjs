@@ -176,7 +176,7 @@ const scenarios = {
     await say("They go on a one-page results PDF for the brand.", 3400);
     await click(drawer.getByRole("button", { name: "Close" }));
     await click(page.locator(".tab[data-tab=drafts]"));
-    const recap = page.locator(".card", { hasText: "Results recap" }).first();
+    const recap = await openDraft(page, "Petal & Pine", "Results recap");
     await recap.waitFor();
     await recap.scrollIntoViewIfNeeded();
     await point(recap.locator("textarea"));

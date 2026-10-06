@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 /**
  * Walkthrough videos live on the GitHub release they shipped with. The app fetches each one once and keeps it
  * in the data folder, so the dashboard plays them from its own address (no third-party content in the page)
- * and they keep working offline.
+ * and they keep working offline. When that release lacks a video, the newest release's copy is used.
  */
 @Service
 public class VideoCache {
@@ -36,8 +36,14 @@ public class VideoCache {
         Path dir = Files.createDirectories(Path.of(props.dataDir()).toAbsolutePath().resolve("videos").resolve(version));
         Path target = dir.resolve(file);
         if (!Files.exists(target)) {
-            updates.download(updates.downloadBaseUrl() + "/" + updates.repo() + "/releases/download/v" + version + "/" + file,
-                    target);
+            String releases = updates.downloadBaseUrl() + "/" + updates.repo() + "/releases/";
+            try {
+                updates.download(releases + "download/v" + version + "/" + file, target);
+            } catch (IOException e) {
+                // That version's release may have no videos (its recording failed) or not exist at all (merged
+                // while another release was running). Every release records every video, so the newest has it.
+                updates.download(releases + "latest/download/" + file, target);
+            }
         }
         return target;
     }
