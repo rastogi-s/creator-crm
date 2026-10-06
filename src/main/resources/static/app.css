@@ -528,3 +528,40 @@ select { max-width: 100%; text-overflow: ellipsis; }
   /* Only list rows with a number on the left indent their buttons under the text. */
   .item:not(:has(> .num)) .actions { padding-left: 0; }
 }
+
+/* ---------- Everything working? (More card, Today strip) ---------- */
+.health-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.health-head h3 { margin: 0; }
+.health-verdict { font-size: .82rem; font-weight: 600; padding: .1rem .6rem; border-radius: 999px; }
+.health-verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.health-verdict.warn { background: var(--warn-soft); color: var(--warn); }
+.health-list { list-style: none; margin: .5rem 0 .75rem; padding: 0; }
+.health-row { display: flex; align-items: center; gap: .65rem; padding: .6rem 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.health-row:first-child { border-top: 0; }
+.health-row .body { flex: 1 1 12rem; min-width: 0; }
+.health-row .title { font-weight: 600; }
+.health-row .detail { color: var(--muted); font-size: .88rem; overflow-wrap: anywhere; }
+.health-row.problem .detail { color: var(--text); }
+.health-row > .btn, .health-row > button { flex: 0 0 auto; }
+.health-icon {
+  flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: .85rem; background: var(--surface-2); color: var(--muted);
+}
+.health-row.ok .health-icon { background: var(--ok-soft); color: var(--ok); }
+.health-row.warn .health-icon { background: var(--warn-soft); color: var(--warn); }
+.health-row.problem .health-icon { background: var(--danger-soft); color: var(--danger); }
+.health-strip.warn .health-icon { background: var(--surface); color: var(--warn); }
+.health-strip.problem .health-icon { background: var(--surface); color: var(--danger); }
+.health a.btn.primary, .health-strip a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.health-strip { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .5rem .75rem; border-radius: 8px; margin: -.25rem 0 1rem; font-size: .9rem; }
+.health-strip.warn { background: var(--warn-soft); color: var(--warn); }
+.health-strip.problem { background: var(--danger-soft); color: var(--danger); }
+.health-strip .text { font-weight: 600; flex: 1 1 10rem; min-width: 0; }
+.health-strip .more { font-size: .85rem; color: inherit; }
+.health-strip.ok { padding: 0; margin: -.5rem 0 1rem; font-size: .85rem; }
+.health-strip.ok a { color: var(--ok); text-decoration: none; }
+.health-strip.ok a:hover { text-decoration: underline; }
+@media (max-width: 480px) {
+  /* Buttons drop under the words, lined up with them, instead of squeezing the sentence. */
+  .health-row > .btn, .health-row > button { margin-left: 2.15rem; }
+}
