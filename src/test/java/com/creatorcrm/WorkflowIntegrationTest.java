@@ -110,7 +110,8 @@ class WorkflowIntegrationTest {
                 base.updatedSummary(),
                 "Bloom's creator program pays $500 per UGC video. The form asks for your handles and audience stats.",
                 List.of(new com.creatorcrm.llm.MessageAnalysis.TaskLink("Application form", "https://forms.bloom.test/apply?ref=ava"),
-                        new com.creatorcrm.llm.MessageAnalysis.TaskLink("Made up", "https://evil.test/login")));
+                        new com.creatorcrm.llm.MessageAnalysis.TaskLink("Made up", "https://evil.test/login")),
+                base.dealStage());
 
         email(Direction.INBOUND, 0, "Join our creator program! Apply here: https://forms.bloom.test/apply?ref=ava", a);
 

@@ -6,6 +6,7 @@ import com.creatorcrm.domain.Enums.OpportunityType;
 import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.MessageAnalysis;
+import com.creatorcrm.llm.StageSeen;
 import com.creatorcrm.llm.MessageAnalysis.ExtractedDeadline;
 import com.creatorcrm.llm.MessageAnalysis.TaskLink;
 import java.time.LocalDate;
@@ -96,7 +97,7 @@ final class DemoInbox {
                 "1 post", "Candle gift set", List.of(), List.of(), false, Priority.LOW,
                 "", "Petal & Pine thanked Ava for posting their candle gift set.");
         return new MessageAnalysis(false, "", "", Intent.NOT_BRAND_RELATED, OpportunityType.OTHER, Compensation.UNKNOWN, 0, "",
-                "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "", "", List.of());
+                "", "", "", "", List.of(), List.of(), false, Priority.LOW, "", "", "", List.of(), StageSeen.UNCLEAR);
     }
 
     private static MessageAnalysis a(String brand, String contact, Intent intent, OpportunityType type, Compensation comp,
@@ -110,13 +111,13 @@ final class DemoInbox {
                                      List<ExtractedDeadline> deadlines, List<String> missing, boolean reply, Priority urgency,
                                      String action, String summary) {
         return new MessageAnalysis(true, brand, contact, intent, type, comp, budget, budget > 0 ? "USD" : "",
-                budget > 0 ? "$" + (int) budget : "", deliverables, usageRights, campaign, deadlines, missing, reply, urgency, action, summary, "", List.of());
+                budget > 0 ? "$" + (int) budget : "", deliverables, usageRights, campaign, deadlines, missing, reply, urgency, action, summary, "", List.of(), StageSeen.UNCLEAR);
     }
 
     private static MessageAnalysis withTask(MessageAnalysis x, String brief, TaskLink... links) {
         return new MessageAnalysis(x.brandRelated(), x.brandName(), x.contactName(), x.intent(), x.opportunityType(),
                 x.compensation(), x.budgetAmount(), x.currency(), x.budgetText(), x.deliverables(), x.usageRights(),
                 x.campaign(), x.deadlines(), x.missingInfo(), x.requiresReply(), x.urgency(), x.suggestedAction(),
-                x.updatedSummary(), brief, List.of(links));
+                x.updatedSummary(), brief, List.of(links), x.dealStage());
     }
 }

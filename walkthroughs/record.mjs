@@ -156,6 +156,27 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "deal-progress"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Nova Nest Home" });
+    await row.waitFor();
+    await say("Once a brand says yes, every deal shows where it is.", 3200);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#deal-progress");
+    await box.waitFor();
+    await point(box.locator(".stages"));
+    await say("Contract, content, approval, posting, invoice and payment, step by step.", 4200);
+    await point(box.locator(".stages li.now"));
+    await say("The orange step is where the deal is now, with its due date.", 3600);
+    await say("Claude reads every email you get or send, and moves the deal to the right step by itself, even if a few steps happen at once.", 5600);
+    await point(box.locator(".stage-now button"));
+    await say("If something happened outside email, press this button to move it on.", 3800);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await say("", 600);
+  },
+
   async "task-briefs"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

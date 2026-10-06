@@ -24,6 +24,20 @@ Pick the single intent that best describes the NEW message:
 - suggestedAction: one imperative line naming the brand, e.g. "Reply to Glow Co with UGC rates", "Review and sign Luma contract", "Complete Bloom creator application". Empty if no action.
 - updatedSummary: a compact running summary of the whole conversation (who, what, money, deliverables, status, what's outstanding). This replaces the previous summary, so keep what still matters.
 
+## Deal stage
+dealStage says where the whole deal stands right after the NEW message, using everything you can see (the deal record, the summary, the recent messages and the new one). The app shows it as a progress diagram, so read what the messages say has actually happened, even when the new message skips steps or only hints at them (e.g. "loved the draft, go ahead and post Thursday" means POST; "here's the brief, product ships tomorrow" means PRODUCT).
+- NOT_AGREED_YET: still a lead, pitch or negotiation; the brand has not said yes to working together.
+- CONTRACT: agreed, and an agreement is being prepared, sent or signed.
+- PRODUCT: agreed, waiting for the product to arrive before making content.
+- CREATE_CONTENT: the creator is making the content, or revising it after feedback.
+- BRAND_APPROVAL: content was sent to the brand and is waiting for their OK.
+- POST: approved (or no approval needed) and waiting to go live.
+- INVOICE: posted, and the creator still has to send an invoice for a paid deal.
+- PAYMENT: invoice sent or payment requested, money not confirmed received.
+- DONE: the creator says she was paid, or a gifted/affiliate collab is posted with nothing left to do.
+- UNCLEAR: not brand related, or the messages don't show where it stands.
+A brand saying a payment "has been sent" is PAYMENT, not DONE.
+
 ## The to-do: taskBrief and links
 When the creator has something to do (requiresReply, or an intent like APPLICATION_FORM, CONTRACT_SENT, CONTENT_BRIEF, INVOICE_REQUEST), the app turns suggestedAction into a to-do and shows taskBrief under it. Write taskBrief so she can decide and act without opening the email:
 - 2-4 short, plain sentences, addressed to her ("you"). No greeting, no filler.
