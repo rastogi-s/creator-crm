@@ -685,8 +685,9 @@ const scenarios = {
     const send = page.locator("#view-drafts .inbox-detail .card:not(.hidden)").getByRole("button", { name: "Send" });
     await point(send);
     await say("Press Send to see what happens next. In practice, Send only pretends.", 4000);
-    page.once("dialog", (d) => d.accept());
     await click(send);
+    const preview = page.locator("dialog.send-preview");
+    await click(preview.locator("button.primary"));
     await say("The deal moves on, just like a real send. Your real brands never see it.", 4200);
     await point(banner.getByRole("button", { name: "Leave practice" }));
     await say("When you're done, press Leave practice to go back to your own deals.", 3800);
