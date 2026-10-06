@@ -74,6 +74,8 @@ public class SecurityConfig {
         RequestMatcher appPage = req -> !EMAIL_PAGE.matches(req);
         http.authorizeHttpRequests(a -> a
                         .requestMatchers("/setup.html", "/setup.js", "/login.html", "/login.js", "/app.css", "/favicon.ico", "/favicon.png", "/error").permitAll()
+                        // Practice mode's sign-in link from the real app; it checks its own one-off ticket.
+                        .requestMatchers(HttpMethod.GET, "/practice/enter").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/setup/status").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/setup/admin").access((auth, ctx) ->
                                 new org.springframework.security.authorization.AuthorizationDecision(!setup.isSetupComplete()))

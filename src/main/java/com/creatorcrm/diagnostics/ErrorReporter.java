@@ -105,7 +105,9 @@ public class ErrorReporter {
         this.repo = repo;
         this.apiBaseUrl = apiBaseUrl;
         this.gmail = gmail;
-        if (LoggerFactory.getILoggerFactory() instanceof LoggerContext ctx) {
+        // Practice mode is a second copy of the app in the same program: the real app's reporter already sees every log line.
+        boolean practice = Boolean.TRUE.equals(env.getProperty("crm.practice", Boolean.class));
+        if (!practice && LoggerFactory.getILoggerFactory() instanceof LoggerContext ctx) {
             capture.setContext(ctx);
             capture.start();
             ctx.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(capture);
