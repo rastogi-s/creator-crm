@@ -54,6 +54,83 @@ final class MailText {
         return sb.isEmpty() ? "" : "\n\nLinks in this email:" + sb;
     }
 
+    /** The longest HTML a message may keep, inline pictures included. */
+    static final int MAX_HTML = 1_000_000;
+
+    private static final java.util.regex.Pattern CID = java.util.regex.Pattern.compile("(?i)cid:([^\"'\\s>)]+)");
+
+    /**
+     * The HTML version of the email, in its own character set, with inline pictures ({@code cid:}) embedded as
+     * data addresses while they fit in {@link #MAX_HTML}. "" when the email has no HTML version or it is too long.
+     * {@code attachment} downloads a part whose bytes Gmail didn't include.
+     */
+    static String htmlOf(MessagePart payload, java.util.function.Function<MessagePart, byte[]> attachment) {
+        MessagePart part = payload == null ? null : findPart(payload, "text/html");
+        if (part == null || part.getBody() == null || part.getBody().getData() == null) return "";
+        String html = new String(part.getBody().decodeData(), charsetOf(part));
+        if (html.length() > MAX_HTML) return "";
+        java.util.Map<String, MessagePart> inline = new java.util.HashMap<>();
+        collectInline(payload, inline);
+        java.util.regex.Matcher m = CID.matcher(html);
+        StringBuilder sb = new StringBuilder();
+        int room = MAX_HTML - html.length();
+        while (m.find()) {
+            String uri = m.group();
+            MessagePart img = inline.get(m.group(1).toLowerCase(java.util.Locale.ROOT));
+            if (img != null) {
+                byte[] data = img.getBody() != null && img.getBody().getData() != null ? img.getBody().decodeData() : attachment.apply(img);
+                if (data != null && data.length > 0 && data.length * 4L / 3 + 40 < room) {
+                    uri = "data:" + img.getMimeType().split(";")[0].strip() + ";base64," + Base64.getEncoder().encodeToString(data);
+                    room -= uri.length();
+                }
+            }
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(uri));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    private static void collectInline(MessagePart part, java.util.Map<String, MessagePart> out) {
+        if (part.getMimeType() != null && part.getMimeType().toLowerCase(java.util.Locale.ROOT).startsWith("image/")
+                && part.getHeaders() != null) {
+            for (var h : part.getHeaders()) {
+                if ("Content-ID".equalsIgnoreCase(h.getName()) && h.getValue() != null) {
+                    out.putIfAbsent(h.getValue().strip().replaceAll("^<|>$", "").toLowerCase(java.util.Locale.ROOT), part);
+                }
+            }
+        }
+        if (part.getParts() != null) part.getParts().forEach(p -> collectInline(p, out));
+    }
+
+    private static java.nio.charset.Charset charsetOf(MessagePart part) {
+        if (part.getHeaders() != null) {
+            for (var h : part.getHeaders()) {
+                if (!"Content-Type".equalsIgnoreCase(h.getName()) || h.getValue() == null) continue;
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)charset=\"?([\\w.:-]+)").matcher(h.getValue());
+                if (m.find()) {
+                    try {
+                        return java.nio.charset.Charset.forName(m.group(1));
+                    } catch (RuntimeException unknown) {
+                        return StandardCharsets.UTF_8;
+                    }
+                }
+            }
+        }
+        return StandardCharsets.UTF_8;
+    }
+
+    private static MessagePart findPart(MessagePart part, String mime) {
+        if (part.getMimeType() != null && part.getMimeType().startsWith(mime)
+                && (part.getFilename() == null || part.getFilename().isBlank())) return part;
+        if (part.getParts() != null) {
+            for (MessagePart p : part.getParts()) {
+                MessagePart found = findPart(p, mime);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     private static String find(MessagePart part, String mime) {
         if (part.getMimeType() != null && part.getMimeType().startsWith(mime)) {
             String s = GmailConnector.decode(part);

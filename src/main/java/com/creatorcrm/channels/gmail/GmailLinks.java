@@ -23,11 +23,17 @@ public class GmailLinks {
         return m == null ? null : url(m.externalId, secrets.get(SecretName.GMAIL_ADDRESS).orElse(""));
     }
 
-    static String url(String externalId, String account) {
+    /** The Gmail API id of this message, or null when it didn't come from Gmail. */
+    public static String gmailId(String externalId) {
         if (externalId == null || !externalId.startsWith(PREFIX)) return null;
         String id = externalId.substring(PREFIX.length());
         // Gmail API message ids are hex; anything else (demo data, other channels) has no Gmail page.
-        if (!id.matches("[0-9a-f]{8,32}")) return null;
+        return id.matches("[0-9a-f]{8,32}") ? id : null;
+    }
+
+    static String url(String externalId, String account) {
+        String id = gmailId(externalId);
+        if (id == null) return null;
         // authuser picks the right inbox when she's signed in to more than one Google account.
         String user = account.isBlank() ? "" : "?authuser=" + URLEncoder.encode(account, StandardCharsets.UTF_8);
         return "https://mail.google.com/mail/" + user + "#all/" + id;

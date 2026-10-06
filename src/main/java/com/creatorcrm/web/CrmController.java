@@ -75,9 +75,12 @@ public class CrmController {
                                     List<FollowUp> followUps, List<Deadline> deadlines, List<MessageView> messages,
                                     List<Draft> drafts, List<Activity> activity) {}
 
-    /** Message content is third-party text: the UI renders it as plain text only. */
+    /**
+     * Message content is third-party text: the UI renders it as plain text only. When {@code fullEmail} is set, the
+     * UI shows the email itself from {@code /api/messages/{id}/email}, cleaned and in a sandboxed frame.
+     */
     public record MessageView(Long id, String direction, String from, String subject, String content,
-                              OffsetDateTime sentAt, String type, String gmailUrl) {}
+                              OffsetDateTime sentAt, String type, String gmailUrl, boolean fullEmail) {}
 
     public record DraftView(Draft draft, String brand, String blockedReason) {}
 
@@ -367,6 +370,6 @@ public class CrmController {
     private MessageView messageView(Message m) {
         return new MessageView(m.id, m.direction.name(),
                 m.senderName == null || m.senderName.isBlank() ? m.sender : m.senderName,
-                m.subject, m.content, m.sentAt, m.messageType, gmailLinks.urlFor(m));
+                m.subject, m.content, m.sentAt, m.messageType, gmailLinks.urlFor(m), EmailViewController.hasFullEmail(m));
     }
 }

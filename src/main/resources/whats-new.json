@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.29.0",
+    "title": "Emails that look like emails",
+    "features": [
+      {
+        "id": "full-emails",
+        "title": "Pictures, links and layout in every email",
+        "body": "Brand emails in a deal now show the way they did in Gmail: their pictures, colours and buttons, with every link clickable. Long emails are folded until you tap Show the whole email, and earlier messages in the thread sit behind Show earlier messages. Emails are cleaned before they're shown, so nothing in them can run inside the app.",
+        "video": "full-emails.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.28.0",
     "title": "Pitching brands fits your phone",
     "features": [

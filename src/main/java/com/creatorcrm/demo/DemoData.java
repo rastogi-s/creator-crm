@@ -16,6 +16,7 @@ import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.ContractRepo;
 import com.creatorcrm.repo.InvoiceRepo;
+import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.security.AppUser;
 import com.creatorcrm.security.AppUserRepo;
@@ -61,6 +62,7 @@ public class DemoData implements ApplicationRunner {
     private final CalendarSync calendar;
     private final CampaignResults results;
     private final CampaignResultRepo resultRepo;
+    private final MessageRepo messages;
 
     static final String DEMO_CONTRACT = """
             INFLUENCER AGREEMENT between Bloomleaf Tea Co. ("Brand") and Ava Rivera ("Creator").
@@ -76,7 +78,8 @@ public class DemoData implements ApplicationRunner {
                     OutreachService outreach, InvoiceService invoices, OpportunityRepo opportunities,
                     WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
                     ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
-                    CalendarSync calendar, CampaignResults results, CampaignResultRepo resultRepo) {
+                    CalendarSync calendar, CampaignResults results, CampaignResultRepo resultRepo, MessageRepo messages) {
+        this.messages = messages;
         this.calendar = calendar;
         this.results = results;
         this.resultRepo = resultRepo;
@@ -116,6 +119,8 @@ public class DemoData implements ApplicationRunner {
             ingestion.store(List.of(new NormalizedMessage(Platform.EMAIL, "demo-" + i, "demo-thread-" + i, Direction.INBOUND,
                     m.email(), m.contact(), "ava@creator.example", m.email(), m.subject(), m.body(),
                     "<demo-" + i + "@creator.example>", "", now.minusDays(m.daysAgo()).minusHours(i), false)));
+            String html = DemoInbox.HTML.get(m.brand());
+            if (html != null) messages.findByExternalId("email:demo-" + i).ifPresent(saved -> messages.saveHtml(saved.id, html));
         }
         ingestion.processPending();
         outreach.logPitch(new OutreachService.PitchRequest("Sunday Pantry", "Alex", "alex@sundaypantry.example", "",
