@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.33.0",
+    "title": "Clearer messages when something goes wrong",
+    "features": [
+      {
+        "id": "plain-errors",
+        "title": "Problems explained in plain words",
+        "body": "When Gmail, Instagram, Claude or a backup runs into trouble, the app now says what happened and what to do, such as \"Gmail needs you to sign in again. Press Reconnect Gmail.\" or \"Couldn't reach Instagram. Check this computer is online.\" The technical details are still there under Details if someone helping you needs them. The status line at the top also says \"Checking for new messages\" and \"Claude is reading 3 messages\" instead of computer words.",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
     "version": "1.31.0",
     "title": "Easier setup, tidier Settings",
     "features": [
