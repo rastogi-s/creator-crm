@@ -74,6 +74,8 @@ public class SettingsService {
     public static final String CALENDAR_SYNC = "calendarSync";
     /** Her own rules for how Claude reads emails and writes to-dos, added to the classifier's instructions. */
     public static final String TASK_RULES = "taskRules";
+    /** First-run setup guide: blank = not finished, "done" = finished, "skipped" = she chose to set up later. */
+    public static final String SETUP_GUIDE = "setupGuide";
 
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
@@ -83,7 +85,7 @@ public class SettingsService {
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
             WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
-            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES);
+            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES, SETUP_GUIDE);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -256,6 +258,7 @@ public class SettingsService {
         m.put(CONTRACT_REVISIONS_INCLUDED, String.valueOf(contractRevisionsIncluded()));
         m.put(CALENDAR_SYNC, String.valueOf(calendarSync()));
         m.put(TASK_RULES, taskRules());
+        m.put(SETUP_GUIDE, raw(SETUP_GUIDE, ""));
         return m;
     }
 
@@ -288,6 +291,9 @@ public class SettingsService {
             }
             case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
+            }
+            case SETUP_GUIDE -> {
+                if (!v.isBlank() && !v.trim().matches("done|skipped")) throw new IllegalArgumentException("setupGuide must be done or skipped");
             }
             case PAYMENT_REMINDER_DAYS -> {
                 if (!v.isBlank() && !v.matches("\\s*\\d{1,3}(\\s*,\\s*\\d{1,3}){0,5}\\s*")) {

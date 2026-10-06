@@ -1,5 +1,24 @@
 [
   {
+    "version": "1.31.0",
+    "title": "Easier setup, tidier Settings",
+    "features": [
+      {
+        "id": "setup-guide",
+        "title": "A setup guide that holds your hand",
+        "body": "Setting up on a new computer is now one step per screen: your name, Claude, Gmail, then your rates. Each step says why the app needs it and exactly what to click, with links straight to the right page and a Copy button for the address Google asks for. It opens by itself until Claude and Gmail are connected, and you can open it again any time from More or Settings.",
+        "video": "setup-guide.webm",
+        "tryIt": "#setup"
+      },
+      {
+        "id": "settings-tabs",
+        "title": "Settings in five tabs",
+        "body": "Settings used to be one very long page. It now has tabs: Accounts for your connections, You for your name, voice, rates and to-do rules, Deals & money for follow-ups, invoices and contracts, App for updates, nightly backups and Claude spending, and Advanced for the things you rarely need, like Claude models, extra Instagram options and restoring a backup.",
+        "tryIt": "#settings"
+      }
+    ]
+  },
+  {
     "version": "1.29.0",
     "title": "Emails that look like emails",
     "features": [
