@@ -15,9 +15,6 @@ async function renderPipeline(root) {
   clear(root);
   const save = () => savePrefs("pipeline", f);
   const statusOrder = Object.keys(statuses);
-  const statusSelect = el("select", { "aria-label": "Status", onchange: (e) => { f.status = e.target.value; save(); draw(); } },
-    el("option", { value: "" }, "All statuses"),
-    Object.entries(statuses).map(([k, v]) => el("option", { value: k, selected: f.status === k }, v)));
   const compSelect = el("select", { "aria-label": "Deal type", onchange: (e) => { f.comp = e.target.value; save(); draw(); } },
     [["", "All deal types"], ["PAID", "Paid"], ["GIFTED", "Gifted"], ["AFFILIATE", "Affiliate"], ["UNKNOWN", "Not sure yet"]]
       .map(([v, l]) => el("option", { value: v, selected: f.comp === v }, l)));
@@ -29,8 +26,9 @@ async function renderPipeline(root) {
   root.appendChild(dealsSwitch("pipeline"));
   root.appendChild(el("div", { class: "row" }, el("h1", {}, "Deals"), el("div", { class: "spacer" }),
     el("label", { class: "check" }, closedBox, "Show closed")));
-  root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), leadSelect, statusSelect, compSelect));
-  const chips = el("div", { class: "row card" });
+  root.appendChild(el("div", { class: "row filters" }, el("div", { class: "spacer" }, search), leadSelect, compSelect));
+  // The stage pills are the status filter: one row, scrolling sideways on a phone.
+  const chips = el("div", { class: "chips stage-chips", role: "group", "aria-label": "Filter by stage" });
   const list = el("div", {});
   root.append(chips, list);
 
@@ -47,14 +45,21 @@ async function renderPipeline(root) {
   const leadRank = { HIGH: 3, MEDIUM: 2, LOW: 1 };
 
   function draw() {
-    // Status chips count every deal; clicking one filters to it, clicking again shows all.
+    // Stage pills count every deal; clicking one filters to it, clicking it again (or All) shows all.
     const counts = {};
     rows.forEach((r) => { counts[r.status] = (counts[r.status] || 0) + 1; });
-    clear(chips).append(...Object.keys(counts).sort((a, b) => statusOrder.indexOf(a) - statusOrder.indexOf(b)).map((k) =>
-      el("button", { class: "chip" + (f.status === k ? " active" : ""), "aria-pressed": String(f.status === k),
-        title: "Show only " + (statuses[k] || pretty(k)),
-        onclick: () => { f.status = f.status === k ? "" : k; statusSelect.value = f.status; save(); draw(); } },
-        icon(STATUS_ICONS[k]), stripEmoji(statuses[k] || pretty(k)) + " · " + counts[k])));
+    if (f.status && !counts[f.status]) f.status = "";
+    chips.classList.toggle("filtering", !!f.status);
+    clear(chips).append(
+      el("button", { class: "chip stage tone-grey" + (f.status ? "" : " active"), "aria-pressed": String(!f.status),
+        onclick: () => { f.status = ""; save(); draw(); } }, "All", el("span", { class: "n" }, String(rows.length))),
+      ...Object.keys(counts).sort((a, b) => statusOrder.indexOf(a) - statusOrder.indexOf(b)).map((k) =>
+        el("button", { class: "chip stage tone-" + (STATUS_TONES[k] || "grey") + (f.status === k ? " active" : ""),
+          "aria-pressed": String(f.status === k), title: "Show only " + (statuses[k] || pretty(k)),
+          onclick: () => { f.status = f.status === k ? "" : k; save(); draw(); } },
+          icon(STATUS_ICONS[k]), stripEmoji(statuses[k] || pretty(k)), el("span", { class: "n" }, String(counts[k])))));
+    const active = chips.querySelector(".active");
+    if (active && f.status) active.scrollIntoView({ block: "nearest", inline: "nearest" });
     clear(list);
     if (!rows.length) { list.appendChild(card(null, emptyLine("No deals yet. They appear here as brand emails and DMs come in, or when you log a pitch."))); return; }
     const shown = sortRows(rows.filter((r) => (!f.status || r.status === f.status) && (!f.comp || r.compensation === f.comp)
@@ -64,7 +69,7 @@ async function renderPipeline(root) {
       brand: (r) => r.brand, lead: (r) => leadRank[r.lead], status: (r) => statusOrder.indexOf(r.status), nextFollowUp: (r) => r.nextFollowUp,
       openTasks: (r) => r.openTasks, updatedAt: (r) => r.updatedAt,
     });
-    const clearAll = () => { Object.assign(f, { q: "", status: "", comp: "", lead: "" }); search.value = ""; statusSelect.value = ""; compSelect.value = ""; leadSelect.value = ""; save(); draw(); };
+    const clearAll = () => { Object.assign(f, { q: "", status: "", comp: "", lead: "" }); search.value = ""; compSelect.value = ""; leadSelect.value = ""; save(); draw(); };
     const line = shownLine(shown.length, rows.length, "deals", clearAll);
     if (line) list.appendChild(line);
     if (!shown.length) { list.appendChild(card(null, emptyLine(f.lead ? "No leads match this filter." : "No deals match. Try fewer words or another filter."))); return; }

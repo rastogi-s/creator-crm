@@ -1,5 +1,23 @@
 [
   {
+    "version": "1.42.0",
+    "title": "Colours that tell you where each deal is",
+    "features": [
+      {
+        "id": "stage-colours",
+        "title": "Every stage has its own colour",
+        "body": "On Deals, each stage now has its own colour and icon: blue for new and waiting, amber while you're talking it through, violet while you're making the content, green once it's posted, and teal while you wait to be paid. The coloured row above your deals is the filter: press a stage to see only those deals, and All to see everything again. On your phone, slide the row sideways to see every stage.",
+        "tryIt": "#pipeline"
+      },
+      {
+        "id": "today-sections",
+        "title": "A tidier Today",
+        "body": "Do these first now stands out at the top. Every other section has a coloured icon and shows how many things are in it, so you can see at a glance where the work is. Drafts shows the first three, with See all to open the rest, and New opportunities folds its list until you press Show all.",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.41.0",
     "title": "Check before it goes, undo after",
     "features": [

@@ -23,34 +23,43 @@ async function renderToday(root) {
   // The list is already ranked (money, lateness, priority). Three things are a plan; thirteen are a pile.
   const first = t.urgent.slice(0, 3);
   const rest = t.urgent.slice(3);
-  root.appendChild(card("Do these first", itemList(first, "Nothing urgent. Nice.", true)));
+  const firstCard = card(sectionTitle("sparkle", "accent", "Do these first"), itemList(first, "Nothing urgent. Nice.", true));
+  firstCard.classList.add("lead-card");
+  root.appendChild(firstCard);
   if (rest.length) {
     root.appendChild(el("details", { class: "card more-items" },
-      el("summary", {}, el("h3", {}, "Everything else for today (" + rest.length + ")")),
+      el("summary", {}, el("h3", {}, sectionTitle("list", "grey", "Everything else for today", rest.length))),
       itemList(rest, "", false)));
   }
-  root.appendChild(card([icon("bell"), "Follow-ups"], followUpList(t.followUps)));
+  root.appendChild(card(sectionTitle("bell", "amber", "Follow-ups", t.followUps.length), followUpList(t.followUps)));
   if (t.rebook && t.rebook.length) root.appendChild(rebookCard(t.rebook));
 
   if (t.approvals.length) {
-    root.appendChild(card([icon("mail"), "Drafts awaiting your approval"],
-      el("ul", { class: "list" }, t.approvals.map((a) => el("li", { class: "item" },
+    // The first few here; Drafts has them all.
+    const shownDrafts = t.approvals.slice(0, 3);
+    const moreDrafts = t.approvals.length - shownDrafts.length;
+    root.appendChild(card(sectionTitle("mail", "blue", "Drafts awaiting your approval", t.approvals.length),
+      el("ul", { class: "list" }, shownDrafts.map((a) => el("li", { class: "item" },
         el("div", { class: "body" }, el("div", { class: "title" }, a.brand + " — " + pretty(a.type)),
           el("div", { class: "detail" }, a.preview)),
-        el("div", { class: "actions" }, el("button", { class: "small primary", onclick: () => showDraft({ id: a.draftId }) }, "Review")))))));
+        el("div", { class: "actions" }, el("button", { class: "small primary", onclick: () => showDraft({ id: a.draftId }) }, "Review"))))),
+      moreDrafts > 0 ? el("p", { class: "see-all" }, el("a", { href: "#drafts" }, "See all " + t.approvals.length + " drafts")) : null));
   }
 
   const o = t.newOpportunities;
-  root.appendChild(card([icon("money"), "New opportunities (last 24h)"],
-    el("p", {}, o.paid + " paid · " + o.gifted + " gifted · " + o.affiliate + " affiliate · " + o.other + " other"),
-    o.items.length ? el("ul", {}, o.items.map((s) => el("li", {}, s))) : null));
+  const newCount = o.paid + o.gifted + o.affiliate + o.other;
+  const newList = o.items.length > 5
+    ? el("details", { class: "fold" }, el("summary", {}, "Show all " + o.items.length), el("ul", {}, o.items.map((s) => el("li", {}, s))))
+    : o.items.length ? el("ul", {}, o.items.map((s) => el("li", {}, s))) : null;
+  root.appendChild(card(sectionTitle("money", "green", "New opportunities (last 24h)", newCount),
+    el("p", {}, o.paid + " paid · " + o.gifted + " gifted · " + o.affiliate + " affiliate · " + o.other + " other"), newList));
 
-  root.appendChild(card([icon("calendar"), "Upcoming"], itemList(t.upcoming, "Nothing scheduled in the next two weeks.", false)));
+  root.appendChild(card(sectionTitle("calendar", "teal", "Upcoming", t.upcoming.length), itemList(t.upcoming, "Nothing scheduled in the next two weeks.", false)));
 }
 
 // Win back past brands: re-pitches drafted for brands she worked with before, a few each week.
 function rebookCard(items) {
-  const c = card([icon("repeat"), "Rebook past brands"],
+  const c = card(sectionTitle("repeat", "violet", "Rebook past brands", items.length),
     el("p", { class: "small muted" }, "Brands that paid you and have gone quiet, or gave you a gifted collab a few weeks ago. "
       + "A short re-pitch is ready for each; nothing is sent until you approve it."),
     el("ul", { class: "list" }, items.map((it) => el("li", { class: "item" },
