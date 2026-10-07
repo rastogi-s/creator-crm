@@ -47,11 +47,11 @@ public class BackupService {
     static final List<String> TABLES = List.of(
             "users", "settings", "app_state", "brands", "conversations", "messages", "opportunities",
             "tasks", "followups", "deadlines", "drafts", "activity", "creator_links", "writing_examples", "brand_leads", "invoices", "contracts", "campaign_results",
-            "deal_stages");
+            "deal_stages", "brand_contacts", "contact_sources", "brand_domains", "suppression_list");
     private static final List<String> IDENTITY_TABLES = List.of(
             "users", "brands", "conversations", "messages", "opportunities", "tasks", "followups", "deadlines",
             "drafts", "activity", "creator_links", "writing_examples", "brand_leads", "invoices", "contracts", "campaign_results",
-            "deal_stages");
+            "deal_stages", "brand_contacts", "contact_sources", "brand_domains", "suppression_list");
 
     public record Summary(String createdAt, String schemaVersion, Map<String, Integer> rows, int credentials) {}
 

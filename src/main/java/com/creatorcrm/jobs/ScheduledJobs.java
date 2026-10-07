@@ -3,6 +3,7 @@ package com.creatorcrm.jobs;
 import com.creatorcrm.calendar.CalendarSync;
 import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
+import com.creatorcrm.contacts.GmailContacts;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftStatus;
@@ -52,13 +53,15 @@ public class ScheduledJobs {
     private final CalendarSync calendar;
     private final CampaignResults results;
     private final SendQueue sendQueue;
+    private final GmailContacts gmailContacts;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
                          PaymentReminders paymentReminders, WinBack winBack,
                          InstagramEngagementService instagramEngagement, CalendarSync calendar,
-                         CampaignResults results, SendQueue sendQueue) {
+                         CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts) {
+        this.gmailContacts = gmailContacts;
         this.results = results;
         this.sendQueue = sendQueue;
         this.instagramEngagement = instagramEngagement;
@@ -106,6 +109,11 @@ public class ScheduledJobs {
         markMorningRun(now.toLocalDate());
         sync();
         instagramStats.refreshIfStale();
+        try {
+            gmailContacts.refresh(); // after the sync, so today's replies count towards who ranks first
+        } catch (RuntimeException e) {
+            log.warn("Could not refresh brand contacts: {}", e.getMessage());
+        }
         prepareMorning();
         if (settings.followupAutoSend()) autoSendFollowUps();
     }
