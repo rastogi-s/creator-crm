@@ -374,14 +374,14 @@ public class DraftService {
     }
 
     /** Why this draft can't be sent via API right now (e.g. outside Instagram's 24h window), if anything. */
-    /** Drafts that reach out first or chase, which must never go to someone on the do-not-email list. */
+    /** Drafts that reach out first or chase, which must never go to someone on the do-not-email list or a dead address. */
     private static final Set<DraftType> OUTREACH = EnumSet.of(DraftType.PITCH, DraftType.REPITCH, DraftType.FOLLOW_UP);
 
     public Optional<String> sendBlockedReason(Draft d) {
         if (practice) return Optional.empty(); // nothing really goes out, so nothing can stop it
         if (d.channel == Platform.EMAIL && OUTREACH.contains(d.type)) {
-            Optional<String> stop = Emails.findAll(d.toAddress).stream().map(suppressions::find)
-                    .flatMap(Optional::stream).map(Suppressions::explain).findFirst();
+            Optional<String> stop = Emails.findAll(d.toAddress).stream().map(suppressions::whyNot)
+                    .flatMap(Optional::stream).findFirst();
             if (stop.isPresent()) return stop;
         }
         ChannelConnector c = channels.get(d.channel);

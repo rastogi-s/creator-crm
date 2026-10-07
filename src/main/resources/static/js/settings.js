@@ -42,14 +42,14 @@ async function calendarStep(root, c) {
 // Settings is split into tabs so the everyday choices aren't buried among developer ones. The open tab lives in
 // the address (#settings?tab=you), so a Save that re-renders the page, or a link from elsewhere, lands on it.
 const SETTINGS_TABS = [
-  ["accounts", "Accounts", "Claude, Gmail, Google Calendar and Instagram"],
+  ["accounts", "Accounts", "Claude, Gmail, Google Calendar, Instagram and contact finders"],
   ["you", "You", "Your name, voice, rates and to-do rules"],
-  ["deals", "Deals & money", "Follow-ups, invoices, rates, contracts, rebooking"],
+  ["deals", "Deals & money", "Follow-ups, pitch campaigns, invoices, rates, contracts, rebooking"],
   ["app", "App", "Updates, backups, Claude spending, password"],
   ["advanced", "Advanced", "Claude models, extra connections, error reports, restoring a backup"],
 ];
 // Older links (and the OAuth return pages) name a card, not a tab.
-const SETTINGS_TAB_OF = { spend: "app", backup: "app", gmail: "accounts", instagram: "accounts", facebook: "advanced" };
+const SETTINGS_TAB_OF = { spend: "app", backup: "app", gmail: "accounts", instagram: "accounts", facebook: "advanced", finders: "accounts" };
 
 function settingsTab() {
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
@@ -369,9 +369,10 @@ async function renderSettings(root) {
     keyOut,
     el("p", { class: "small muted" }, s.mcpAllowSend ? "Sending via MCP is turned on." : "MCP can draft but not send; you approve sends here.")));
 
-  const [spend, learning, startup, errorReports, autoBackup] = await Promise.all([claudeSpendCard(root), learningCard(root),
-    startWithWindowsCard(), errorReportsCard(root, c), autoBackupCard(root)]);
+  const [spend, learning, startup, errorReports, autoBackup, finders] = await Promise.all([claudeSpendCard(root), learningCard(root),
+    startWithWindowsCard(), errorReportsCard(root, c), autoBackupCard(root), contactFindersCard(root, c, secretField, saveSecrets)]);
   if (stale()) return;
+  panes.accounts.appendChild(finders);
   panes.you.appendChild(learning);
   panes.advanced.appendChild(errorReports);
 

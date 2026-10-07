@@ -12,7 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * In the practice copy, keeps out everything that would reach past the sample data: connecting real accounts,
- * entering keys, backups and restores (they'd write to her real backup folder), updates, Start with Windows and
+ * entering keys, contact finders (they spend real credits), backups and restores (they'd write to her real backup folder), updates, Start with Windows and
  * problem reports. Also notes each visit, so an unused practice copy is closed after a while.
  */
 @Component
@@ -28,7 +28,8 @@ public class PracticeFence extends OncePerRequestFilter {
             "/api/desktop/",
             "/api/diagnostics/",
             "/api/settings/credentials", "/api/settings/test-anthropic", "/api/settings/mcp-key",
-            "/api/settings/password", "/api/settings/instagram-");
+            "/api/settings/password", "/api/settings/instagram-",
+            "/api/finders/");
 
     static boolean blocked(String method, String path) {
         if ("GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method)) return false;
