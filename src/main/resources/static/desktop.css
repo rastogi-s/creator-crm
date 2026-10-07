@@ -74,3 +74,13 @@ td.opp-cell { min-width: 9rem; }
   td.brand-cell { white-space: normal; }
   .table-wrap { padding: .4rem .5rem; }
 }
+
+/* ---------- Day summary: two columns, so nothing important sits below a long list ---------- */
+.eod-cols { display: grid; gap: 0 1.25rem; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); align-items: start; }
+.eod-main > .card, .eod-side > .card { scroll-margin-top: 4.5rem; }
+/* Long to-do notes show two lines here; the full note is on Today and on the deal. */
+.eod-cols .task-about .brief {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+/* The side column is narrow: keep each row's Open button on the same line as its text. */
+.eod-side .item .actions { flex-shrink: 0; }

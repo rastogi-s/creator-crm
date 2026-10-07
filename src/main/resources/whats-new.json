@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.44.0",
+    "title": "A Day summary that fits your screen",
+    "features": [
+      {
+        "id": "day-summary-columns",
+        "title": "Day summary in two columns on a laptop",
+        "body": "On a laptop, Day summary now puts what still needs you first: Still waiting on you, then Lined up for tomorrow, in the wide column. New deals today and What you got done sit beside them on the right, so you no longer scroll past a long list to find them. Tomorrow shows the first four things (press Show more for the rest), and long notes show two lines; the full note is on Today and on the deal. Your phone looks exactly the same as before.",
+        "tryIt": "#summary"
+      }
+    ]
+  },
+  {
     "version": "1.43.0",
     "title": "A laptop layout with room to breathe",
     "features": [

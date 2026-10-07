@@ -8,6 +8,9 @@
 
 const DONE_ICONS = { TASK: "check", SENT: "send", REPLY: "chat", MONEY: "money", PITCH: "send" };
 const COMP_BADGES = { PAID: ["Paid", "badge ok"], GIFTED: ["Gifted", "badge accent"], AFFILIATE: ["Affiliate", "badge medium"] };
+// Same width desktop.css switches on. On a laptop the page is two columns; phones keep one long column.
+const EOD_DESK = matchMedia("(min-width: 1024px)");
+EOD_DESK.addEventListener("change", () => { if (location.hash.startsWith("#summary")) route(); });
 
 async function renderSummary(root) {
   const s = await api("GET", "/api/summary/eod");
@@ -46,11 +49,11 @@ async function renderSummary(root) {
       : emptyLine("Nothing ticked off yet. When you finish a task, send a message or a brand writes back, it shows up here."));
   doneCard.id = "eod-done";
 
+  const desk = EOD_DESK.matches;
   const tomorrowCard = card(sectionTitle("sun", "amber", "Lined up for tomorrow"),
-    s.tomorrowItems.length ? itemList(s.tomorrowItems, "", false)
+    s.tomorrowItems.length ? (desk ? showMore(s.tomorrowItems, 4, (items) => itemList(items, "", false)) : itemList(s.tomorrowItems, "", false))
       : emptyLine("Nothing is due tomorrow yet." + (waiting ? " A good start is whatever is still waiting below." : "")));
   tomorrowCard.id = "eod-tomorrow";
-  root.appendChild(el("div", { class: "eod-grid" }, doneCard, tomorrowCard));
 
   const waitingCard = card(sectionTitle("hourglass", "blue", "Still waiting on you"));
   waitingCard.id = "eod-waiting";
@@ -63,7 +66,6 @@ async function renderSummary(root) {
     waitingCard.appendChild(el("h4", { class: "eod-sub" }, icon("bell"), " Follow-ups to send"));
     waitingCard.appendChild(showMore(s.followUps, 5, followUpList));
   }
-  root.appendChild(waitingCard);
 
   const newCard = card(sectionTitle("money", "teal", "New deals today"),
     s.newDeals.length ? showMore(s.newDeals, 6, (items) => el("ul", { class: "list" }, items.map((d) => {
@@ -77,7 +79,17 @@ async function renderSummary(root) {
     })))
       : emptyLine("No new brands reached out today."));
   newCard.id = "eod-new";
-  root.appendChild(newCard);
+
+  if (desk) {
+    // Laptop: what needs her (waiting, then tomorrow) in the wide column; new deals and the done list beside it.
+    root.appendChild(el("div", { class: "eod-cols" },
+      el("div", { class: "eod-main" }, waitingCard, tomorrowCard),
+      el("div", { class: "eod-side" }, newCard, doneCard)));
+  } else {
+    root.appendChild(el("div", { class: "eod-grid" }, doneCard, tomorrowCard));
+    root.appendChild(waitingCard);
+    root.appendChild(newCard);
+  }
 }
 
 function eodStat(icon, value, label, tone, onclick) {
