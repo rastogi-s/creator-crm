@@ -668,3 +668,8 @@ body.practice .topbar { box-shadow: inset 0 4px 0 var(--warn); }
   .contact-row .who { flex-basis: calc(100% - 3rem); }
   .contact-row .actions { flex-basis: 100%; justify-content: flex-start; padding-left: 2.9rem; }
 }
+
+/* Brand directory: what's in the shared CSV and what never is. */
+.directory-why { margin: 0 0 .9rem; padding-left: 1.2rem; font-size: .92rem; }
+.directory-why li { margin: .3rem 0; }
+.directory-actions { margin-top: .75rem; }

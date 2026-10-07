@@ -825,6 +825,32 @@ const scenarios = {
     await say("Check again looks for a new version once more. Everything else is always up to date.", 4200);
     await say("", 600);
   },
+
+  async "brand-directory"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await goTo(page, "directory");
+    const view = page.locator("#view-directory");
+    await view.locator(".stats").waitFor();
+    await say("Brand directory is under More. It's the part of your contacts you can share or sell.", 4200);
+    await point(view.locator(".stats"));
+    await say("It counts the brands and their team inboxes, and how many have answered creators.", 4000);
+    await point(view.getByRole("heading", { name: "What's in it" }));
+    await say("Only facts about brands go in: name, niche, website, Instagram, and inboxes like collabs@ or pr@.", 4600);
+    await point(view.getByRole("heading", { name: "What's never in it, and why" }));
+    await say("People's names, anything from Hunter or Apollo, and your do-not-email list always stay out.", 4600);
+    const preview = view.getByRole("heading", { name: "Preview" });
+    if (await preview.count()) {
+      await point(preview);
+      await say("The preview shows exactly what the file holds.", 3000);
+    }
+    const download = view.getByRole("link", { name: "Download CSV" });
+    if (await download.count()) {
+      await point(download);
+      await say("Download CSV saves it as a spreadsheet, ready to sell as a pack or share.", 3800);
+    }
+    await say("", 600);
+  },
 };
 
 async function signIn(page) {
