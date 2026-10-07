@@ -28,11 +28,7 @@ public class ClaudeSpend {
     private static final Logger log = LoggerFactory.getLogger(ClaudeSpend.class);
 
     /** What a call was for; shown in Settings. */
-<<<<<<< HEAD
-    public enum Feature { CLASSIFY, DRAFT, REVISE, RESEARCH, CONTRACT, CONTACTS }
-=======
-    public enum Feature { CLASSIFY, DRAFT, REVISE, RESEARCH, CONTRACT, PERSONALISE }
->>>>>>> origin/main
+    public enum Feature { CLASSIFY, DRAFT, REVISE, RESEARCH, CONTRACT, PERSONALISE, CONTACTS }
 
     /** USD per million tokens. Cache writes cost 1.25× input (5-minute cache). */
     record Price(double input, double output, double cacheRead) {}
