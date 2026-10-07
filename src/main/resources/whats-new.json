@@ -1,5 +1,24 @@
 [
   {
+    "version": "1.49.0",
+    "title": "Pitch campaigns: one email per brand, sent slowly from your Gmail",
+    "features": [
+      {
+        "id": "pitch-campaigns",
+        "title": "Pitch campaigns",
+        "body": "Pick a saved list of brand contacts and a template, and the app writes one pitch to each brand, to its best-ranked person, never two people at the same brand. Templates fill in their first name, the brand, why you fit and your media kit and rate card from My links, so they use no Claude at all (Personalise adds one opening line per brand with Claude, at half price). Every pitch waits in Drafts until you press Approve. Approved emails go out a few minutes apart, on weekdays during the brand's working hours: 10 a day the first week, growing to at most 30 (you can choose up to 50). A reply from anyone at a brand stops that brand's emails. If nobody answers after the follow-ups, the app tries the next person once.",
+        "video": "pitch-campaigns.webm",
+        "tryIt": "#campaigns"
+      },
+      {
+        "id": "campaign-safety",
+        "title": "Pitches that follow the rules",
+        "body": "Every campaign email ends with your name, your business postal address and a line saying they can reply \"no thanks\". Anyone who does, or whose address bounces, is never emailed again. Sending pauses by itself after 2 bounces or 1 \"no thanks\" in a day, until you press Resume. Add your postal address (a PO box works) in Settings, Deals & money, Pitch campaigns before your first campaign.",
+        "tryIt": "#settings?tab=deals"
+      }
+    ]
+  },
+  {
     "version": "1.48.0",
     "title": "Find contacts on a brand's own website",
     "features": [

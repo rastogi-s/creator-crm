@@ -138,7 +138,18 @@ public class DraftService {
         if (type == DraftType.INVOICE || type == DraftType.PAYMENT_REMINDER) {
             throw new IllegalArgumentException("Invoices and payment reminders are written from the invoice itself");
         }
-        return create(opportunityId, type, instructions, taskId, followupId, null, null, null);
+        return create(opportunityId, type, instructions, taskId, followupId, null, null, null, null);
+    }
+
+    /**
+     * A draft whose text is already written (a campaign template with its merge fields filled in), so no Claude is
+     * used. It goes to the brand's thread when the deal has one, else as a new email to {@code toAddress}.
+     */
+    @Transactional
+    public Draft createWritten(Long opportunityId, DraftType type, Long followupId, String toAddress, DraftText text,
+                               Long campaignTargetId) {
+        Draft d = create(opportunityId, type, null, null, followupId, null, null, null, text, toAddress, campaignTargetId);
+        return d;
     }
 
     /**
@@ -154,7 +165,7 @@ public class DraftService {
                 drafts.save(old);
             }
         }
-        return create(invoice.opportunityId, type, instructions, null, null, invoice, null, fallback);
+        return create(invoice.opportunityId, type, instructions, null, null, invoice, null, fallback, null);
     }
 
     /**
@@ -169,7 +180,7 @@ public class DraftService {
                 drafts.save(old);
             }
         }
-        return create(result.opportunityId, DraftType.RESULTS_RECAP, instructions, null, null, null, result, fallback);
+        return create(result.opportunityId, DraftType.RESULTS_RECAP, instructions, null, null, null, result, fallback, null);
     }
 
     /** The one-page results PDF for a deal's campaign. */
@@ -179,7 +190,14 @@ public class DraftService {
     }
 
     private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
-                         Invoice invoice, CampaignResult result, DraftText fallback) {
+                         Invoice invoice, CampaignResult result, DraftText fallback, DraftText written) {
+        return create(opportunityId, type, instructions, taskId, followupId, invoice, result, fallback, written, null, null);
+    }
+
+    /** {@code written}: use this text and skip Claude. {@code toAddress}: the recipient of a new email thread. */
+    private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
+                         Invoice invoice, CampaignResult result, DraftText fallback, DraftText written,
+                         String toAddress, Long campaignTargetId) {
         Opportunity o = opportunities.findById(opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
         Brand b = brands.findById(o.brandId).orElseThrow();
         Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
@@ -197,18 +215,27 @@ public class DraftService {
             routeInvoice(d, invoice, b, conv, thread);
         } else if (type == DraftType.REPITCH) {
             routeRepitch(d, b, conv, thread);
+        } else if (toAddress != null && conv == null) {
+            d.channel = Platform.EMAIL;
+            d.toAddress = toAddress;
+            d.subject = "";
         } else {
             route(d, b, conv, thread);
         }
+        d.campaignTargetId = campaignTargetId;
 
-        DraftInput input = draftInput(o, b, conv, thread, type, d.channel, instructions);
         DraftText text;
-        try {
-            text = llm.writeDraft(input);
-        } catch (RuntimeException e) {
-            if (fallback == null) throw e;
-            log.info("Using the standard {} email for deal {}: {}", type, o.id, e.getMessage());
-            text = fallback;
+        if (written != null) {
+            text = written;
+        } else {
+            DraftInput input = draftInput(o, b, conv, thread, type, d.channel, instructions);
+            try {
+                text = llm.writeDraft(input);
+            } catch (RuntimeException e) {
+                if (fallback == null) throw e;
+                log.info("Using the standard {} email for deal {}: {}", type, o.id, e.getMessage());
+                text = fallback;
+            }
         }
 
         d.subject = d.channel == Platform.EMAIL
@@ -352,11 +379,8 @@ public class DraftService {
 
     public Optional<String> sendBlockedReason(Draft d) {
         if (practice) return Optional.empty(); // nothing really goes out, so nothing can stop it
-        if (d.channel == Platform.EMAIL && OUTREACH.contains(d.type)) {
-            Optional<String> stop = Emails.findAll(d.toAddress).stream().map(suppressions::whyNot)
-                    .flatMap(Optional::stream).findFirst();
-            if (stop.isPresent()) return stop;
-        }
+        Optional<String> stop = doNotEmailReason(d);
+        if (stop.isPresent()) return stop;
         ChannelConnector c = channels.get(d.channel);
         if (c == null || !c.isConnected()) return Optional.of((d.channel == Platform.EMAIL ? "Gmail" : d.channel == Platform.INSTAGRAM ? "Instagram" : "This account")
                 + " isn't connected, so this can't be sent from here. Connect it in Settings, or copy it and press I sent it myself.");
@@ -365,6 +389,12 @@ public class DraftService {
                         .filter(m -> m.direction == Direction.INBOUND).map(m -> m.sentAt)
                         .reduce((a, x) -> x).orElse(null);
         return c.sendBlockedReason(d, lastInbound);
+    }
+
+    /** Why this outreach email must never go out (her do-not-email list), whatever else is connected. */
+    public Optional<String> doNotEmailReason(Draft d) {
+        if (practice || d.channel != Platform.EMAIL || !OUTREACH.contains(d.type)) return Optional.empty();
+        return Emails.findAll(d.toAddress).stream().map(suppressions::whyNot).flatMap(Optional::stream).findFirst();
     }
 
     /** Human-approved send of one specific draft, optionally with edits. */
@@ -383,6 +413,9 @@ public class DraftService {
     @Transactional
     public Draft readyToSend(Long draftId, String editedSubject, String editedBody) {
         Draft d = edit(draftId, editedSubject, editedBody);
+        if (d.campaignTargetId != null) {
+            throw new IllegalStateException("This is a campaign email: press Approve, and it goes out in the slow send queue.");
+        }
         sendBlockedReason(d).ifPresent(reason -> { throw new IllegalStateException(reason); });
         String blanks = Placeholders.message(d.body);
         if (blanks != null) throw new IllegalStateException(blanks);
@@ -400,6 +433,17 @@ public class DraftService {
             throw new IllegalStateException("Only email follow-ups can be sent automatically");
         }
         return deliver(d, true);
+    }
+
+    /**
+     * The slow campaign queue sending a draft she approved earlier ({@code CampaignSender}). Same checks as her own
+     * Send: the do-not-email list, blanks, a connected Gmail.
+     */
+    @Transactional
+    public Draft sendApproved(Long draftId) {
+        Draft d = pending(draftId);
+        if (d.campaignTargetId == null) throw new IllegalStateException("Only campaign emails go out from the send queue");
+        return deliver(d, false);
     }
 
     private Draft deliver(Draft d, boolean automatic) {
@@ -433,6 +477,7 @@ public class DraftService {
     @Transactional
     public Draft markSentManually(Long draftId) {
         Draft d = pending(draftId);
+        if (d.campaignTargetId != null) throw new IllegalStateException("Campaign emails go out from the send queue. Press Approve instead.");
         recordOutbound(d, null, false);
         d.status = DraftStatus.SENT;
         d.sentAt = OffsetDateTime.now();

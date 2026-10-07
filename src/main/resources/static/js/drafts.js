@@ -71,13 +71,13 @@ function askClaude(d, subject, body) {
  * What will go out, exactly as the brand gets it, before anything is sent. Resolves true for Send, false for
  * Keep editing (or Escape).
  */
-function sendPreview(d, brand, subject, body) {
+function sendPreview(d, brand, subject, body, campaign) {
   return new Promise((resolve) => {
     const email = d.channel === "EMAIL";
     const files = [d.invoiceId && email ? "Invoice PDF" : null, d.resultId && email ? "Results PDF" : null].filter(Boolean);
-    const sendBtn = el("button", { class: "primary", onclick: () => close(true) }, email ? "Send email" : "Send DM");
+    const sendBtn = el("button", { class: "primary", onclick: () => close(true) }, campaign ? "Approve for sending" : email ? "Send email" : "Send DM");
     const dlg = el("dialog", { class: "send-preview", "aria-labelledby": "send-preview-title" },
-      el("h2", { id: "send-preview-title" }, "Check before sending"),
+      el("h2", { id: "send-preview-title" }, campaign ? "Check before approving" : "Check before sending"),
       el("p", { class: "small muted" }, email ? "This is the email " + brand + " will get." : "This is the Instagram DM " + brand + " will get."),
       el("div", { class: "preview-mail" },
         el("div", { class: "preview-head" },
@@ -85,7 +85,10 @@ function sendPreview(d, brand, subject, body) {
           email ? el("div", {}, el("span", { class: "muted" }, "Subject: "), el("strong", {}, subject || "(no subject)")) : null,
           files.length ? el("div", {}, el("span", { class: "muted" }, "Attached: "), "📎 " + files.join(", ")) : null),
         el("div", { class: "preview-body" }, body)),
-      el("p", { class: "small muted" }, "After you press Send you have a few seconds to undo it."
+      el("p", { class: "small muted" }, (campaign
+        ? "Part of your " + campaign + " campaign. It goes out from your Gmail in the send queue, a few minutes after the one before, "
+          + "on a weekday during the brand's working hours. You can take it back on the Campaigns page until then."
+        : "After you press Send you have a few seconds to undo it.")
         + (practiceInside ? " Practice: nothing is really sent." : "")),
       el("div", { class: "row" }, sendBtn, el("button", { onclick: () => close(false) }, "Keep editing")));
     let done = false;
@@ -170,12 +173,20 @@ async function renderDrafts(root) {
         route();
       }) }, "Approve all declines")));
   }
+  const fromCampaigns = list.filter((x) => x.campaign && x.draft.type === "PITCH");
+  if (fromCampaigns.length > 1) {
+    root.appendChild(el("div", { class: "row card" },
+      el("span", {}, fromCampaigns.length + " campaign pitches are waiting. Read a few here, then approve the rest at once on Campaigns."),
+      el("div", { class: "spacer" }),
+      el("a", { class: "btn small", href: "#campaigns" }, "Open Campaigns")));
+  }
   // An inbox: a short list, with one draft open beside it (full screen on a phone). Every draft's card is built once
   // and only hidden, so text typed into a draft survives filtering, sorting and opening another one.
   const df = draftsFilter;
   const save = () => savePrefs("drafts", df);
   const groups = {
     all: () => true,
+    campaign: (d) => !!d.campaignTargetId,
     pitch: (d) => d.type === "PITCH" || d.type === "REPITCH",
     followup: (d) => d.type === "FOLLOW_UP",
     money: (d) => d.type === "PAYMENT_REMINDER" || d.type === "INVOICE",
@@ -183,7 +194,7 @@ async function renderDrafts(root) {
   };
   const present = Object.keys(groups).filter((g) => g === "all" || list.some((x) => groups[g](x.draft)));
   if (!present.includes(df.type)) df.type = "all";
-  const groupNames = { all: "All", pitch: "Pitches", followup: "Follow-ups", money: "Payment", reply: "Replies" };
+  const groupNames = { all: "All", campaign: "Campaigns", pitch: "Pitches", followup: "Follow-ups", money: "Payment", reply: "Replies" };
   const search = searchBox(df.q, "Search brand or text…", (v) => { df.q = v; save(); draw(); });
   const chips = el("div", {});
   const order = el("select", { "aria-label": "Order", onchange: (e) => { df.order = e.target.value; save(); draw(); } },
@@ -203,7 +214,7 @@ async function renderDrafts(root) {
   const reading = (on) => { inbox.classList.toggle("showing-detail", on); root.classList.toggle("reading-draft", on); };
   reading(false);
   const cards = [];
-  for (const { draft: d, brand, blockedReason, sendingAt, sendError } of list) {
+  for (const { draft: d, brand, blockedReason, sendingAt, sendError, campaign } of list) {
     // Already on its way (Send was pressed moments ago, maybe before a refresh): the undo bar shows the countdown.
     if (sendingAt) sendingBar(d.id, brand, sendingAt);
     const subject = el("input", { value: d.subject || "", maxlength: "1000" });
@@ -230,6 +241,7 @@ async function renderDrafts(root) {
     const row = el("li", {}, el("button", { class: "inbox-row", onclick: () => select(d.id, true) },
       el("span", { class: "inbox-top" }, el("strong", {}, brand), el("span", { class: "small muted" }, fmtDate(d.createdAt))),
       el("span", { class: "inbox-type small" }, pretty(d.type) + (d.channel === "EMAIL" ? "" : " · Instagram"), blankMark,
+        campaign ? el("span", { class: "badge accent" }, "Campaign") : null,
         sendingAt ? el("span", { class: "badge" }, "Sending") : null),
       preview));
     const node = holder.appendChild(card(null,
@@ -239,6 +251,9 @@ async function renderDrafts(root) {
       d.invoiceId ? el("div", { class: "small" }, icon("clip"), " ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
       d.resultId && d.channel === "EMAIL" ? el("div", { class: "small" }, icon("clip"), " ", el("a", { href: "/api/opportunities/" + d.opportunityId + "/results/pdf", target: "_blank", rel: "noopener" }, "Results PDF"), " is attached") : null,
       d.type === "PAYMENT_REMINDER" ? el("div", { class: "small muted" }, "Payment reminders always wait for you here, even when follow-ups are sent automatically.") : null,
+      campaign ? el("div", { class: "small muted" }, "From your " + campaign + " campaign. Press Approve and it goes out in the slow send "
+        + "queue (see Campaigns), a few minutes apart, during the brand's working hours. The last lines with your address and the "
+        + "\"no thanks\" line are required, so they're put back if removed.") : null,
       d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
       d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
       el("label", {}, "Message"), body,
@@ -250,13 +265,19 @@ async function renderDrafts(root) {
       el("div", { class: "row" + (sendingAt ? " hidden" : "") },
         blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
           if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
-          if (!await sendPreview(d, brand, subject.value, body.value)) return;
+          if (!await sendPreview(d, brand, subject.value, body.value, campaign)) return;
+          if (campaign) {
+            await api("POST", "/api/campaigns/drafts/" + d.id + "/approve", edits());
+            toast("Approved. It's in the send queue.");
+            route();
+            return;
+          }
           const q = await api("POST", "/api/drafts/" + d.id + "/send", edits());
           sendingBar(d.id, brand, q.sendAt);
           route();
-        }) }, "Send"),
+        }) }, campaign ? "Approve" : "Send"),
         el("button", { onclick: action(async () => { await navigator.clipboard.writeText(body.value); }, "Copied") }, "Copy"),
-        el("button", { onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/sent-manually"); route(); }, "Recorded as sent") }, "I sent it myself"),
+        campaign ? null : el("button", { onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/sent-manually"); route(); }, "Recorded as sent") }, "I sent it myself"),
         el("button", { onclick: action(async () => { await api("PUT", "/api/drafts/" + d.id, edits()); }, "Saved") }, "Save edits"),
         el("div", { class: "spacer" }),
         el("button", { class: "danger", onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/discard"); route(); }, "Discarded") }, "Discard"),
