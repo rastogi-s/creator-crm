@@ -30,6 +30,17 @@ function markNav() {
 }
 matchMedia("(min-width: 1024px)").addEventListener("change", markNav);
 
+// On a phone the tab bar is pinned to the bottom of the screen. It sits outside the sticky header there, because
+// iPhone Safari moves a pinned bar that lives inside a sticky header up and down while the page scrolls.
+const PHONE = matchMedia("(max-width: 640px)");
+function placeNav() {
+  const nav = document.querySelector("nav.tabs"), header = document.querySelector(".topbar");
+  if (PHONE.matches) { if (nav.parentElement !== document.body) header.after(nav); }
+  else if (nav.parentElement !== header) header.insertBefore(nav, header.querySelector(".global-search"));
+}
+placeNav();
+PHONE.addEventListener("change", placeNav);
+
 async function route() {
   const tab = currentTab();
   markNav();
