@@ -13,6 +13,7 @@ crm:
     backup-check-cron: "-"
     campaign-cron: "-"
     opening-lines-cron: "-"
+    website-check-cron: "-"
   updates:
     enabled: false
     check-cron: "-"

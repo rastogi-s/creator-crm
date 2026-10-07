@@ -657,6 +657,60 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "website-contacts"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    let lead = view.locator(".item", { hasText: "Trailmix Co" });
+    if (!(await lead.count())) {
+      const query = view.locator(".find-brands .query input");
+      await point(query);
+      await query.fill("snack brands that work with outdoor creators");
+      await click(view.getByRole("button", { name: "Find brands" }));
+      lead = view.locator(".item", { hasText: "Trailmix Co" });
+      await lead.waitFor();
+    }
+    await point(lead);
+    await say("Some brands don't come with an email. Trailmix Co is one of them.", 3800);
+    const find = lead.getByRole("button", { name: "Find contacts on website" });
+    await point(find);
+    await say("Press Find contacts on website. The app reads the brand's own contact, partnerships and press pages.", 4800);
+    await click(find);
+    lead = view.locator(".item", { hasText: "creators@trailmix.example" });
+    await lead.waitFor({ timeout: 30000 });
+    await point(lead.getByRole("link", { name: "(source)" }));
+    await say("It picks the partnerships address first, and links the page it came from.", 4200);
+    await say("It's free and uses no Claude. It only reads public pages, slowly, and skips sites that ask apps not to.", 5000);
+    await say("Every night it also checks brands and suggestions that still have no contact.", 4000);
+    await say("On a deal, the same button under People at this brand saves everyone the website lists.", 4400);
+    await say("", 600);
+  },
+
+  async "category-search"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    const input = view.locator(".find-category input");
+    await point(input);
+    await say("Want brands in a category, for free? Type it here, like snack food.", 4000);
+    await input.pressSequentially("snack food", { delay: 60 });
+    await click(view.getByRole("button", { name: "Search category (free)" }));
+    const peak = view.locator(".item", { hasText: "Peak Provisions" });
+    await peak.waitFor();
+    await point(peak);
+    await say("Brands come from Wikidata, a free open database of companies, with their website and Instagram.", 4800);
+    await say("The app then reads each brand's own website for a published email, politely, in the background.", 4800);
+    await page.waitForTimeout(2500);
+    await page.reload();
+    const found = view.locator(".item", { hasText: "partners@peakprovisions.example" });
+    await found.waitFor({ timeout: 30000 });
+    await point(found);
+    await say("Here's Peak Provisions' partnerships email, with a link to the page it came from. No Claude, no cost.", 4800);
+    await say("", 600);
+  },
+
   async "drafts-inbox"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");

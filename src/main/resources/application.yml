@@ -86,6 +86,8 @@ crm:
     morning-check-cron: "0 * * * * *"
     # Campaign send queue: each minute, reads new replies and bounces, then sends at most one approved email if due.
     campaign-cron: "30 * * * * *"
+    # Checks every 20 minutes whether tonight's read of brand websites for contacts (after 1am, once a day) is due.
+    website-check-cron: "0 */20 * * * *"
   # In-app updates: checks the latest GitHub release (no account or token needed) and, on Windows, installs it
   # when you click "Update now". Nothing is downloaded or installed without that click.
   updates:
