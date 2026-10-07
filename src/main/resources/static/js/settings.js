@@ -44,7 +44,7 @@ async function calendarStep(root, c) {
 const SETTINGS_TABS = [
   ["accounts", "Accounts", "Claude, Gmail, Google Calendar, Instagram and contact finders"],
   ["you", "You", "Your name, voice, rates and to-do rules"],
-  ["deals", "Deals & money", "Follow-ups, invoices, rates, contracts, rebooking"],
+  ["deals", "Deals & money", "Follow-ups, pitch campaigns, invoices, rates, contracts, rebooking"],
   ["app", "App", "Updates, backups, Claude spending, password"],
   ["advanced", "Advanced", "Claude models, extra connections, error reports, restoring a backup"],
 ];
@@ -222,6 +222,12 @@ async function renderSettings(root) {
         followupTime: fu.followupTime.value, followupAutoSend: String(fu.followupAutoSend.checked) });
       renderSettings(root);
     }, "Saved") }, "Save"))));
+
+  // Pitch campaigns: same card as on the Campaigns page.
+  const cr = campaignRulesCard(p, () => renderSettings(root));
+  cr.id = "settings-campaigns";
+  cr.querySelector("h3").textContent = "Pitch campaigns";
+  panes.deals.appendChild(cr);
 
   // Invoices
   const iv = {
@@ -474,7 +480,11 @@ async function claudeSpendCard(root) {
   const sp = await api("GET", "/api/claude-spend").catch(() => null);
   if (!sp) return el("div");
   showCreditBanner(sp);
+<<<<<<< HEAD
   const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", CONTACTS: "Reading contact pictures" };
+=======
+  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines" };
+>>>>>>> origin/main
   const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
     value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
   const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

@@ -61,8 +61,14 @@ async function renderContacts(root) {
       await api("POST", "/api/contacts/refresh");
       redraw();
     }, "Contacts updated from your email"), title: "Read your brand emails again for people, replies and signatures" }, "Update from my email"),
+<<<<<<< HEAD
     el("button", { onclick: () => importCard.classList.toggle("hidden") }, "Import contacts"),
     el("a", { class: "btn", href: "/api/contacts/export.csv", download: "brand-contacts.csv" }, "Download all (CSV)")));
+=======
+    el("button", { onclick: () => importCard.classList.toggle("hidden") }, "Import a spreadsheet"),
+    el("a", { class: "btn", href: "/api/contacts/export.csv", download: "brand-contacts.csv" }, "Download all (CSV)"),
+    el("a", { class: "btn", href: "#directory", title: "Only brand inboxes like collabs@, safe to share or sell" }, "Brand directory")));
+>>>>>>> origin/main
 
   const importCard = contactsImportCard(redraw);
   importCard.classList.add("hidden");

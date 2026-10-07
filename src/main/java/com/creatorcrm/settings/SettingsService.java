@@ -77,6 +77,13 @@ public class SettingsService {
     /** First-run setup guide: blank = not finished, "done" = finished, "skipped" = she chose to set up later. */
     public static final String SETUP_GUIDE = "setupGuide";
 
+    /** Pitch campaigns: her business postal address for the email footer (US CAN-SPAM asks for one; a PO box works). */
+    public static final String CAMPAIGN_ADDRESS = "campaignPostalAddress";
+    /** Most new campaign pitches sent in a day, 10 to 50. */
+    public static final String CAMPAIGN_DAILY_CAP = "campaignDailyCap";
+    /** "false" = skip the warm-up (10 a day at first, 5 more each week while bounces stay low). */
+    public static final String CAMPAIGN_WARMUP = "campaignWarmup";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
@@ -85,7 +92,8 @@ public class SettingsService {
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
             WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
-            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES, SETUP_GUIDE);
+            CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES, SETUP_GUIDE,
+            CAMPAIGN_ADDRESS, CAMPAIGN_DAILY_CAP, CAMPAIGN_WARMUP);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -218,6 +226,12 @@ public class SettingsService {
 
     public int contractRevisionsIncluded() { return Integer.parseInt(raw(CONTRACT_REVISIONS_INCLUDED, "1")); }
 
+    public String campaignAddress() { return raw(CAMPAIGN_ADDRESS, ""); }
+
+    public int campaignDailyCap() { return Integer.parseInt(raw(CAMPAIGN_DAILY_CAP, "30")); }
+
+    public boolean campaignWarmup() { return Boolean.parseBoolean(raw(CAMPAIGN_WARMUP, "true")); }
+
     public List<String> brandKeywords() {
         return Arrays.stream(raw(BRAND_KEYWORDS, DEFAULT_KEYWORDS).split(","))
                 .map(s -> s.trim().toLowerCase()).filter(s -> !s.isEmpty()).toList();
@@ -259,6 +273,9 @@ public class SettingsService {
         m.put(CALENDAR_SYNC, String.valueOf(calendarSync()));
         m.put(TASK_RULES, taskRules());
         m.put(SETUP_GUIDE, raw(SETUP_GUIDE, ""));
+        m.put(CAMPAIGN_ADDRESS, campaignAddress());
+        m.put(CAMPAIGN_DAILY_CAP, String.valueOf(campaignDailyCap()));
+        m.put(CAMPAIGN_WARMUP, String.valueOf(campaignWarmup()));
         return m;
     }
 
@@ -289,7 +306,15 @@ public class SettingsService {
                     throw new IllegalArgumentException("Follow-up time must be HH:mm, e.g. 08:00");
                 }
             }
-            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC -> {
+            case CAMPAIGN_DAILY_CAP -> {
+                if (!v.isBlank() && (!v.trim().matches("\\d{1,2}") || Integer.parseInt(v.trim()) < 10 || Integer.parseInt(v.trim()) > 50)) {
+                    throw new IllegalArgumentException("Pitches a day: a number from 10 to 50, e.g. 30");
+                }
+            }
+            case CAMPAIGN_ADDRESS -> {
+                if (v.length() > 300) throw new IllegalArgumentException("Postal address is too long (max 300 characters)");
+            }
+            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC, CAMPAIGN_WARMUP -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
             }
             case SETUP_GUIDE -> {
