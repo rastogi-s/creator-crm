@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.50.0",
+    "title": "A brand directory you can share or sell",
+    "features": [
+      {
+        "id": "brand-directory",
+        "title": "Brand directory, with no personal details",
+        "body": "More now has a Brand directory: every brand you know that works with creators, with its niche, website, Instagram and the team inbox it uses for collabs, like collabs@ or pr@. It shows which inboxes have answered you and when each was last seen working. Download CSV saves it as a spreadsheet you can sell as a pack or share with other creators. People's names, anything found through Hunter or Apollo, and anyone on your do-not-email list are always left out, and the page explains why.",
+        "video": "brand-directory.webm",
+        "tryIt": "#directory"
+      }
+    ]
+  },
+  {
     "version": "1.49.0",
     "title": "Pitch campaigns: one email per brand, sent slowly from your Gmail",
     "features": [

@@ -62,7 +62,8 @@ async function renderContacts(root) {
       redraw();
     }, "Contacts updated from your email"), title: "Read your brand emails again for people, replies and signatures" }, "Update from my email"),
     el("button", { onclick: () => importCard.classList.toggle("hidden") }, "Import a spreadsheet"),
-    el("a", { class: "btn", href: "/api/contacts/export.csv", download: "brand-contacts.csv" }, "Download all (CSV)")));
+    el("a", { class: "btn", href: "/api/contacts/export.csv", download: "brand-contacts.csv" }, "Download all (CSV)"),
+    el("a", { class: "btn", href: "#directory", title: "Only brand inboxes like collabs@, safe to share or sell" }, "Brand directory")));
 
   const importCard = contactsImportCard(redraw);
   importCard.classList.add("hidden");
