@@ -608,6 +608,30 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "category-search"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    const input = view.locator(".find-category input");
+    await point(input);
+    await say("Want brands in a category, for free? Type it here, like snack food.", 4000);
+    await input.pressSequentially("snack food", { delay: 60 });
+    await click(view.getByRole("button", { name: "Search category (free)" }));
+    const peak = view.locator(".item", { hasText: "Peak Provisions" });
+    await peak.waitFor();
+    await point(peak);
+    await say("Brands come from Wikidata, a free open database of companies, with their website and Instagram.", 4800);
+    await say("The app then reads each brand's own website for a published email, politely, in the background.", 4800);
+    await page.waitForTimeout(2500);
+    await page.reload();
+    const found = view.locator(".item", { hasText: "partners@peakprovisions.example" });
+    await found.waitFor({ timeout: 30000 });
+    await point(found);
+    await say("Here's Peak Provisions' partnerships email, with a link to the page it came from. No Claude, no cost.", 4800);
+    await say("", 600);
+  },
+
   async "drafts-inbox"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");

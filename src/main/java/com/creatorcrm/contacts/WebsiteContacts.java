@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +69,12 @@ public class WebsiteContacts {
     private final JdbcTemplate jdbc;
     private final TaskExecutor executor;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    /** Websites she asked for (a category search) are read one at a time, in the order asked. */
+    private final ExecutorService queue = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "website-contacts");
+        t.setDaemon(true);
+        return t;
+    });
 
     public WebsiteContacts(WebsiteReader reader, ContactService contacts, BrandContactRepo contactRepo, BrandDomainRepo domains,
                            BrandRepo brands, BrandLeadRepo leads, AppStateRepo state, SettingsService settings,
@@ -154,6 +162,19 @@ public class WebsiteContacts {
         String msg = message(r, out.size(), out.size());
         if (filled) msg += " Using " + lead.contactEmail + " for this pitch.";
         return new Result(r.site(), r.pagesRead().size(), out, filled ? 1 : 0, msg);
+    }
+
+    /** Reads these leads' websites in the background, one site after another, e.g. after a category search. */
+    public void readLeadsSoon(List<Long> leadIds) {
+        for (Long id : leadIds) {
+            queue.execute(() -> {
+                try {
+                    forLead(id);
+                } catch (RuntimeException e) {
+                    log.info("Website contacts: lead {}: {}", id, e.getMessage());
+                }
+            });
+        }
     }
 
     /** Who to pitch first when a lead has several addresses: partnerships, then PR, marketing, a general inbox. */

@@ -9,6 +9,13 @@
         "body": "Press Find contacts on website on a brand suggestion, or under People at this brand on any deal, and the app reads the brand's own homepage and its contact, partnerships, press, about and wholesale pages for email addresses they publish. Every address is saved with the page it came from, and the best one (a partnerships or PR inbox before a general one) becomes who new pitches go to. Every night it also checks brands and suggestions that still have no contact. It's free and uses no Claude. It only reads public pages, a few seconds apart, never social media or anything behind a sign-in, and leaves alone any site that asks apps not to read it.",
         "video": "website-contacts.webm",
         "tryIt": "#outreach"
+      },
+      {
+        "id": "category-search",
+        "title": "Find brands by category, for free",
+        "body": "On Pitching brands, type a category like skincare, running shoes or coffee and press Search category (free). Brands come from Wikidata, a free open database of companies, with their website and Instagram, and the app then reads each brand's own website for a published email in the background. It doesn't use Claude, so it costs nothing. It finds established brands best; the Claude search above still finds smaller ones.",
+        "video": "category-search.webm",
+        "tryIt": "#outreach"
       }
     ]
   },

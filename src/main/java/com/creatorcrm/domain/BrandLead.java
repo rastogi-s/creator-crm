@@ -12,8 +12,11 @@ import java.time.OffsetDateTime;
 public class BrandLead {
     public enum Status { NEW, DRAFTED, DISMISSED }
 
-    /** WEB: Find brands research. INSTAGRAM: tagged, mentioned or commented on her. LOOKUP: she looked up a handle. */
-    public enum Source { WEB, INSTAGRAM, LOOKUP }
+    /**
+     * WEB: Find brands research. INSTAGRAM: tagged, mentioned or commented on her. LOOKUP: she looked up a handle.
+     * CATEGORY: the free category search (Wikidata open data, no Claude).
+     */
+    public enum Source { WEB, INSTAGRAM, LOOKUP, CATEGORY }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
     public String name;

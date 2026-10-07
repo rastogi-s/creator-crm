@@ -95,6 +95,35 @@ class WebsiteContactsIntegrationTest {
     }
 
     @Test
+    void categorySearchAddsNewBrandsOnly() {
+        String t = UUID.randomUUID().toString().substring(0, 6);
+        brand("Known " + t, "https://known" + t + ".example");
+        CategorySearch search = new CategorySearch(site, website, leads, brands, domains) {
+            @Override
+            protected String get(java.net.URI uri) {
+                if (uri.getHost().equals("www.wikidata.org")) return "{\"search\":[{\"id\":\"Q2095\",\"label\":\"snack food\"}]}";
+                return "{\"results\":{\"bindings\":[" + row("Q1", "Known " + t, "https://known" + t + ".example")
+                        + "," + row("Q2", "Peak " + t, "https://peak" + t + ".example")
+                        + "," + row("Q3", "Insta " + t, "https://www.instagram.com/insta" + t) + "]}}";
+            }
+        };
+        CategorySearch.Result r = search.search("  snack   food ", 10);
+        assertThat(r.added()).extracting(l -> l.name).containsExactly("Peak " + t);
+        BrandLead lead = r.added().get(0);
+        assertThat(lead.source).isEqualTo(BrandLead.Source.CATEGORY);
+        assertThat(lead.searchQuery).isEqualTo("snack food");
+        assertThat(lead.website).isEqualTo("https://peak" + t + ".example");
+        assertThat(r.message()).contains("1 new brand");
+        assertThat(search.search("snack food", 10).added()).isEmpty(); // already a suggestion
+        assertThatThrownBy(() -> search.search("ab", 10)).hasMessageContaining("Type a category");
+    }
+
+    private static String row(String id, String name, String site) {
+        return "{\"b\":{\"value\":\"e/" + id + "\"},\"bLabel\":{\"value\":\"" + name + "\"},\"site\":{\"value\":\"" + site
+                + "\"},\"catLabel\":{\"value\":\"snack food\"}}";
+    }
+
+    @Test
     void nightlyPicksBrandsAndLeadsWithoutContacts() {
         String t = UUID.randomUUID().toString().substring(0, 6);
         Brand none = brand("Bare " + t, "bare" + t + ".example");

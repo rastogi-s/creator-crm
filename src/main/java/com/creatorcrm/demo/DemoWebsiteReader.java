@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-/** Demo mode only: a made-up brand website instead of the internet, with short pauses so videos stay short. */
+/** Demo mode only: made-up brand websites instead of the internet, with short pauses so videos stay short. */
 @Component
 @Primary
 @Profile("demo")
@@ -34,9 +34,21 @@ public class DemoWebsiteReader extends WebsiteReader {
         super(build);
     }
 
+    /** Two more made-up brands for the category search: one page each, with a partnerships email. */
+    private static String other(String host, String path) {
+        String brand = host.startsWith("peak") ? "peakprovisions" : host.startsWith("summit") ? "summitbars" : null;
+        if (brand == null) return null;
+        if (path.equals("/robots.txt")) return "User-agent: *\nDisallow: /cart\n";
+        if (path.equals("/")) return "<html><body><a href=\"/pages/contact\">Contact</a></body></html>";
+        if (path.equals("/pages/contact")) return "<html><body><p>Brand partnerships: <a href=\"mailto:partners@" + brand
+                + ".example\">partners@" + brand + ".example</a></p></body></html>";
+        return null;
+    }
+
     @Override
     protected Page fetch(URI uri) {
-        String body = uri.getHost() != null && uri.getHost().endsWith("trailmix.example") ? PAGES.get(uri.getPath()) : null;
+        String host = uri.getHost() == null ? "" : uri.getHost();
+        String body = host.endsWith("trailmix.example") ? PAGES.get(uri.getPath()) : other(host, uri.getPath());
         if (body == null) return new Page(404, "text/html", "", null);
         return new Page(200, uri.getPath().endsWith(".txt") ? "text/plain" : "text/html; charset=utf-8", body, null);
     }

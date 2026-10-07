@@ -101,7 +101,7 @@ public class WebsiteReader {
                 + "; reads public contact pages; +https://github.com/rastogi-s/creator-crm)";
     }
 
-    String userAgent() {
+    public String userAgent() {
         return userAgent;
     }
 
@@ -323,7 +323,7 @@ public class WebsiteReader {
         }
     }
 
-    static boolean neverRead(String host) {
+    public static boolean neverRead(String host) {
         String d = Emails.registrable(host);
         return d != null && (NEVER_READ.contains(d) || d.startsWith("amazon.") || d.startsWith("etsy."));
     }
