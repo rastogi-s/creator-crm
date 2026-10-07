@@ -134,6 +134,13 @@ public class DemoLlm implements LlmClient {
     }
 
     @Override
+    public PictureContacts readContactPicture(byte[] image, String mediaType) {
+        return new PictureContacts(List.of(new com.creatorcrm.llm.ContactCards.Card("maya.chen@sunleafbotanics.com", "Maya Chen",
+                "Influencer Partnerships Manager", "Sunleaf Botanics", "sunleafbotanics.com", "+1 (415) 555-0142",
+                "sunleafbotanics", "")), 0.004);
+    }
+
+    @Override
     public BrandLeads findBrands(BrandSearchInput input) {
         List<BrandLeads.Lead> sample = List.of(
                 new BrandLeads.Lead("Dewdrop Skin", "https://dewdrop.example", "dewdropskin", "creators@dewdrop.example",

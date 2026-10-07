@@ -1,5 +1,6 @@
 package com.creatorcrm.llm;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,6 +26,17 @@ public interface LlmClient {
 
     /** Read a brand contract's terms. The app's own rules then check them against the creator's limits. */
     ContractTerms extractContractTerms(ContractInput input);
+
+    /** What Claude read off a picture, and what that cost in USD. */
+    record PictureContacts(List<ContactCards.Card> contacts, double costUsd) {}
+
+    /**
+     * Read the contacts in a picture (PNG, JPEG, GIF or WebP). Only when she asks for it: it costs about a cent, and
+     * the app tries the computer's own text reader first.
+     */
+    default PictureContacts readContactPicture(byte[] image, String mediaType) {
+        throw new UnsupportedOperationException("Reading pictures isn't supported");
+    }
 
     boolean isConfigured();
 

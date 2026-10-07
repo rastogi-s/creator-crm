@@ -27,6 +27,7 @@ import com.creatorcrm.repo.MessageRepo;
 import com.creatorcrm.repo.OpportunityRepo;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -216,6 +217,26 @@ class ContactsIntegrationTest {
         assertThat(v.sources()).containsExactly("HUNTER");
         assertThat(v.shareable()).isFalse(); // bought data is never shared
         assertThat(csv.export(contacts.forBrand(existing.id))).contains("ana@known" + t + ".com").contains("HUNTER");
+    }
+
+    @Test
+    void importsAGridWithTheColumnsSheChoseAndKeepsSomeoneElsesListPrivate() {
+        String t = tag();
+        ContactCsv.Table table = new ContactCsv.Table(List.of("Who", "Contact", "Notes"), List.of(
+                List.of("Ana Ruiz", "collabs@shared" + t + ".com", "met at a fair"),
+                List.of("", "", "")), 2);
+        Map<String, Integer> guessed = ContactCsv.guessMapping(table);
+        assertThat(guessed).containsEntry("email", 1).doesNotContainKey("name");
+        ContactCsv.Preview p = csv.preview(table, Map.of("email", 1, "name", 0));
+        assertThat(p.added()).isEqualTo(1);
+        assertThat(p.rows().get(0).name()).isEqualTo("Ana Ruiz");
+
+        csv.importTable(table, Map.of("email", 1), ContactCsv.Origin.THIRD_PARTY, "fair-list.xlsx");
+        BrandContact c = contactRepo.findByEmail("collabs@shared" + t + ".com").orElseThrow();
+        assertThat(c.name).isNull();
+        ContactService.View v = contacts.forBrand(c.brandId).get(0);
+        assertThat(v.sources()).containsExactly("THIRD_PARTY");
+        assertThat(v.shareable()).isFalse(); // a role inbox, but from someone else's list
     }
 
     @Test

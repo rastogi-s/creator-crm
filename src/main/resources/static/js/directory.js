@@ -6,7 +6,7 @@
 
 // ---------- Brand directory ----------
 // Brands that work with creators and the inbox they publish for it. Never a named person, never anything bought
-// from Hunter or Apollo, never anyone on the do-not-email list (the server decides, see BrandDirectory.java).
+// from Hunter, Apollo or someone else's list, never anyone on the do-not-email list (the server decides, see BrandDirectory.java).
 
 const DIRECTORY_PREVIEW = 50;
 
@@ -39,8 +39,8 @@ async function renderDirectory(root) {
       el("li", {}, "People's names and personal addresses (" + d.leftOutPeople + " left out). Selling those would make you a "
         + "data broker, which California and other states require registering for, and GDPR would hold you responsible "
         + "for what every buyer does with them."),
-      el("li", {}, "Anything found through Hunter, Apollo or another finder service (" + d.leftOutPaid + " left out). "
-        + "Their terms let you email these people yourself but forbid passing them on."),
+      el("li", {}, "Anything found through Hunter, Apollo or another finder service, or from a list you bought or got from someone "
+        + "else (" + d.leftOutPaid + " left out). You can email these people yourself, but they aren't yours to pass on."),
       el("li", {}, "Anyone on your do-not-email list, or whose email bounced (" + d.leftOutDoNotEmail + " left out). "
         + "They asked to be left alone, or the address doesn't work."),
       el("li", {}, "Gmail-style addresses, addresses the app only guessed and never saw work, and general addresses like "

@@ -232,6 +232,11 @@ label.check input { width: auto; }
   border-radius: 999px; max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .sync-status.warn { background: var(--warn-soft); color: var(--warn); }
+.import-grid th { vertical-align: bottom; }
+.import-grid select { min-width: 8.5rem; width: 100%; }
+.import-grid input { min-width: 9rem; width: 100%; }
+.import-head { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 14rem; }
+.import-text { white-space: pre-wrap; max-height: 12rem; overflow: auto; background: var(--surface-2); border-radius: 8px; padding: .5rem; }
 .import-box { border-top: 1px solid var(--border); margin-top: .75rem; padding-top: .75rem; }
 .import-box h4 { margin: 0 0 .25rem; font-size: .9rem; }
 .import-box p { margin: 0 0 .5rem; }

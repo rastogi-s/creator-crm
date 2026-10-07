@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.51.0",
+    "title": "Import contacts from any file, even a photo of a business card",
+    "features": [
+      {
+        "id": "contact-import",
+        "title": "Import contacts from files and pictures",
+        "body": "Brand contacts, Import contacts now takes Excel sheets, CSVs (including Google and Outlook exports), contact cards from your phone (.vcf), PDFs, and pictures like business cards or screenshots. The app guesses which column is which and you can change any of them; for a picture you see every person it found and can fix anything it read wrong before saving. Pictures are read on your laptop by Windows itself, for free. If that misses something, Read it with Claude shows the price first (usually under a cent). Say where the list came from: lists you bought or got from someone else are kept out of anything you share.",
+        "video": "contact-import.webm",
+        "tryIt": "#contacts"
+      }
+    ]
+  },
+  {
     "version": "1.50.0",
     "title": "A brand directory you can share or sell",
     "features": [

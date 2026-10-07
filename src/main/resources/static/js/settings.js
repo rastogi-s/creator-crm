@@ -480,7 +480,7 @@ async function claudeSpendCard(root) {
   const sp = await api("GET", "/api/claude-spend").catch(() => null);
   if (!sp) return el("div");
   showCreditBanner(sp);
-  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines" };
+  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines", CONTACTS: "Reading contact pictures" };
   const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
     value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
   const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

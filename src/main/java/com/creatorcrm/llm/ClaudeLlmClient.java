@@ -6,7 +6,10 @@ import com.anthropic.core.JsonValue;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.ErrorType;
+import com.anthropic.models.messages.Base64ImageSource;
 import com.anthropic.models.messages.CacheControlEphemeral;
+import com.anthropic.models.messages.ContentBlockParam;
+import com.anthropic.models.messages.ImageBlockParam;
 import com.anthropic.models.messages.JsonOutputFormat;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
@@ -28,6 +31,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +54,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final String writerSystem;
     private final String researchSystem;
     private final String contractSystem;
+    private final String pictureSystem;
 
     private AnthropicClient client;
     private String clientKeyHash;
@@ -66,6 +71,7 @@ public class ClaudeLlmClient implements LlmClient {
         this.writerSystem = resource("prompts/writer-system.md");
         this.researchSystem = resource("prompts/brand-research-system.md");
         this.contractSystem = resource("prompts/contract-system.md");
+        this.pictureSystem = resource("prompts/contact-image-system.md");
     }
 
     @Override
@@ -302,6 +308,37 @@ public class ClaudeLlmClient implements LlmClient {
                 settings.classifierEffort(), contractSystem, null, user.toString(), ContractTerms.class, 4000, null));
     }
 
+    /** Pictures of contacts are simple to read: the cheapest model does it for about a cent. */
+    static final String PICTURE_MODEL = "claude-haiku-4-5";
+
+    @Override
+    public PictureContacts readContactPicture(byte[] image, String mediaType) {
+        ImageBlockParam picture = ImageBlockParam.builder().source(Base64ImageSource.builder()
+                .mediaType(Base64ImageSource.MediaType.of(mediaType))
+                .data(Base64.getEncoder().encodeToString(image)).build()).build();
+        MessageCreateParams.Builder params = MessageCreateParams.builder()
+                .model(PICTURE_MODEL)
+                .maxTokens(4000L)
+                .outputConfig(outputConfig(PICTURE_MODEL, null, ContactCards.class))
+                .systemOfTextBlockParams(systemBlocks(pictureSystem, null))
+                .addUserMessageOfBlockParams(List.of(ContentBlockParam.ofImage(picture),
+                        ContentBlockParam.ofText("List the contacts in this picture.")));
+        Message response = create(params);
+        double usd = spend.record(ClaudeSpend.Feature.CONTACTS, response);
+        StopReason stop = response.stopReason().orElse(null);
+        if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined to read this picture");
+        if (StopReason.MAX_TOKENS.equals(stop)) throw new LlmException("This picture has too many people for one go; crop it into smaller parts");
+        String json = response.content().stream().flatMap(b -> b.text().stream()).map(t -> t.text()).reduce((a, b) -> b)
+                .orElseThrow(() -> new LlmException("Claude returned no structured output"));
+        ContactCards cards;
+        try {
+            cards = OutputSchemas.parse(json, ContactCards.class);
+        } catch (RuntimeException e) {
+            throw new LlmException("Claude's reply didn't match the expected format: " + firstLine(e), e);
+        }
+        return new PictureContacts(cards.contacts() == null ? List.of() : cards.contacts(), usd);
+    }
+
     /** Her own to-do rules from Settings, or null when she has none (keeps the cached prompt unchanged). */
     String taskRules() {
         String rules = settings.taskRules().strip();
@@ -370,7 +407,7 @@ public class ClaudeLlmClient implements LlmClient {
         OutputSchemas.of(type).forEach((k, v) -> schema.putAdditionalProperty(k, JsonValue.from(v)));
         OutputConfig.Builder out = OutputConfig.builder()
                 .format(JsonOutputFormat.builder().schema(schema.build()).build());
-        if (supportsEffort(model)) out.effort(OutputConfig.Effort.of(effort));
+        if (effort != null && supportsEffort(model)) out.effort(OutputConfig.Effort.of(effort));
         return out.build();
     }
 

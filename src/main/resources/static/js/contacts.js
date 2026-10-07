@@ -9,7 +9,7 @@
 const CONTACT_ROLES = { PARTNERSHIPS: "Partnerships", PR: "PR", MARKETING: "Marketing", FOUNDER: "Founder",
   GENERAL: "General inbox", SUPPORT: "Support", OTHER: "Other" };
 const CONTACT_SOURCES = { GMAIL: "your email", WEBSITE: "their website", HUNTER: "Hunter", APOLLO: "Apollo", FINDER: "a finder service",
-  IMPORT: "your spreadsheet", MANUAL: "typed in by you", LEAD: "brand research", GUESS: "a guess" };
+  IMPORT: "your import", THIRD_PARTY: "someone else's list", MANUAL: "typed in by you", LEAD: "brand research", GUESS: "a guess" };
 let contactsFilter = loadPrefs("contacts", { q: "", show: "all" });
 
 function contactRankTone(score) {
@@ -61,7 +61,7 @@ async function renderContacts(root) {
       await api("POST", "/api/contacts/refresh");
       redraw();
     }, "Contacts updated from your email"), title: "Read your brand emails again for people, replies and signatures" }, "Update from my email"),
-    el("button", { onclick: () => importCard.classList.toggle("hidden") }, "Import a spreadsheet"),
+    el("button", { onclick: () => importCard.classList.toggle("hidden") }, "Import contacts"),
     el("a", { class: "btn", href: "/api/contacts/export.csv", download: "brand-contacts.csv" }, "Download all (CSV)"),
     el("a", { class: "btn", href: "#directory", title: "Only brand inboxes like collabs@, safe to share or sell" }, "Brand directory")));
 
@@ -84,7 +84,7 @@ async function renderContacts(root) {
 
   const all = page.contacts;
   if (!all.length) {
-    root.appendChild(card(null, emptyLine("No contacts yet. Press Update from my email, or import a spreadsheet.")));
+    root.appendChild(card(null, emptyLine("No contacts yet. Press Update from my email, or import a file or a picture.")));
     return;
   }
   const pf = contactsFilter;
@@ -117,43 +117,125 @@ async function renderContacts(root) {
   draw();
 }
 
-/** Spreadsheet import: pick the file, say where it came from, see what would happen, then import. */
+const IMPORT_FIELDS = { email: "Email", name: "Full name", first: "First name", last: "Last name", title: "Job title",
+  brand: "Brand or company", website: "Website", role: "Role", phone: "Phone", instagram: "Instagram", linkedin: "LinkedIn" };
+/** Rows shown as boxes she can type in; longer files show a sample. */
+const IMPORT_EDITABLE_ROWS = 25;
+
+function fileAsBase64(f) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ""));
+    r.onerror = () => reject(new Error("Couldn't open that file"));
+    r.readAsDataURL(f);
+  });
+}
+
+/**
+ * Import from any file: a spreadsheet (CSV, Excel), contact cards from a phone (.vcf), a PDF, or a picture such as a
+ * business card or screenshot. The file is read on this computer; she checks which column is which (and can fix
+ * what was read off a picture), sees what would happen, then imports. Claude reads a picture only if she asks.
+ */
 function contactsImportCard(onDone) {
-  const file = el("input", { type: "file", accept: ".csv,text/csv" });
-  const origin = el("select", { "aria-label": "Where this list came from" },
-    el("option", { value: "" }, "Where is this list from?"),
-    el("option", { value: "OWN" }, "My own list"),
+  const file = el("input", { type: "file", "aria-label": "File to import",
+    accept: ".csv,.tsv,.txt,.xlsx,.xlsm,.xls,.vcf,.pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.heic,image/*,text/csv,text/vcard" });
+  const origin = el("select", { "aria-label": "Where these contacts came from" },
+    el("option", { value: "" }, "Where are these from?"),
+    el("option", { value: "OWN" }, "My own (people I met or emailed, cards I was given)"),
+    el("option", { value: "THIRD_PARTY" }, "Bought, or got from someone else"),
     el("option", { value: "HUNTER" }, "Hunter"),
     el("option", { value: "APOLLO" }, "Apollo"),
     el("option", { value: "OTHER_FINDER" }, "Another contact-finder service"));
-  const out = el("div", {});
-  let text = null;
-  file.addEventListener("change", action(async () => {
+  const out = el("div", { class: "import-out" });
+  let picked = null;
+
+  const load = async (useClaude) => {
     clear(out);
     const f = file.files[0];
     if (!f) return;
-    if (f.size > 5_000_000) { toast("That file is bigger than 5 MB. Split it into smaller files.", true); return; }
-    text = await f.text();
-    const p = await api("POST", "/api/contacts/import/preview", { csv: text });
-    out.appendChild(el("p", {}, p.added + " new, " + p.merged + " already saved (blanks filled in), " + p.newBrands + " new brands, "
+    if (f.size > 8_000_000) { toast("That file is bigger than 8 MB. Split it into smaller files.", true); return; }
+    out.appendChild(el("p", { class: "small muted" }, useClaude ? "Claude is reading the picture…" : "Reading " + f.name + "…"));
+    picked = f;
+    const r = await api("POST", "/api/contacts/import/read", { name: f.name, data: await fileAsBase64(f), claude: !!useClaude });
+    if (picked !== f) return; // she picked another file meanwhile
+    showRead(f, r);
+  };
+
+  const showRead = (f, r) => {
+    clear(out);
+    if (r.method) out.appendChild(el("p", { class: "small muted" }, r.method + "."));
+    if (r.note) out.appendChild(el("p", {}, r.note));
+    if (r.claudeCost) {
+      out.appendChild(el("div", { class: "row" },
+        el("button", { onclick: action(() => load(true)) },
+          (r.rows.length ? "Read it with Claude instead" : "Read it with Claude") + " (" + r.claudeCost + ")"),
+        el("span", { class: "small muted" }, "Uses your Claude credit. Only this picture is sent.")));
+    }
+    if (r.text) {
+      out.appendChild(el("details", { class: "small" }, el("summary", {}, "What the app read"),
+        el("pre", { class: "import-text" }, r.text)));
+    }
+    if (!r.rows.length) return;
+    importGrid(out, f.name, r, origin, onDone);
+  };
+
+  file.addEventListener("change", action(() => load(false)));
+  return card("Import contacts",
+    el("p", { class: "small muted" }, "Spreadsheets (CSV or Excel, including Hunter, Apollo, Google and Outlook exports), contact cards "
+      + "from your phone (.vcf), PDFs, and pictures like business cards or screenshots. Pictures are read on this computer for free. "
+      + "You check every row before anything is saved; duplicates are merged and junk addresses skipped."),
+    el("div", { class: "row" }, file, origin),
+    el("p", { class: "small muted" }, "Lists you bought or got from someone else, and lists from contact-finder services, are for your "
+      + "own pitches only: the app keeps them out of anything you share."),
+    out);
+}
+
+/** Which column is which (one dropdown per column), the rows (editable when there are few), then what importing would do. */
+function importGrid(out, fileName, r, origin, onDone) {
+  const rows = r.rows.map((row) => r.headers.map((_, i) => row[i] == null ? "" : String(row[i])));
+  const mapping = Object.assign({}, r.mapping);
+  const result = el("div", {});
+  const fieldOf = (i) => Object.keys(mapping).find((k) => mapping[k] === i) || "";
+
+  const preview = action(async () => {
+    clear(result);
+    if (mapping.email === undefined) { result.appendChild(el("p", { class: "alert warn" }, "Pick which column has the email addresses.")); return; }
+    const body = { headers: r.headers, rows, firstLine: r.firstLine, mapping, fileName };
+    const p = await api("POST", "/api/contacts/import/preview", body);
+    result.appendChild(el("p", {}, p.added + " new, " + p.merged + " already saved (blanks filled in), " + p.newBrands + " new brands, "
       + p.skipped + " skipped."));
-    const skipped = p.rows.filter((r) => r.action === "SKIP").slice(0, 8);
-    if (skipped.length) out.appendChild(el("ul", { class: "small muted" }, skipped.map((r) => el("li", {}, "Row " + r.line + ": " + (r.email || "(blank)") + " — " + r.note))));
-    out.appendChild(el("button", { class: "primary", onclick: (e) => {
-      if (!origin.value) { toast("Pick where this list came from first", true); return; }
+    const skipped = p.rows.filter((x) => x.action === "SKIP").slice(0, 8);
+    if (skipped.length) result.appendChild(el("ul", { class: "small muted" }, skipped.map((x) => el("li", {}, "Row " + x.line + ": " + (x.email || "(blank)") + " — " + x.note))));
+    if (p.added + p.merged === 0) return;
+    result.appendChild(el("button", { class: "primary", onclick: (e) => {
+      if (!origin.value) { toast("Pick where these contacts came from first", true); origin.focus(); return; }
       action(async () => {
-        await api("POST", "/api/contacts/import", { csv: text, origin: origin.value });
+        await api("POST", "/api/contacts/import", Object.assign({ origin: origin.value }, body));
         onDone();
       }, "Imported")(e);
-    } }, "Import " + (p.added + p.merged) + " contacts"));
+    } }, "Import " + (p.added + p.merged) + (p.added + p.merged === 1 ? " contact" : " contacts")));
+  });
+
+  const head = el("tr", {}, r.headers.map((h, i) => {
+    const pick = el("select", { "aria-label": "Column " + (i + 1) + " is", onchange: () => {
+      for (const k of Object.keys(mapping)) if (mapping[k] === i || k === pick.value) delete mapping[k];
+      if (pick.value) mapping[pick.value] = i;
+      head.querySelectorAll("select").forEach((s, j) => { s.value = fieldOf(j); });
+      preview();
+    } }, el("option", { value: "" }, "Skip this column"), Object.entries(IMPORT_FIELDS).map(([k, label]) => el("option", { value: k }, label)));
+    pick.value = fieldOf(i);
+    return el("th", {}, el("div", { class: "small muted import-head" }, h), pick);
   }));
-  return card("Import a spreadsheet",
-    el("p", { class: "small muted" }, "Any CSV with an Email column works, including exports from Hunter and Apollo. Brand, website, name, "
-      + "title and phone columns are picked up too. Duplicates are merged and junk addresses are skipped."),
-    el("div", { class: "row" }, file, origin),
-    el("p", { class: "small muted" }, "Lists from contact-finder services are for your own pitches only: their terms don't allow sharing or "
-      + "selling them, so the app keeps them out of anything you share."),
-    out);
+  const editable = rows.length <= IMPORT_EDITABLE_ROWS;
+  const shown = editable ? rows : rows.slice(0, 5);
+  const body = el("tbody", {}, shown.map((row, ri) => el("tr", {}, row.map((v, ci) => el("td", {}, editable
+    ? el("input", { value: v, "aria-label": r.headers[ci] + ", row " + (ri + 1), onchange: (e) => { rows[ri][ci] = e.target.value.trim(); preview(); } })
+    : v)))));
+  out.appendChild(el("p", { class: "small" }, editable ? "Check each column, and fix anything that was read wrong:" : "Check what each column is:"));
+  out.appendChild(el("div", { class: "table-wrap" }, el("table", { class: "import-grid" }, el("thead", {}, head), body)));
+  if (!editable) out.appendChild(el("p", { class: "small muted" }, "…and " + (rows.length - 5) + " more rows."));
+  out.appendChild(result);
+  preview();
 }
 
 /** Deal drawer: everyone at this brand, best first, a way to find more (Hunter, Apollo), and a quick way to add someone. */
