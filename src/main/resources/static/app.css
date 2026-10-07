@@ -385,9 +385,8 @@ button.link:hover { background: none; color: var(--text); }
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
-    /* Solid, and on its own layer: a blurred see-through bar makes iPhone Safari redraw it on every scroll frame,
-       and it visibly lags and bobs as the page moves. */
-    background: var(--surface); transform: translateZ(0); -webkit-transform: translateZ(0);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
     border-top: 1px solid var(--border); box-shadow: 0 -4px 20px rgba(0,0,0,.05);
     padding: .4rem calc(.25rem + env(safe-area-inset-right, 0px)) calc(.4rem + env(safe-area-inset-bottom, 0px)) calc(.25rem + env(safe-area-inset-left, 0px));
   }
