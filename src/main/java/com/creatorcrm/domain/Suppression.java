@@ -11,7 +11,8 @@ public class Suppression {
     public enum Reason { OPTED_OUT, BOUNCED, FORGET_ME, MANUAL }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) public Long id;
-    public String value;
+    /** A lower-case email address, or a bare domain. */
+    @Column(name = "address") public String value;
     @Enumerated(EnumType.STRING) public Kind kind;
     @Enumerated(EnumType.STRING) public Reason reason;
     public OffsetDateTime addedAt;

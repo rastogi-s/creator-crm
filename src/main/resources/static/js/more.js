@@ -94,6 +94,7 @@ async function renderMore(root) {
     el("span", { class: "title" }, title), el("span", { class: "detail" }, detail));
   root.appendChild(el("div", { class: "card more-list" },
     link("summary", "Day summary", "What you got done today and what's lined up for tomorrow"),
+    link("contacts", "Brand contacts", "Everyone at every brand, best person to pitch first"),
     link("links", "My links", "Your Instagram, TikTok, website and media kit, used in drafts"),
     link("settings", "Settings", "Accounts, your rates and voice, follow-ups, backups"),
     link("setup", "Setup guide", "Connect Claude and Gmail one step at a time"),
