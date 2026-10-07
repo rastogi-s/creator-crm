@@ -83,6 +83,7 @@ class ContactsIntegrationTest {
         m.recipient = to;
         m.content = body;
         m.sentAt = at;
+        m.aiProcessed = true; // already read, so other tests' ingestion runs never pick these up
         messages.save(m);
     }
 
