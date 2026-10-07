@@ -101,13 +101,13 @@ public class CampaignService {
     private final Suppressions suppressions;
     private final FollowUpEngine followUps;
     private final CampaignState state;
-    private final ObjectMapper json;
+    private static final ObjectMapper json = new ObjectMapper();
 
     public CampaignService(ContactListRepo lists, PitchTemplateRepo templates, CampaignRepo campaigns,
                            CampaignTargetRepo targets, BrandContactRepo contacts, BrandRepo brands, BrandLeadRepo leads,
                            OpportunityRepo opportunities, DraftRepo drafts, DraftService draftService,
                            ActivityRepo activity, LinkService links, SettingsService settings, Suppressions suppressions,
-                           FollowUpEngine followUps, CampaignState state, ObjectMapper json) {
+                           FollowUpEngine followUps, CampaignState state) {
         this.lists = lists;
         this.templates = templates;
         this.campaigns = campaigns;
@@ -124,7 +124,6 @@ public class CampaignService {
         this.suppressions = suppressions;
         this.followUps = followUps;
         this.state = state;
-        this.json = json;
     }
 
     // ---------- saved lists ----------

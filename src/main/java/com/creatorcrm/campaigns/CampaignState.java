@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 public class CampaignState {
     static final String PAUSED = "campaigns.pausedReason";
     static final String PAUSED_AT = "campaigns.pausedAt";
+    static final String RESUMED_AT = "campaigns.resumedAt";
     static final String NEXT_SEND = "campaigns.nextSendAt";
     static final String LAST_SCANNED = "campaigns.lastScannedMessageId";
 
@@ -57,6 +58,16 @@ public class CampaignState {
     public void resume() {
         put(PAUSED, "");
         put(PAUSED_AT, "");
+        put(RESUMED_AT, OffsetDateTime.now().toString());
+    }
+
+    /**
+     * Where today's count of bounces and opt-outs starts for the auto-pause: midnight, or when she last pressed
+     * Resume, so the problems she already looked at don't pause sending again.
+     */
+    public OffsetDateTime pauseCountFrom() {
+        OffsetDateTime today = startOfToday();
+        return get(RESUMED_AT).map(OffsetDateTime::parse).filter(r -> r.isAfter(today)).orElse(today);
     }
 
     public Optional<OffsetDateTime> nextSendAt() {

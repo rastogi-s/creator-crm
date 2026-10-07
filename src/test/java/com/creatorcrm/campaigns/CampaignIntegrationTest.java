@@ -94,6 +94,7 @@ class CampaignIntegrationTest {
     @Autowired FollowUpRepo followUps;
     @Autowired CrmController crm;
     @Autowired SendQueue sendQueue;
+    @Autowired com.creatorcrm.links.LinkService links;
 
     String tag;
 
@@ -105,6 +106,9 @@ class CampaignIntegrationTest {
         doAnswer(inv -> new SentMessage(UUID.randomUUID().toString(), UUID.randomUUID().toString())).when(gmail).send(any());
         settings.update(Map.of(SettingsService.CAMPAIGN_ADDRESS, "PO Box 12\nAustin, TX 78701", SettingsService.CAMPAIGN_DAILY_CAP, "30",
                 SettingsService.CAMPAIGN_WARMUP, "true", SettingsService.CREATOR_NAME, "Maya"));
+        if (links.list().stream().noneMatch(l -> l.label.toLowerCase().contains("media kit"))) {
+            links.add("Media kit", "https://example.org/maya-media-kit");
+        }
         state.resume();
         state.nextSendAt(OffsetDateTime.now().minusMinutes(1));
         watcher.scan(); // start reading from here
@@ -170,7 +174,7 @@ class CampaignIntegrationTest {
         assertThat(da.toAddress).isEqualTo("ana@" + tag.toLowerCase() + "-alpha.com");
         assertThat(da.type).isEqualTo(DraftType.PITCH);
         assertThat(da.subject).isEqualTo("Collab idea for " + a.name);
-        assertThat(da.body).startsWith("Hi Ana,").contains("I'm Maya").contains("PO Box 12, Austin, TX 78701")
+        assertThat(da.body).startsWith("Hi Ana,").contains("I'm Maya").contains("https://example.org/maya-media-kit").contains("PO Box 12, Austin, TX 78701")
                 .contains(CampaignFooter.OPT_OUT_LINE).doesNotContain("{");
         Draft db = drafts.findById(list.stream().filter(t -> t.brandId.equals(b.id)).findFirst().orElseThrow().draftId).orElseThrow();
         assertThat(db.body).startsWith("Hi " + b.name + " team,");

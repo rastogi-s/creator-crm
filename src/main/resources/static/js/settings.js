@@ -223,6 +223,12 @@ async function renderSettings(root) {
       renderSettings(root);
     }, "Saved") }, "Save"))));
 
+  // Pitch campaigns: same card as on the Campaigns page.
+  const cr = campaignRulesCard(p, () => renderSettings(root));
+  cr.id = "settings-campaigns";
+  cr.querySelector("h3").textContent = "Pitch campaigns";
+  panes.deals.appendChild(cr);
+
   // Invoices
   const iv = {
     invoiceBusinessName: el("input", { value: p.invoiceBusinessName, maxlength: "200", placeholder: p.creatorName }),

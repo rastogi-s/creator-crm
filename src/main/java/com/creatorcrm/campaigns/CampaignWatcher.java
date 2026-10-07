@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>"No thanks", "remove me" and the like: that address goes on the do-not-email list for good.</li>
  *   <li>A bounce: the address goes on the do-not-email list, and the brand's next-ranked person is tried instead.</li>
  * </ul>
- * Two bounces or one opt-out in a day pause all campaign sending until she presses Resume.
+ * Two bounces or one opt-out in a day (counted since she last pressed Resume) pause all campaign sending.
  */
 @Service
 public class CampaignWatcher {
@@ -174,7 +174,7 @@ public class CampaignWatcher {
     }
 
     private void checkPause() {
-        OffsetDateTime today = state.startOfToday();
+        OffsetDateTime today = state.pauseCountFrom();
         long bounces = events.countByKindAndAtGreaterThanEqual(CampaignEvent.Kind.BOUNCE, today);
         long optOuts = events.countByKindAndAtGreaterThanEqual(CampaignEvent.Kind.OPT_OUT, today);
         String why = bounces >= BOUNCES_TO_PAUSE

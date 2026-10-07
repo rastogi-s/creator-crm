@@ -22,7 +22,7 @@ const SIZES = {
 // [page, how to get there]. "tab" is in the tab bar, "more" is one tap further under More, "hash" is by address.
 const PLACES = [
   ["today", "tab"], ["drafts", "tab"], ["pipeline", "tab"], ["money", "tab"], ["more", "tab"],
-  ["settings", "more"], ["setup", "more"], ["help", "more"], ["whatsnew", "more"], ["summary", "more"], ["links", "more"], ["contacts", "more"],
+  ["settings", "more"], ["setup", "more"], ["help", "more"], ["whatsnew", "more"], ["summary", "more"], ["links", "more"], ["contacts", "more"], ["campaigns", "more"],
   ["outreach", "hash"],
 ];
 
