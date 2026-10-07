@@ -11,6 +11,7 @@ crm:
     morning-check-cron: "-"
     batch-check-cron: "-"
     backup-check-cron: "-"
+    website-check-cron: "-"
   updates:
     enabled: false
     check-cron: "-"

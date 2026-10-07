@@ -197,11 +197,29 @@ function findBrandsCard(root, leads, ig) {
     ? el("div", { class: "row" }, el("span", { class: "small muted" }, "Know a brand already?"), el("div", { class: "spacer" }, handle),
       el("button", { class: "small", onclick: lookup }, "Look up on Instagram"))
     : el("p", { class: "small muted" }, "Tip: connect Facebook on the Settings page to look up any brand's Instagram (followers, bio, creators they work with) and add it here.");
+  // Free search by category: Wikidata's open brand data, then each brand's own website for emails. No Claude.
+  const category = el("input", { placeholder: "A category, e.g. skincare, running shoes, coffee", maxlength: "100", "aria-label": "Category" });
+  const categoryStatus = el("span", { class: "small muted" });
+  const byCategory = action(async () => {
+    if (category.value.trim().length < 3) throw new Error("Type a category, like skincare or running shoes");
+    categoryStatus.textContent = "Looking up brands in the free brand database…";
+    try {
+      const r = await api("POST", "/api/leads/category", { category: category.value, count: Number(count.value) });
+      toast(r.message);
+      renderOutreach(root);
+      if (r.added.length) setTimeout(() => { if (currentTab() === "outreach") renderOutreach(root); }, 60000);
+    } finally { categoryStatus.textContent = ""; }
+  });
+  category.addEventListener("keydown", (e) => { if (e.key === "Enter") byCategory(e); });
+  const categoryRow = el("div", { class: "row find-category" }, el("div", { class: "query" }, category),
+    el("button", { onclick: byCategory, title: "Uses Wikidata, a free open database of companies, then reads each brand's own website for published emails" }, "Search category (free)"));
   return card("Find brands to pitch",
     el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
     el("div", { class: "row find-brands" }, el("div", { class: "query" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
     el("div", { class: "row find-depth" }, el("span", { class: "small muted" }, "Search depth:"), depth),
     status,
+    el("p", { class: "small muted" }, "Or search a category for free (no Claude): brands come from Wikidata, an open database of companies, and their websites are read for published emails."),
+    categoryRow, categoryStatus,
     lookupRow,
     leads.length ? el("div", {}, leads.map((l) => leadItem(root, l, ig && ig.facebookConnected))) : null);
 }
@@ -224,7 +242,8 @@ function leadItem(root, l, canLookUp) {
         safeUrl(l.website) ? el("a", { href: l.website, target: "_blank", rel: "noopener noreferrer", class: "small" }, l.website.replace(/^https?:\/\//, "")) : null,
         l.instagram ? el("span", { class: "badge" }, "@" + l.instagram) : null,
         l.source === "INSTAGRAM" ? el("span", { class: "badge" }, "Engaged with you") : null,
-        l.source === "LOOKUP" ? el("span", { class: "badge" }, "Looked up") : null),
+        l.source === "LOOKUP" ? el("span", { class: "badge" }, "Looked up") : null,
+        l.source === "CATEGORY" ? el("span", { class: "badge" }, l.searchQuery) : null),
       l.fitReason ? el("div", { class: "detail" }, l.fitReason) : null,
       l.igCheckedAt ? el("div", { class: "detail" }, icon("camera"), " " + [l.igFollowers != null ? compactNum(l.igFollowers) + " followers" : null,
         l.igBio, l.igPartners ? "Works with " + l.igPartners.split(",").map((h) => "@" + h).join(", ") : null].filter(Boolean).join(" · ")) : null,
@@ -237,6 +256,13 @@ function leadItem(root, l, canLookUp) {
         showDraft(made);
       }, "Pitch drafted. Review it in Drafts") }, "Draft pitch"),
       el("button", { class: "small", onclick: () => contactEdit.classList.toggle("hidden") }, "Edit contact"),
+      !l.contactEmail && safeUrl(l.website) ? el("button", { class: "small", title: "Reads the brand's contact, partnerships and press pages for a published email. Free, no Claude.",
+        onclick: action(async (e) => {
+          e.currentTarget.textContent = "Reading website…";
+          const r = await api("POST", "/api/leads/" + l.id + "/website");
+          toast(r.message);
+          renderOutreach(root);
+        }) }, "Find contacts on website") : null,
       canLookUp && l.instagram ? el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/leads/" + l.id + "/instagram"); renderOutreach(root);
       }, "Instagram details updated") }, l.igCheckedAt ? "Refresh Instagram" : "Check Instagram") : null,

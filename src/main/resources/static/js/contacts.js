@@ -282,7 +282,19 @@ async function brandContactsCard(brandId) {
           load();
         }, "Contact added")(e);
       } }, "Add person")));
-    body.appendChild(el("p", { class: "small muted" }, "New pitches go to the top person who can be emailed."));
+    const find = el("button", { class: "small", title: "Reads the brand's own contact, partnerships and press pages for published emails. Free, no Claude.",
+      onclick: action(async () => {
+        find.textContent = "Reading website…";
+        try {
+          const r = await api("POST", "/api/contacts/brand/" + brandId + "/website");
+          toast(r.message);
+          await load();
+        } finally {
+          find.textContent = "Find contacts on website";
+        }
+      }) }, "Find contacts on website");
+    body.appendChild(el("div", { class: "row" }, find,
+      el("span", { class: "small muted" }, "New pitches go to the top person who can be emailed.")));
   }
   await load();
   return box;
