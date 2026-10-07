@@ -30,7 +30,8 @@ public class Suppressions {
         return find(email).isPresent();
     }
 
-    /** Adds an address (or a bare domain) to the list. Keeps the first reason when it is already there. */
+    /** Adds an address (or a bare domain) to the list. Keeps the first reason when it is already there, except that
+     * "forget me" always wins, since it also stops the address being collected again. */
     public Suppression add(String emailOrDomain, Suppression.Reason reason) {
         String v = emailOrDomain.strip().toLowerCase(java.util.Locale.ROOT);
         boolean domain = !v.contains("@");
@@ -39,14 +40,21 @@ public class Suppressions {
             if (clean != null) v = clean;
         }
         String value = v;
-        return repo.findByValue(value).orElseGet(() -> {
-            Suppression s = new Suppression();
-            s.value = value;
-            s.kind = domain ? Suppression.Kind.DOMAIN : Suppression.Kind.EMAIL;
-            s.reason = reason;
-            s.addedAt = OffsetDateTime.now();
-            return repo.save(s);
-        });
+        Optional<Suppression> existing = repo.findByValue(value);
+        if (existing.isPresent()) {
+            Suppression s = existing.get();
+            if (reason == Suppression.Reason.FORGET_ME && s.reason != reason) {
+                s.reason = reason;
+                return repo.save(s);
+            }
+            return s;
+        }
+        Suppression s = new Suppression();
+        s.value = value;
+        s.kind = domain ? Suppression.Kind.DOMAIN : Suppression.Kind.EMAIL;
+        s.reason = reason;
+        s.addedAt = OffsetDateTime.now();
+        return repo.save(s);
     }
 
     public static String explain(Suppression s) {

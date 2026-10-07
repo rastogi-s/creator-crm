@@ -53,7 +53,7 @@ public final class Emails {
             e = local + "@" + domain;
         }
         if (JUNK_LOCAL.contains(local) || local.startsWith("noreply") || local.startsWith("no-reply")) return null;
-        if (JUNK_DOMAINS.contains(domain) || domain.endsWith(".wixpress.com")) return null;
+        if (JUNK_DOMAINS.contains(domain) || domain.endsWith(".wixpress.com") || domain.endsWith(".sentry.io")) return null;
         // Image names that look like addresses: logo@2x.png
         if (domain.matches(".*\\.(png|jpe?g|gif|webp|svg|avif|css|js)$")) return null;
         // Long hex ids are tracking addresses, not people

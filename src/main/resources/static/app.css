@@ -653,3 +653,18 @@ select { max-width: 100%; text-overflow: ellipsis; }
 body.practice .topbar { box-shadow: inset 0 4px 0 var(--warn); }
 .update-banner.practice-banner { order: 8; }
 .practice-card .row { flex-wrap: wrap; gap: .5rem; align-items: center; }
+
+/* Brand contacts: one ranked person per row; the score badge takes its tone's colour. */
+.contact-row { display: flex; gap: .7rem; align-items: flex-start; padding: .65rem 0; border-top: 1px solid var(--border); }
+.contact-list .contact-row:first-child, .card > div > .contact-row:first-child { border-top: 0; }
+.contact-row .rank { flex: none; min-width: 2.2rem; text-align: center; padding: .2rem .35rem; border-radius: 8px; font-weight: 700;
+  font-variant-numeric: tabular-nums; background: var(--tone-soft); color: var(--tone); }
+.contact-row .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.contact-row .actions { flex: none; display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+.contact-row.stopped .who { opacity: .65; }
+.contact-row .warn { color: var(--warn); }
+@media (max-width: 600px) {
+  .contact-row { flex-wrap: wrap; }
+  .contact-row .who { flex-basis: calc(100% - 3rem); }
+  .contact-row .actions { flex-basis: 100%; justify-content: flex-start; padding-left: 2.9rem; }
+}
