@@ -288,6 +288,9 @@ public class CampaignService {
         if (personalise && !claudeReady) {
             throw new IllegalStateException("Personalise needs Claude connected in Settings. Turn it off to use the template on its own.");
         }
+        if (pick(filterOf(l)).isEmpty()) {
+            throw new IllegalStateException("No brands on " + l.name + " can be pitched right now. Edit the list to take in more people.");
+        }
         Campaign c = new Campaign();
         c.name = clip(name == null || name.isBlank() ? t.name + " · " + l.name : name.strip(), 120);
         c.listId = l.id;
@@ -452,7 +455,8 @@ public class CampaignService {
         d = draftService.edit(draftId, subject, body);
         d.body = CampaignFooter.ensure(d.body, settings.creatorName(), settings.campaignAddress());
         Draft check = d;
-        draftService.sendBlockedReason(check).ifPresent(reason -> { throw new IllegalStateException(reason); });
+        // Gmail being disconnected only holds the queue; the do-not-email list is final.
+        draftService.doNotEmailReason(check).ifPresent(reason -> { throw new IllegalStateException(reason); });
         String blanks = Placeholders.message(d.body);
         if (blanks != null) throw new IllegalStateException(blanks);
         if (d.type == DraftType.PITCH && (d.subject == null || d.subject.isBlank())) throw new IllegalStateException("Add a subject line");

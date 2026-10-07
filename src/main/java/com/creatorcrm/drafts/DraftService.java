@@ -379,11 +379,8 @@ public class DraftService {
 
     public Optional<String> sendBlockedReason(Draft d) {
         if (practice) return Optional.empty(); // nothing really goes out, so nothing can stop it
-        if (d.channel == Platform.EMAIL && OUTREACH.contains(d.type)) {
-            Optional<String> stop = Emails.findAll(d.toAddress).stream().map(suppressions::whyNot)
-                    .flatMap(Optional::stream).findFirst();
-            if (stop.isPresent()) return stop;
-        }
+        Optional<String> stop = doNotEmailReason(d);
+        if (stop.isPresent()) return stop;
         ChannelConnector c = channels.get(d.channel);
         if (c == null || !c.isConnected()) return Optional.of((d.channel == Platform.EMAIL ? "Gmail" : d.channel == Platform.INSTAGRAM ? "Instagram" : "This account")
                 + " isn't connected, so this can't be sent from here. Connect it in Settings, or copy it and press I sent it myself.");
@@ -392,6 +389,12 @@ public class DraftService {
                         .filter(m -> m.direction == Direction.INBOUND).map(m -> m.sentAt)
                         .reduce((a, x) -> x).orElse(null);
         return c.sendBlockedReason(d, lastInbound);
+    }
+
+    /** Why this outreach email must never go out (her do-not-email list), whatever else is connected. */
+    public Optional<String> doNotEmailReason(Draft d) {
+        if (practice || d.channel != Platform.EMAIL || !OUTREACH.contains(d.type)) return Optional.empty();
+        return Emails.findAll(d.toAddress).stream().map(suppressions::whyNot).flatMap(Optional::stream).findFirst();
     }
 
     /** Human-approved send of one specific draft, optionally with edits. */

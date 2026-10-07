@@ -10,6 +10,7 @@ import com.creatorcrm.domain.ContactList;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftStatus;
 import com.creatorcrm.domain.PitchTemplate;
+import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.repo.DraftRepo;
@@ -51,7 +52,7 @@ public class CampaignsController {
 
     /** Everything the Campaigns page shows at the top: is it sending, how much today, and what's next. */
     public record Overview(String pausedReason, String pausedAt, long sentToday, int allowance, int cap, boolean warmup,
-                           OffsetDateTime nextSendAt, boolean addressSet, String address, boolean claudeReady,
+                           OffsetDateTime nextSendAt, String heldBecause, boolean addressSet, String address, boolean claudeReady,
                            List<QueuedEmail> queue, List<CampaignService.CampaignView> campaigns,
                            List<CampaignService.ListView> lists, List<PitchTemplate> templates, Map<String, String> fields) {}
 
@@ -63,10 +64,11 @@ public class CampaignsController {
     private final OpportunityRepo opportunities;
     private final WorkflowEngine workflow;
     private final LlmClient llm;
+    private final DraftService draftService;
 
     public CampaignsController(CampaignService campaigns, CampaignState state, OpeningLines openingLines,
                                SettingsService settings, DraftRepo drafts, OpportunityRepo opportunities,
-                               WorkflowEngine workflow, LlmClient llm) {
+                               WorkflowEngine workflow, LlmClient llm, DraftService draftService) {
         this.campaigns = campaigns;
         this.state = state;
         this.openingLines = openingLines;
@@ -75,18 +77,22 @@ public class CampaignsController {
         this.opportunities = opportunities;
         this.workflow = workflow;
         this.llm = llm;
+        this.draftService = draftService;
     }
 
     @GetMapping
     public Overview overview() {
-        List<QueuedEmail> queue = drafts.findByStatusAndApprovedAtNotNullOrderByApprovedAtAscIdAsc(DraftStatus.PENDING).stream()
+        List<Draft> queued = drafts.findByStatusAndApprovedAtNotNullOrderByApprovedAtAscIdAsc(DraftStatus.PENDING);
+        // e.g. Gmail isn't connected: approved emails wait until it is
+        String held = queued.isEmpty() ? null : draftService.sendBlockedReason(queued.get(0)).orElse(null);
+        List<QueuedEmail> queue = queued.stream()
                 .map(d -> new QueuedEmail(d.id, d.opportunityId, opportunities.findById(d.opportunityId).map(workflow::brandName).orElse(""),
                         d.toAddress, d.type.name(), d.subject, d.approvedAt))
                 .toList();
         String address = settings.campaignAddress();
         return new Overview(state.pausedReason().orElse(null), state.pausedAt().orElse(null), state.sentToday(),
                 state.dailyAllowance(), settings.campaignDailyCap(), settings.campaignWarmup(),
-                state.nextSendAt().filter(t -> t.isAfter(OffsetDateTime.now())).orElse(null), !address.isBlank(), address,
+                state.nextSendAt().filter(t -> t.isAfter(OffsetDateTime.now())).orElse(null), held, !address.isBlank(), address,
                 llm.isConfigured(), queue, campaigns.campaigns(), campaigns.lists(), campaigns.templates(), MergeFields.FIELDS);
     }
 

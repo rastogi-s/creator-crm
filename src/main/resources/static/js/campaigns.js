@@ -93,6 +93,8 @@ function sendingCard(o, redraw) {
   box.appendChild(el("p", { class: "small muted" }, o.queue.length + (o.queue.length === 1 ? " email is" : " emails are") + " approved and waiting"
     + (o.nextSendAt && !o.pausedReason ? "; the next can go " + minutesUntil(o.nextSendAt) : "")
     + ". Each goes on a weekday between 9 and 5 where the brand is."));
+  if (o.heldBecause) box.appendChild(el("div", { class: "alert warn" }, "On hold: " + o.heldBecause.split(". ")[0]
+    + ". They'll go out once that's fixed."));
   box.appendChild(el("ul", { class: "campaign-queue" }, o.queue.slice(0, 50).map((q) => el("li", { class: "row" },
     el("div", { class: "spacer" }, el("strong", {}, q.brand), " ", el("span", { class: "small muted" }, (q.type === "FOLLOW_UP" ? "Follow-up to " : "Pitch to ") + q.to)),
     el("button", { class: "small", title: "Take it out of the queue and back to Drafts", onclick: action(async () => {
@@ -186,8 +188,8 @@ function newCampaignCard(o, redraw) {
     el("p", { class: "small muted" }, o.claudeReady
       ? "Uses Claude Haiku in a half-price overnight batch, roughly a tenth of a cent per brand. Off: the template only, no Claude at all."
       : "Needs Claude connected in Settings. The template on its own works without it."),
-    el("p", { class: "small muted" }, "Each brand gets one email, to its best-ranked person you can email. Brands you already have a deal "
-      + "with, brands another campaign is pitching, and anyone on your do-not-email list are left out. About two days of pitches "
+    el("p", { class: "small muted" }, "Each brand gets one email, to its best-ranked person you can email. Brands another campaign is "
+      + "pitching and anyone on your do-not-email list are always left out, and brands you have a deal with unless the list says otherwise. About two days of pitches "
       + "are written at a time, and more each morning."),
     el("p", {}, el("button", { class: "primary", disabled: !o.addressSet, title: o.addressSet ? null : "Add your postal address under Sending rules first",
       onclick: action(async () => {

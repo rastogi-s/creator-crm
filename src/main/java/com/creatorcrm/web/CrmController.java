@@ -291,7 +291,7 @@ public class CrmController {
             String brand = opportunities.findById(d.opportunityId).map(workflow::brandName).orElse("");
             String campaign = d.campaignTargetId == null ? null : campaignTargets.findById(d.campaignTargetId)
                     .flatMap(t -> campaignRepo.findById(t.campaignId)).map(c -> c.name).orElse("Campaign");
-            out.add(new DraftView(d, brand, draftService.sendBlockedReason(d).orElse(null),
+            out.add(new DraftView(d, brand, (d.campaignTargetId != null ? draftService.doNotEmailReason(d) : draftService.sendBlockedReason(d)).orElse(null),
                     sendQueue.waiting(d.id).map(SendQueue.Waiting::sendAt).orElse(null),
                     sendQueue.failure(d.id).orElse(campaign != null ? d.error : null), campaign));
         }
