@@ -11,6 +11,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,17 +21,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Spreadsheet import and export for contacts. Import reads the columns Hunter, Apollo and most spreadsheets use,
- * shows what it would do first, then cleans and dedupes every row through {@link ContactService}.
+ * Spreadsheet import and export for contacts. Import guesses which column is which from the names Hunter, Apollo,
+ * Google, Outlook and most spreadsheets use, lets her change that, shows what it would do first, then cleans and dedupes
+ * every row through {@link ContactService}. {@link ContactFiles} turns other files (Excel, contact cards, pictures)
+ * into the same grid.
  */
 @Service
 public class ContactCsv {
     public static final int MAX_ROWS = 20_000;
 
-    /** Where an imported list came from. Lists bought from a finder service stay out of anything shared. */
+    /**
+     * Where an imported list came from. Lists bought from a finder service, or bought or got from someone else, stay
+     * out of anything shared.
+     */
     public enum Origin {
-        OWN(ContactSource.Kind.IMPORT), HUNTER(ContactSource.Kind.HUNTER), APOLLO(ContactSource.Kind.APOLLO),
-        OTHER_FINDER(ContactSource.Kind.FINDER);
+        OWN(ContactSource.Kind.IMPORT), THIRD_PARTY(ContactSource.Kind.THIRD_PARTY), HUNTER(ContactSource.Kind.HUNTER),
+        APOLLO(ContactSource.Kind.APOLLO), OTHER_FINDER(ContactSource.Kind.FINDER);
 
         final ContactSource.Kind kind;
 
@@ -42,27 +48,42 @@ public class ContactCsv {
     public record Row(int line, String brand, String website, String email, String name, String title, Role role,
                       String phone, String linkedin, String instagram, String action, String note) {}
 
-    public record Preview(int added, int merged, int newBrands, int skipped, List<Row> rows) {}
+    /** {@code mapping}: which column each field was read from (field → column number, from 0). */
+    public record Preview(int added, int merged, int newBrands, int skipped, List<Row> rows, Map<String, Integer> mapping) {}
+
+    /**
+     * A file read as a grid. {@code firstLine} is the line number of the first row (2 below a header row), so skipped
+     * rows can be named the way she sees them in Excel.
+     */
+    public record Table(List<String> headers, List<List<String>> rows, int firstLine) {}
+
+    /** The fields a column can be read as. "first" and "last" are joined into the name. */
+    public static final List<String> FIELDS = List.of("email", "name", "first", "last", "title", "brand", "website", "role",
+            "phone", "instagram", "linkedin");
 
     private static final Map<String, String> COLUMNS = new HashMap<>();
 
     static {
-        for (String a : List.of("brand", "company", "company name", "organization", "organisation", "account name", "brand name"))
+        for (String a : List.of("brand", "company", "company name", "organization", "organisation", "account name", "brand name",
+                "organization 1 - name", "business", "employer"))
             COLUMNS.put(a, "brand");
-        for (String a : List.of("website", "domain", "company domain", "company website", "url", "site"))
+        for (String a : List.of("website", "domain", "company domain", "company website", "url", "site", "web page", "web site",
+                "website 1 - value", "homepage"))
             COLUMNS.put(a, "website");
-        for (String a : List.of("email", "email address", "work email", "e-mail", "contact email", "business email"))
+        for (String a : List.of("email", "email address", "work email", "e-mail", "contact email", "business email",
+                "e-mail address", "e-mail 1 - value", "email 1", "e-mail 1", "email 1 - value", "mail", "emails"))
             COLUMNS.put(a, "email");
-        for (String a : List.of("name", "full name", "contact name", "contact")) COLUMNS.put(a, "name");
-        COLUMNS.put("first name", "first");
-        COLUMNS.put("firstname", "first");
-        COLUMNS.put("last name", "last");
-        COLUMNS.put("lastname", "last");
-        for (String a : List.of("title", "job title", "position", "job position")) COLUMNS.put(a, "title");
+        for (String a : List.of("name", "full name", "contact name", "contact", "display name", "person")) COLUMNS.put(a, "name");
+        for (String a : List.of("first name", "firstname", "given name", "first")) COLUMNS.put(a, "first");
+        for (String a : List.of("last name", "lastname", "family name", "surname", "last")) COLUMNS.put(a, "last");
+        for (String a : List.of("title", "job title", "position", "job position", "organization 1 - title", "designation", "job"))
+            COLUMNS.put(a, "title");
         COLUMNS.put("role", "role");
-        for (String a : List.of("phone", "phone number", "mobile", "work phone", "direct phone")) COLUMNS.put(a, "phone");
+        for (String a : List.of("phone", "phone number", "mobile", "work phone", "direct phone", "business phone", "mobile phone",
+                "phone 1 - value", "telephone", "tel", "cell"))
+            COLUMNS.put(a, "phone");
         for (String a : List.of("linkedin", "linkedin url", "person linkedin url", "linkedin profile")) COLUMNS.put(a, "linkedin");
-        for (String a : List.of("instagram", "instagram handle", "ig")) COLUMNS.put(a, "instagram");
+        for (String a : List.of("instagram", "instagram handle", "ig", "instagram url", "insta")) COLUMNS.put(a, "instagram");
     }
 
     private final ContactService contacts;
@@ -80,14 +101,28 @@ public class ContactCsv {
         this.suppressions = suppressions;
     }
 
-    /** What importing would do, row by row. Nothing is saved. */
+    /** What importing a CSV would do, row by row, with the columns guessed from their names. Nothing is saved. */
     public Preview preview(String csv) {
-        return plan(csv);
+        Table t = table(parse(csv == null ? "" : csv));
+        return preview(t, guessMapping(t));
     }
 
     @Transactional
     public Preview importCsv(String csv, Origin origin) {
-        Preview p = plan(csv);
+        Table t = table(parse(csv == null ? "" : csv));
+        return importTable(t, guessMapping(t), origin, null);
+    }
+
+    /** What importing would do with these columns. Nothing is saved. */
+    public Preview preview(Table t, Map<String, Integer> mapping) {
+        return plan(t, mapping);
+    }
+
+    /** Saves every usable row. {@code fileName} is kept as where the contacts came from. */
+    @Transactional
+    public Preview importTable(Table t, Map<String, Integer> mapping, Origin origin, String fileName) {
+        Preview p = plan(t, mapping);
+        String from = blank(fileName) ? null : "file:" + fileName.strip();
         Map<String, Long> created = new HashMap<>();
         Set<Long> touched = new HashSet<>();
         for (Row r : p.rows()) {
@@ -109,38 +144,90 @@ public class ContactCsv {
             contacts.claimDomain(brandId, Emails.domainOfUrl(r.website()));
             Long id = brandId;
             contacts.save(id, new ContactService.Found(r.email(), r.name(), r.title(), r.role(), r.phone(), r.linkedin(),
-                    r.instagram(), null, origin.kind, null)).ifPresent(c -> touched.add(c.brandId));
+                    r.instagram(), null, origin.kind, from)).ifPresent(c -> touched.add(c.brandId));
         }
         touched.forEach(contacts::refreshPrimary);
         return p;
     }
 
-    private Preview plan(String csv) {
-        List<List<String>> table = parse(csv == null ? "" : csv);
-        if (table.isEmpty()) throw new IllegalArgumentException("That file is empty");
-        if (table.size() - 1 > MAX_ROWS) throw new IllegalArgumentException("That's more than " + MAX_ROWS + " rows. Split it into smaller files.");
-        List<String> head = table.get(0);
-        Map<String, Integer> col = new HashMap<>();
-        for (int i = 0; i < head.size(); i++) {
-            String k = COLUMNS.get(head.get(i).strip().toLowerCase(Locale.ROOT).replace('_', ' '));
+    /**
+     * A grid with its header row, or with made-up headers ("Column 1") when the first row already holds an email
+     * address, as in a list copied without its headings.
+     */
+    public static Table table(List<List<String>> raw) {
+        List<List<String>> rows = new ArrayList<>(raw);
+        rows.removeIf(r -> r.stream().allMatch(c -> c == null || c.isBlank()));
+        if (rows.isEmpty()) throw new IllegalArgumentException("That file is empty");
+        int width = rows.stream().mapToInt(List::size).max().orElse(0);
+        List<String> first = rows.get(0);
+        boolean headerless = first.stream().anyMatch(c -> Emails.IN_TEXT.matcher(c == null ? "" : c).find());
+        List<String> headers = new ArrayList<>();
+        for (int i = 0; i < width; i++) {
+            String h = headerless || i >= first.size() || first.get(i) == null ? "" : first.get(i).strip();
+            headers.add(h.isEmpty() ? "Column " + (i + 1) : h);
+        }
+        List<List<String>> data = headerless ? rows : rows.subList(1, rows.size());
+        if (data.size() > MAX_ROWS) throw new IllegalArgumentException("That's more than " + MAX_ROWS + " rows. Split it into smaller files.");
+        return new Table(headers, new ArrayList<>(data), headerless ? 1 : 2);
+    }
+
+    /** Which column holds what, from the column names; the email column is found by its contents if its name isn't known. */
+    public static Map<String, Integer> guessMapping(Table t) {
+        Map<String, Integer> col = new LinkedHashMap<>();
+        for (int i = 0; i < t.headers().size(); i++) {
+            String k = COLUMNS.get(headerKey(t.headers().get(i)));
             if (k != null) col.putIfAbsent(k, i);
         }
-        if (!col.containsKey("email")) throw new IllegalArgumentException("Couldn't find an Email column. Name one column \"Email\".");
+        if (!col.containsKey("email")) {
+            int best = -1, bestCount = 0;
+            for (int i = 0; i < t.headers().size(); i++) {
+                int count = 0;
+                for (List<String> r : t.rows().subList(0, Math.min(50, t.rows().size()))) {
+                    if (i < r.size() && r.get(i) != null && Emails.clean(r.get(i)) != null) count++;
+                }
+                if (count > bestCount) {
+                    best = i;
+                    bestCount = count;
+                }
+            }
+            if (best >= 0) {
+                int emailCol = best;
+                col.values().removeIf(i -> i == emailCol); // "Contact" read as a name column, but it holds the emails
+                col.put("email", emailCol);
+            }
+        }
+        return col;
+    }
+
+    static String headerKey(String h) {
+        return h == null ? "" : h.strip().toLowerCase(Locale.ROOT).replace('_', ' ').replaceAll("\\s+", " ").replaceFirst(":$", "");
+    }
+
+    private Preview plan(Table t, Map<String, Integer> mapping) {
+        Map<String, Integer> col = new LinkedHashMap<>();
+        if (mapping != null) {
+            mapping.forEach((field, i) -> {
+                if (i != null && i >= 0 && i < t.headers().size() && FIELDS.contains(field)) col.put(field, i);
+            });
+        }
+        if (!col.containsKey("email")) throw new IllegalArgumentException("Pick which column has the email addresses.");
+        if (t.rows().size() > MAX_ROWS) throw new IllegalArgumentException("That's more than " + MAX_ROWS + " rows. Split it into smaller files.");
 
         List<Row> rows = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         Set<String> newBrandKeys = new HashSet<>();
         int added = 0, merged = 0, skipped = 0;
-        for (int i = 1; i < table.size(); i++) {
-            List<String> t = table.get(i);
-            if (t.stream().allMatch(String::isBlank)) continue;
-            String raw = get(t, col, "email");
-            String name = get(t, col, "name");
-            if (blank(name)) name = (get(t, col, "first") + " " + get(t, col, "last")).strip();
-            String title = get(t, col, "title");
-            Role role = parseRole(get(t, col, "role"));
-            Row base = new Row(i + 1, get(t, col, "brand"), get(t, col, "website"), raw, name, title, role,
-                    get(t, col, "phone"), get(t, col, "linkedin"), get(t, col, "instagram"), "SKIP", null);
+        for (int i = 0; i < t.rows().size(); i++) {
+            List<String> r = t.rows().get(i);
+            if (r.stream().allMatch(c -> c == null || c.isBlank())) continue;
+            String raw = get(r, col, "email");
+            String name = get(r, col, "name");
+            if (blank(name)) name = (get(r, col, "first") + " " + get(r, col, "last")).strip();
+            String title = get(r, col, "title");
+            Role role = parseRole(get(r, col, "role"));
+            String instagram = get(r, col, "instagram").replaceFirst("(?i)^.*instagram\\.com/", "").replaceAll("[/?].*$", "");
+            Row base = new Row(t.firstLine() + i, get(r, col, "brand"), get(r, col, "website"), raw, name, title, role,
+                    get(r, col, "phone"), get(r, col, "linkedin"), instagram, "SKIP", null);
             String email = Emails.clean(raw);
             String note;
             String action;
@@ -180,7 +267,7 @@ public class ContactCsv {
             rows.add(new Row(base.line(), base.brand(), base.website(), email == null ? raw : email, name, title, role,
                     base.phone(), base.linkedin(), base.instagram(), action, note));
         }
-        return new Preview(added, merged, newBrandKeys.size(), skipped, rows);
+        return new Preview(added, merged, newBrandKeys.size(), skipped, rows, col);
     }
 
     /** The brand a row belongs to: the one that has the email, owns its domain or website, or has its name. */
@@ -247,12 +334,20 @@ public class ContactCsv {
         return "\"" + s.replace("\"", "\"\"") + "\"";
     }
 
-    /** RFC 4180 CSV: quoted cells, doubled quotes, line breaks inside quotes. Also reads semicolon-separated files. */
+    /** RFC 4180 CSV: quoted cells, doubled quotes, line breaks inside quotes. Also reads semicolon- and tab-separated files. */
     static List<List<String>> parse(String csv) {
         String text = csv.startsWith("﻿") ? csv.substring(1) : csv;
         int firstBreak = text.indexOf('\n');
         String firstLine = firstBreak < 0 ? text : text.substring(0, firstBreak);
-        char sep = firstLine.chars().filter(ch -> ch == ';').count() > firstLine.chars().filter(ch -> ch == ',').count() ? ';' : ',';
+        char sep = ',';
+        long most = firstLine.chars().filter(ch -> ch == ',').count();
+        for (char c : new char[] {';', '\t'}) {
+            long n = firstLine.chars().filter(ch -> ch == c).count();
+            if (n > most) {
+                sep = c;
+                most = n;
+            }
+        }
         List<List<String>> out = new ArrayList<>();
         List<String> row = new ArrayList<>();
         StringBuilder cell = new StringBuilder();
@@ -295,7 +390,7 @@ public class ContactCsv {
 
     private static String get(List<String> row, Map<String, Integer> col, String key) {
         Integer i = col.get(key);
-        return i == null || i >= row.size() ? "" : row.get(i).strip();
+        return i == null || i >= row.size() || row.get(i) == null ? "" : row.get(i).strip();
     }
 
     private static String n(String s) {

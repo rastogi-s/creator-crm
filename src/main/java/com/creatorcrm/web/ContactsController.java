@@ -1,6 +1,7 @@
 package com.creatorcrm.web;
 
 import com.creatorcrm.contacts.ContactCsv;
+import com.creatorcrm.contacts.ContactFiles;
 import com.creatorcrm.contacts.ContactService;
 import com.creatorcrm.contacts.GmailContacts;
 import com.creatorcrm.domain.Brand;
@@ -10,8 +11,11 @@ import com.creatorcrm.domain.ContactSource;
 import com.creatorcrm.domain.Suppression;
 import com.creatorcrm.repo.BrandRepo;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +36,16 @@ public class ContactsController {
     public record ContactInput(@Size(max = 320) String email, @Size(max = 200) String name, @Size(max = 200) String title,
                                Role role, @Size(max = 50) String phone, @Size(max = 2000) String notes) {}
 
-    public record CsvInput(@Size(max = 5_000_000) String csv, ContactCsv.Origin origin) {}
+    /**
+     * An import: either CSV text (columns guessed from their names), or a grid from {@code /import/read} with the
+     * columns she picked.
+     */
+    public record CsvInput(@Size(max = 5_000_000) String csv, ContactCsv.Origin origin, @Size(max = 200) List<String> headers,
+                           @Size(max = ContactCsv.MAX_ROWS) List<List<String>> rows, Integer firstLine,
+                           Map<String, Integer> mapping, @Size(max = 255) String fileName) {}
+
+    /** A file to read, as base64. {@code claude}: read a picture with Claude, after she saw the price. */
+    public record FileInput(@NotBlank @Size(max = 255) String name, @NotBlank @Size(max = 11_000_000) String data, boolean claude) {}
 
     public record MergeInput(Long keepBrandId, Long dropBrandId) {}
 
@@ -41,12 +54,14 @@ public class ContactsController {
     private final ContactService contacts;
     private final GmailContacts gmail;
     private final ContactCsv csv;
+    private final ContactFiles files;
     private final BrandRepo brands;
 
-    public ContactsController(ContactService contacts, GmailContacts gmail, ContactCsv csv, BrandRepo brands) {
+    public ContactsController(ContactService contacts, GmailContacts gmail, ContactCsv csv, ContactFiles files, BrandRepo brands) {
         this.contacts = contacts;
         this.gmail = gmail;
         this.csv = csv;
+        this.files = files;
         this.brands = brands;
     }
 
@@ -97,15 +112,34 @@ public class ContactsController {
         return contacts.merge(in.keepBrandId(), in.dropBrandId());
     }
 
+    /** Reads any file (spreadsheet, contact cards, PDF, picture) into a grid for the preview. Nothing is saved. */
+    @PostMapping("/import/read")
+    public ContactFiles.Read read(@Valid @RequestBody FileInput in) {
+        byte[] data;
+        try {
+            data = Base64.getDecoder().decode(in.data().replaceFirst("^data:[^,]*,", ""));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Couldn't read that file. Try again.");
+        }
+        return files.read(in.name(), data, in.claude());
+    }
+
     @PostMapping("/import/preview")
     public ContactCsv.Preview preview(@Valid @RequestBody CsvInput in) {
-        return csv.preview(in.csv());
+        if (in.rows() == null) return csv.preview(in.csv());
+        return csv.preview(table(in), in.mapping());
     }
 
     @PostMapping("/import")
     public ContactCsv.Preview importCsv(@Valid @RequestBody CsvInput in) {
         if (in.origin() == null) throw new IllegalArgumentException("Say where this list came from");
-        return csv.importCsv(in.csv(), in.origin());
+        if (in.rows() == null) return csv.importCsv(in.csv(), in.origin());
+        return csv.importTable(table(in), in.mapping(), in.origin(), in.fileName());
+    }
+
+    private static ContactCsv.Table table(CsvInput in) {
+        if (in.headers() == null || in.headers().isEmpty()) throw new IllegalArgumentException("That file has no columns");
+        return new ContactCsv.Table(in.headers(), in.rows(), in.firstLine() == null ? 1 : in.firstLine());
     }
 
     @GetMapping("/export.csv")

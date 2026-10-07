@@ -651,6 +651,68 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "contact-import"(page) {
+    const { say, point, click } = helpers(page);
+    // A business card to "photograph", drawn off camera.
+    const studio = await page.context().browser().newPage({ viewport: { width: 700, height: 400 } });
+    await studio.setContent(`<body style="margin:0;display:grid;place-items:center;height:100vh;background:#d6d3ce;font-family:Georgia,serif">
+      <div style="width:560px;height:300px;background:#fffdf7;border-radius:14px;box-shadow:0 8px 24px #0003;padding:36px 44px;box-sizing:border-box">
+      <div style="letter-spacing:.2em;color:#4d7c0f;font:700 18px system-ui">SUNLEAF BOTANICS</div>
+      <div style="font-size:30px;margin-top:34px">Maya Chen</div><div style="color:#555">Influencer Partnerships Manager</div>
+      <div style="margin-top:22px;font:15px/1.6 system-ui;color:#333">maya.chen@sunleafbotanics.com<br>+1 (415) 555-0142 · sunleafbotanics.com · @sunleafbotanics</div>
+      </div></body>`);
+    const cardPng = await studio.screenshot();
+    await studio.close();
+
+    await page.goto(BASE + "/#contacts");
+    const open = page.getByRole("button", { name: "Import contacts" });
+    await open.waitFor();
+    await say("You can now import contacts from almost any file, even a photo of a business card.", 3800);
+    await click(open);
+    const box = page.locator(".card", { has: page.getByRole("heading", { name: "Import contacts" }) });
+    await point(box.locator("input[type=file]"));
+    await say("Excel, CSV, contact cards from your phone, PDFs and pictures all work.", 3800);
+    await box.locator("input[type=file]").setInputFiles({ name: "fair-contacts.csv", mimeType: "text/csv", buffer: Buffer.from(
+      "Who,Company,Reach me at,Notes\nLeah Grant,Dewdrop Skin,leah@dewdrop.example,Met at the beauty fair\n"
+      + "Omar Haddad,Tidepool Swim,omar@tidepoolswim.example,Wants UGC\nPress team,Tidepool Swim,press@tidepoolswim.example,\n") });
+    const grid = box.locator(".import-grid");
+    await grid.waitFor();
+    await point(grid.locator("th").nth(2));
+    await say("It works out which column is which. The emails were found even under an odd heading.", 4200);
+    const who = grid.locator("th").nth(0).locator("select");
+    await point(who);
+    await say("Change any column it got wrong. This one is the person's name.", 3600);
+    await who.selectOption("name");
+    await page.waitForTimeout(900);
+    await point(box.getByText(/new, .* skipped/));
+    await say("You see what will happen before anything is saved: who's new, who's already there, what's skipped.", 4400);
+    const origin = box.getByLabel("Where these contacts came from");
+    await point(origin);
+    await say("Say where the list came from. Lists you bought or got from someone else are never shared.", 4200);
+    await origin.selectOption("OWN");
+    await click(box.getByRole("button", { name: /^Import \d+ contacts?$/ }));
+    await say("Done. They're ranked with everyone else, no duplicates.", 3200);
+
+    await click(page.getByRole("button", { name: "Import contacts" }));
+    const again = page.locator(".card", { has: page.getByRole("heading", { name: "Import contacts" }) });
+    await again.locator("input[type=file]").setInputFiles({ name: "business-card.png", mimeType: "image/png", buffer: cardPng });
+    await say("Now a photo of a business card.", 2600);
+    const rows = again.locator(".import-grid input");
+    await rows.first().waitFor();
+    await point(again.locator(".import-grid"));
+    await say("Your laptop reads the card itself, for free, and fills in the name, title, email and phone.", 4400);
+    await say("Fix anything it read wrong right here before saving.", 3400);
+    const claude = again.getByRole("button", { name: /Read it with Claude/ });
+    await point(claude);
+    await say("If it misses something, Claude can read it instead. You see the price first, usually under a cent.", 4600);
+    await again.getByLabel("Where these contacts came from").selectOption("OWN");
+    await click(again.getByRole("button", { name: /^Import 1 contact$/ }));
+    await page.locator(".contact-row", { hasText: "Maya Chen" }).first().waitFor();
+    await point(page.locator(".contact-row", { hasText: "Maya Chen" }).first());
+    await say("Maya from Sunleaf Botanics is saved, and Sunleaf is added as a brand.", 3800);
+    await say("", 600);
+  },
+
   async "safer-sending"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");
