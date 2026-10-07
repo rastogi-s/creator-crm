@@ -53,6 +53,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* Keep iPhone Safari from enlarging text by itself when the phone is turned sideways. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -171,7 +173,8 @@ button:disabled { opacity: .55; cursor: default; }
 .msg .email-box.clipped { max-height: 560px; }
 .msg .email-box.clipped::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; pointer-events: none;
   background: linear-gradient(rgba(255,255,255,0), #fff); }
-.msg .email-frame { display: block; width: 100%; height: 160px; border: 0; }
+/* iPhone Safari stretches a frame to the email's own width (often 600px+); 1px + min-width keeps it to the card. */
+.msg .email-frame { display: block; width: 1px; min-width: 100%; height: 160px; border: 0; }
 .msg .email-more { margin-top: .4rem; }
 .msg.focus { outline: 2px solid var(--accent); outline-offset: 2px; transition: outline-color .3s; }
 .task-about .brief { margin: .3rem 0 .2rem; font-size: .88rem; line-height: 1.4; overflow-wrap: anywhere; }
@@ -372,6 +375,13 @@ button.link:hover { background: none; color: var(--text); }
     background-repeat: no-repeat; background-position: .7rem center; background-size: 1rem;
   }
   #sync-btn { display: none; }
+  /* iPhone Safari zooms in on any box with text under 16px when she taps it, and stays zoomed, so the whole page
+     slides around under her finger. 16px boxes never trigger that zoom. */
+  input, select, textarea { font-size: 16px !important; }
+  /* Nothing may push the page wider than the screen, so a sideways swipe never slides the whole app. Wide tables and
+     chip rows keep their own sideways scroll inside their box. */
+  html { overflow-x: hidden; }
+  body { overflow-x: clip; }
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
