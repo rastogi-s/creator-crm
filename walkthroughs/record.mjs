@@ -522,6 +522,10 @@ const scenarios = {
     await say("Approved pitches go out a few minutes apart, on weekdays during the brand's working hours.", 4600);
     await say("If anyone at a brand replies, that brand gets nothing more. If someone says no thanks, they're never emailed again.", 5200);
     await say("", 600);
+    // Off camera: end the campaign so its drafts don't show up in the videos recorded after this one.
+    await page.evaluate(async () => {
+      for (const v of (await api("GET", "/api/campaigns")).campaigns) await api("POST", "/api/campaigns/" + v.campaign.id + "/end");
+    });
   },
 
   async "search"(page) {
