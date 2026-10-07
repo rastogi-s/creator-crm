@@ -18,6 +18,10 @@ public class Draft {
     public Long invoiceId;
     /** Set for a results recap: the campaign results PDF goes out attached. */
     public Long resultId;
+    /** Set for a campaign pitch or follow-up: approving it puts it in the slow send queue ({@code CampaignSender}). */
+    public Long campaignTargetId;
+    /** A campaign email she approved: waiting in the send queue. Null = still in Drafts for her. */
+    public OffsetDateTime approvedAt;
     @Enumerated(EnumType.STRING) public DraftType type;
     @Enumerated(EnumType.STRING) public Platform channel;
     public String toAddress;

@@ -25,6 +25,8 @@ import com.creatorcrm.llm.Intent;
 import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.DeadlineRepo;
+import com.creatorcrm.repo.CampaignRepo;
+import com.creatorcrm.repo.CampaignTargetRepo;
 import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.FollowUpRepo;
 import com.creatorcrm.repo.MessageRepo;
@@ -85,9 +87,11 @@ public class CrmController {
 
     /**
      * @param sendingAt when the draft goes out, while Send's undo window is open (null otherwise)
-     * @param sendError why its last send failed after the undo window, if it did
+     * @param sendError why its last send failed after the undo window (or in the campaign queue), if it did
+     * @param campaign the campaign it belongs to: it's approved for the slow send queue instead of sent
      */
-    public record DraftView(Draft draft, String brand, String blockedReason, OffsetDateTime sendingAt, String sendError) {}
+    public record DraftView(Draft draft, String brand, String blockedReason, OffsetDateTime sendingAt, String sendError,
+                            String campaign) {}
 
     /** Send was pressed: the draft goes out at {@code sendAt} unless she presses Undo first. */
     public record QueuedSend(Long draftId, OffsetDateTime sendAt, int undoSeconds) {}
@@ -129,6 +133,8 @@ public class CrmController {
     private final TaskExecutor executor;
     private final LeadScoring scoring;
     private final GmailLinks gmailLinks;
+    private final CampaignTargetRepo campaignTargets;
+    private final CampaignRepo campaignRepo;
 
     public CrmController(DigestService digest, OpportunityRepo opportunities, BrandRepo brands, TaskRepo tasks,
                          FollowUpRepo followUpRepo, DeadlineRepo deadlines, MessageRepo messages, DraftRepo drafts,
@@ -136,7 +142,10 @@ public class CrmController {
                          DraftService draftService, OutreachService outreach, IngestionService ingestion,
                          ScheduledJobs jobs, SettingsService settings,
                          @Qualifier("applicationTaskExecutor") TaskExecutor executor, LeadScoring scoring,
-                         GmailLinks gmailLinks, SendQueue sendQueue) {
+                         GmailLinks gmailLinks, SendQueue sendQueue, CampaignTargetRepo campaignTargets,
+                         CampaignRepo campaignRepo) {
+        this.campaignTargets = campaignTargets;
+        this.campaignRepo = campaignRepo;
         this.sendQueue = sendQueue;
         this.scoring = scoring;
         this.gmailLinks = gmailLinks;
@@ -278,9 +287,13 @@ public class CrmController {
     public List<DraftView> pendingDrafts() {
         List<DraftView> out = new ArrayList<>();
         for (Draft d : drafts.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING)) {
+            if (d.approvedAt != null) continue; // approved campaign email: waiting in the send queue, on the Campaigns page
             String brand = opportunities.findById(d.opportunityId).map(workflow::brandName).orElse("");
+            String campaign = d.campaignTargetId == null ? null : campaignTargets.findById(d.campaignTargetId)
+                    .flatMap(t -> campaignRepo.findById(t.campaignId)).map(c -> c.name).orElse("Campaign");
             out.add(new DraftView(d, brand, draftService.sendBlockedReason(d).orElse(null),
-                    sendQueue.waiting(d.id).map(SendQueue.Waiting::sendAt).orElse(null), sendQueue.failure(d.id).orElse(null)));
+                    sendQueue.waiting(d.id).map(SendQueue.Waiting::sendAt).orElse(null),
+                    sendQueue.failure(d.id).orElse(campaign != null ? d.error : null), campaign));
         }
         return out;
     }

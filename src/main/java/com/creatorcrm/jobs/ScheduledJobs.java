@@ -1,6 +1,8 @@
 package com.creatorcrm.jobs;
 
 import com.creatorcrm.calendar.CalendarSync;
+import com.creatorcrm.campaigns.CampaignSender;
+import com.creatorcrm.campaigns.CampaignService;
 import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.contacts.GmailContacts;
@@ -54,13 +56,18 @@ public class ScheduledJobs {
     private final CampaignResults results;
     private final SendQueue sendQueue;
     private final GmailContacts gmailContacts;
+    private final CampaignService campaigns;
+    private final CampaignSender campaignSender;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
                          PaymentReminders paymentReminders, WinBack winBack,
                          InstagramEngagementService instagramEngagement, CalendarSync calendar,
-                         CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts) {
+                         CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts,
+                         CampaignService campaigns, CampaignSender campaignSender) {
+        this.campaigns = campaigns;
+        this.campaignSender = campaignSender;
         this.gmailContacts = gmailContacts;
         this.results = results;
         this.sendQueue = sendQueue;
@@ -116,6 +123,11 @@ public class ScheduledJobs {
         }
         prepareMorning();
         if (settings.followupAutoSend()) autoSendFollowUps();
+        try {
+            campaignSender.morning(); // top up campaign pitches for today's send queue
+        } catch (RuntimeException e) {
+            log.warn("Could not prepare campaign pitches: {}", e.getMessage());
+        }
     }
 
     boolean morningDue(ZonedDateTime now) {
@@ -138,13 +150,13 @@ public class ScheduledJobs {
     public int prepareMorning() {
         int cold = followUps.markColdDeals(settings.today());
         int drafted = 0;
-        if (llm.isConfigured()) {
-            for (FollowUp f : followUps.dueOnOrBefore(settings.today())) {
-                try {
-                    if (drafts.draftForFollowUp(f).isPresent()) drafted++;
-                } catch (RuntimeException e) {
-                    log.warn("Could not draft follow-up {}: {}", f.id, e.getMessage());
-                }
+        for (FollowUp f : followUps.dueOnOrBefore(settings.today())) {
+            try {
+                // Campaign pitches are chased with their template's follow-up text, no Claude needed
+                if (campaigns.draftFollowUp(f)) drafted++;
+                else if (llm.isConfigured() && drafts.draftForFollowUp(f).isPresent()) drafted++;
+            } catch (RuntimeException e) {
+                log.warn("Could not draft follow-up {}: {}", f.id, e.getMessage());
             }
         }
         int reminders = paymentReminders.draftDue(settings.today());
@@ -164,6 +176,7 @@ public class ScheduledJobs {
         int sent = 0;
         for (Draft d : draftRepo.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING)) {
             if (d.type != DraftType.FOLLOW_UP || d.channel != Platform.EMAIL || d.followupId == null) continue;
+            if (d.campaignTargetId != null) continue; // campaign follow-ups go out through the slow send queue
             boolean stillDue = followUpRepo.findById(d.followupId)
                     .map(f -> f.status == FollowUpStatus.SCHEDULED && !f.scheduledDate.isAfter(today))
                     .orElse(false);
