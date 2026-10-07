@@ -1,6 +1,8 @@
 package com.creatorcrm.drafts;
 
 import com.creatorcrm.channels.ChannelConnector;
+import com.creatorcrm.contacts.Emails;
+import com.creatorcrm.contacts.Suppressions;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Attachment;
 import com.creatorcrm.domain.CampaignResult;
@@ -40,9 +42,11 @@ import com.creatorcrm.repo.OpportunityRepo;
 import com.creatorcrm.settings.SettingsService;
 import com.creatorcrm.workflow.WorkflowEngine;
 import java.time.OffsetDateTime;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -80,11 +84,14 @@ public class DraftService {
     @Value("${crm.practice:false}")
     boolean practice;
 
+    private final Suppressions suppressions;
+
     public DraftService(LlmClient llm, List<ChannelConnector> connectors, DraftRepo drafts,
                         OpportunityRepo opportunities, ConversationRepo conversations, MessageRepo messages,
                         BrandRepo brands, ActivityRepo activity, WorkflowEngine workflow, SettingsService settings,
                         LearningService learning, InvoiceRepo invoices, InvoicePdf invoicePdf,
-                        CampaignResultRepo results, ResultsPdf resultsPdf) {
+                        CampaignResultRepo results, ResultsPdf resultsPdf, Suppressions suppressions) {
+        this.suppressions = suppressions;
         this.results = results;
         this.resultsPdf = resultsPdf;
         this.invoices = invoices;
@@ -340,8 +347,16 @@ public class DraftService {
     }
 
     /** Why this draft can't be sent via API right now (e.g. outside Instagram's 24h window), if anything. */
+    /** Drafts that reach out first or chase, which must never go to someone on the do-not-email list. */
+    private static final Set<DraftType> OUTREACH = EnumSet.of(DraftType.PITCH, DraftType.REPITCH, DraftType.FOLLOW_UP);
+
     public Optional<String> sendBlockedReason(Draft d) {
         if (practice) return Optional.empty(); // nothing really goes out, so nothing can stop it
+        if (d.channel == Platform.EMAIL && OUTREACH.contains(d.type)) {
+            Optional<String> stop = Emails.findAll(d.toAddress).stream().map(suppressions::find)
+                    .flatMap(Optional::stream).map(Suppressions::explain).findFirst();
+            if (stop.isPresent()) return stop;
+        }
         ChannelConnector c = channels.get(d.channel);
         if (c == null || !c.isConnected()) return Optional.of((d.channel == Platform.EMAIL ? "Gmail" : d.channel == Platform.INSTAGRAM ? "Instagram" : "This account")
                 + " isn't connected, so this can't be sent from here. Connect it in Settings, or copy it and press I sent it myself.");

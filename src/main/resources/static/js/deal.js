@@ -143,6 +143,9 @@ async function openDeal(id, focusMessageId) {
            ["Still unknown", o.missingInfo], ["Next step", o.nextStep], ["Origin", pretty(o.origin)],
            ["Contact", d.brand && [d.brand.contactName, d.brand.contactEmail, d.brand.instagram && "@" + d.brand.instagram].filter(Boolean).join(" · ")]])));
 
+  // Everyone at the brand, ranked: who new pitches go to
+  if (d.brand && d.brand.id) drawer.appendChild(await brandContactsCard(d.brand.id));
+
   // Rate advisor: what to ask for while the deal is still being decided
   if (["NEW_LEAD", "AWAITING_MY_REPLY", "NEGOTIATING"].includes(o.status) && !["GIFTED", "AFFILIATE"].includes(o.compensation)) {
     const advice = await api("GET", "/api/opportunities/" + id + "/rate");

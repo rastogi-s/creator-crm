@@ -1,5 +1,23 @@
 [
   {
+    "version": "1.45.0",
+    "title": "Everyone at every brand, best person first",
+    "features": [
+      {
+        "id": "brand-contacts",
+        "title": "Brand contacts",
+        "body": "A brand can now have lots of people saved, not just one email. Brand contacts (under More, or in the sidebar on a laptop) lists everyone the app found in your brand emails, with job titles and phone numbers from their signatures. Each person gets a score: people who have replied to you rank highest, especially the ones who led to deals and answer fast, then partnerships and PR inboxes. New pitches go to the top person at the brand. Open any deal to see everyone at that brand and add someone.",
+        "tryIt": "#contacts"
+      },
+      {
+        "id": "contacts-clean",
+        "title": "No duplicates, and a do-not-email list",
+        "body": "The same email is never saved twice, and brands that share a website are flagged so you can merge them in one tap. Press Don't email on anyone and no pitch or follow-up can go to them again; if someone replies asking you to stop, that happens by itself. Forget deletes everything about a person. You can also import a spreadsheet (including Hunter or Apollo exports) and download everything as a CSV.",
+        "tryIt": "#contacts"
+      }
+    ]
+  },
+  {
     "version": "1.44.0",
     "title": "A Day summary that fits your screen",
     "features": [

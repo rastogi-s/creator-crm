@@ -1,7 +1,9 @@
 package com.creatorcrm.workflow;
 
+import com.creatorcrm.contacts.ContactService;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Brand;
+import com.creatorcrm.domain.ContactSource;
 import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.FollowUpStatus;
 import com.creatorcrm.domain.Enums.OpportunityStatus;
@@ -53,9 +55,11 @@ public class OutreachService {
     private final ActivityRepo activity;
     private final FollowUpEngine engine;
     private final SettingsService settings;
+    private final ContactService contacts;
 
     public OutreachService(BrandRepo brands, OpportunityRepo opportunities, FollowUpRepo followUps,
-                           ActivityRepo activity, FollowUpEngine engine, SettingsService settings) {
+                           ActivityRepo activity, FollowUpEngine engine, SettingsService settings, ContactService contacts) {
+        this.contacts = contacts;
         this.brands = brands;
         this.opportunities = opportunities;
         this.followUps = followUps;
@@ -89,6 +93,9 @@ public class OutreachService {
         if (blank(b.contactEmail)) b.contactEmail = r.contactEmail();
         if (blank(b.instagram)) b.instagram = r.instagram();
         b = brands.save(b);
+        if (!blank(r.contactEmail())) {
+            contacts.add(b.id, ContactService.Found.of(r.contactEmail(), r.contactName(), ContactSource.Kind.MANUAL, null));
+        }
 
         LocalDate pitched = r.pitchedAt() == null ? settings.today() : r.pitchedAt();
         Opportunity o = new Opportunity();

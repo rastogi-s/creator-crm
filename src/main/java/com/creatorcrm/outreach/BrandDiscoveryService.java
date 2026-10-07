@@ -1,9 +1,12 @@
 package com.creatorcrm.outreach;
 
 import com.creatorcrm.channels.instagram.BrandLookupService;
+import com.creatorcrm.contacts.ContactService;
+import com.creatorcrm.contacts.Emails;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.BrandLead;
+import com.creatorcrm.domain.ContactSource;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.DraftType;
@@ -58,9 +61,11 @@ public class BrandDiscoveryService {
     private final ActivityRepo activity;
     private final DraftService drafts;
     private final BrandLookupService lookup;
+    private final ContactService contacts;
 
     public BrandDiscoveryService(LlmClient llm, BrandLeadRepo leads, BrandRepo brands, OpportunityRepo opportunities,
-                                 ActivityRepo activity, DraftService drafts, BrandLookupService lookup) {
+                                 ActivityRepo activity, DraftService drafts, BrandLookupService lookup, ContactService contacts) {
+        this.contacts = contacts;
         this.lookup = lookup;
         this.llm = llm;
         this.leads = leads;
@@ -299,6 +304,10 @@ public class BrandDiscoveryService {
         if (b.contactEmail == null) b.contactEmail = lead.contactEmail;
         if (b.instagram == null) b.instagram = lead.instagram;
         b = brands.save(b);
+        contacts.claimDomain(b.id, Emails.domainOfUrl(lead.website));
+        if (lead.contactEmail != null) {
+            contacts.add(b.id, ContactService.Found.of(lead.contactEmail, null, ContactSource.Kind.LEAD, lead.contactSourceUrl));
+        }
 
         Opportunity o = new Opportunity();
         o.brandId = b.id;
