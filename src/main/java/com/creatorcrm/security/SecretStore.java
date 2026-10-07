@@ -24,6 +24,8 @@ public class SecretStore {
             if (n.startsWith("GOOGLE_") || n.startsWith("GMAIL_")) return "Gmail isn't connected yet. Connect it in Settings, Accounts.";
             if (n.startsWith("INSTAGRAM_")) return "Instagram isn't connected yet. Connect it in Settings, Accounts.";
             if (n.startsWith("FACEBOOK_")) return "Facebook isn't connected yet. Connect it in Settings, Advanced.";
+            if (name == SecretName.HUNTER_API_KEY) return "Hunter isn't connected yet. Add your Hunter key in Settings, Accounts, Contact finders.";
+            if (name == SecretName.APOLLO_API_KEY) return "Apollo isn't connected yet. Add your Apollo key in Settings, Accounts, Contact finders.";
             if (name == SecretName.BACKUP_PASSPHRASE) return "Choose a backup passphrase first, in Settings, App.";
             return "This needs setting up first, in Settings, Advanced.";
         }
