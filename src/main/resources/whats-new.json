@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.46.0",
+    "title": "Find contacts on a brand's own website",
+    "features": [
+      {
+        "id": "website-contacts",
+        "title": "Find contacts on website",
+        "body": "Press Find contacts on website on a brand suggestion, or under People at this brand on any deal, and the app reads the brand's own homepage and its contact, partnerships, press, about and wholesale pages for email addresses they publish. Every address is saved with the page it came from, and the best one (a partnerships or PR inbox before a general one) becomes who new pitches go to. Every night it also checks brands and suggestions that still have no contact. It's free and uses no Claude. It only reads public pages, a few seconds apart, never social media or anything behind a sign-in, and leaves alone any site that asks apps not to read it.",
+        "video": "website-contacts.webm",
+        "tryIt": "#outreach"
+      }
+    ]
+  },
+  {
     "version": "1.45.0",
     "title": "Everyone at every brand, best person first",
     "features": [

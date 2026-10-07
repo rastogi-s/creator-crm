@@ -237,6 +237,13 @@ function leadItem(root, l, canLookUp) {
         showDraft(made);
       }, "Pitch drafted. Review it in Drafts") }, "Draft pitch"),
       el("button", { class: "small", onclick: () => contactEdit.classList.toggle("hidden") }, "Edit contact"),
+      !l.contactEmail && safeUrl(l.website) ? el("button", { class: "small", title: "Reads the brand's contact, partnerships and press pages for a published email. Free, no Claude.",
+        onclick: action(async (e) => {
+          e.currentTarget.textContent = "Reading website…";
+          const r = await api("POST", "/api/leads/" + l.id + "/website");
+          toast(r.message);
+          renderOutreach(root);
+        }) }, "Find contacts on website") : null,
       canLookUp && l.instagram ? el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/leads/" + l.id + "/instagram"); renderOutreach(root);
       }, "Instagram details updated") }, l.igCheckedAt ? "Refresh Instagram" : "Check Instagram") : null,

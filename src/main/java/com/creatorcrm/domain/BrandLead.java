@@ -35,4 +35,6 @@ public class BrandLead {
     /** Creators the brand tagged in sponsored-looking posts, comma separated, without @. */
     public String igPartners;
     public OffsetDateTime igCheckedAt;
+    /** Last time the website was read for contact addresses; null = never. */
+    public OffsetDateTime websiteCheckedAt;
 }

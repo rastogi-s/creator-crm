@@ -7,6 +7,7 @@ crm:
     sync-cron: "-"
     morning-check-cron: "-"
     backup-check-cron: "-"
+    website-check-cron: "-"
   updates:
     check-cron: "-"
     local-video-dir: ${CRM_DEMO_VIDEOS:}   # the recorder points this at its output, so later videos can show earlier ones

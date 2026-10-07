@@ -578,6 +578,36 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "website-contacts"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    let lead = view.locator(".item", { hasText: "Trailmix Co" });
+    if (!(await lead.count())) {
+      const query = view.locator(".find-brands .query input");
+      await point(query);
+      await query.fill("snack brands that work with outdoor creators");
+      await click(view.getByRole("button", { name: "Find brands" }));
+      lead = view.locator(".item", { hasText: "Trailmix Co" });
+      await lead.waitFor();
+    }
+    await point(lead);
+    await say("Some brands don't come with an email. Trailmix Co is one of them.", 3800);
+    const find = lead.getByRole("button", { name: "Find contacts on website" });
+    await point(find);
+    await say("Press Find contacts on website. The app reads the brand's own contact, partnerships and press pages.", 4800);
+    await click(find);
+    lead = view.locator(".item", { hasText: "creators@trailmix.example" });
+    await lead.waitFor({ timeout: 30000 });
+    await point(lead.getByRole("link", { name: "(source)" }));
+    await say("It picks the partnerships address first, and links the page it came from.", 4200);
+    await say("It's free and uses no Claude. It only reads public pages, slowly, and skips sites that ask apps not to.", 5000);
+    await say("Every night it also checks brands and suggestions that still have no contact.", 4000);
+    await say("On a deal, the same button under People at this brand saves everyone the website lists.", 4400);
+    await say("", 600);
+  },
+
   async "drafts-inbox"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");
