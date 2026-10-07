@@ -53,6 +53,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* Keep iPhone Safari from enlarging text by itself when the phone is turned sideways. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -372,6 +374,9 @@ button.link:hover { background: none; color: var(--text); }
     background-repeat: no-repeat; background-position: .7rem center; background-size: 1rem;
   }
   #sync-btn { display: none; }
+  /* iPhone Safari zooms in on any box with text under 16px when she taps it, and stays zoomed, so the whole page
+     slides around under her finger. 16px boxes never trigger that zoom. */
+  input, select, textarea { font-size: 16px !important; }
   .tabs {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
