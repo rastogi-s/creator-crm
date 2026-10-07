@@ -1,5 +1,24 @@
 [
   {
+    "version": "1.47.0",
+    "title": "Find more people at a brand, and check emails before you send",
+    "features": [
+      {
+        "id": "contact-finders",
+        "title": "Find more people at this brand",
+        "body": "Open any deal and press Find more people: the app asks Hunter.io who works at that brand and adds them to People at this brand, ranked, with partnerships and PR people first. It uses no Claude. Hunter's free plan gives 50 credits a month (one per brand you look up), and the app never goes past that unless you raise the limit. Add your free Hunter key in Settings, Accounts, Contact finders, where you also see how many credits are left. An Apollo key can be added too, as a second finder.",
+        "video": "contact-finders.webm",
+        "tryIt": "#settings?finders"
+      },
+      {
+        "id": "email-checks",
+        "title": "Emails are checked before you send",
+        "body": "Press Check address on anyone to make sure the address exists (half a Hunter credit). Every night the app also checks for free that each brand can receive email at all. Addresses that don't exist are marked, drop to the bottom, and can never be pitched, so fewer emails bounce and your Gmail stays healthy. People who have replied to you count as checked. Addresses at brands that accept everything can't be proven, so automatic follow-ups skip them and wait for you to press Send.",
+        "tryIt": "#contacts"
+      }
+    ]
+  },
+  {
     "version": "1.45.0",
     "title": "Everyone at every brand, best person first",
     "features": [
