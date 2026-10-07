@@ -9,7 +9,7 @@
 const CONTACT_ROLES = { PARTNERSHIPS: "Partnerships", PR: "PR", MARKETING: "Marketing", FOUNDER: "Founder",
   GENERAL: "General inbox", SUPPORT: "Support", OTHER: "Other" };
 const CONTACT_SOURCES = { GMAIL: "your email", WEBSITE: "their website", HUNTER: "Hunter", APOLLO: "Apollo", FINDER: "a finder service",
-  IMPORT: "your spreadsheet", MANUAL: "you", LEAD: "brand research", GUESS: "a guess" };
+  IMPORT: "your spreadsheet", MANUAL: "typed in by you", LEAD: "brand research", GUESS: "a guess" };
 let contactsFilter = loadPrefs("contacts", { q: "", show: "all" });
 
 function contactRankTone(score) {
@@ -21,9 +21,9 @@ function contactRow(v, onChange, showBrand) {
   const c = v.contact;
   const stopped = !!v.doNotEmail || c.bounced || c.optedOut || c.verified === "INVALID";
   const who = c.name ? [el("strong", {}, c.name), " ", el("span", { class: "muted" }, c.email)] : [el("strong", {}, c.email)];
-  const facts = [CONTACT_ROLES[c.role] || pretty(c.role), c.title, c.phone,
+  const facts = [c.role === "OTHER" ? null : CONTACT_ROLES[c.role] || pretty(c.role), c.title, c.phone,
     c.lastRepliedAt ? "last replied " + fmtDate(c.lastRepliedAt) : null,
-    v.sources.length ? "found in " + v.sources.map((s) => CONTACT_SOURCES[s] || pretty(s)).join(", ") : null].filter(Boolean);
+    v.sources.length ? "from " + v.sources.map((s) => CONTACT_SOURCES[s] || pretty(s)).join(", ") : null].filter(Boolean);
   return el("div", { class: "contact-row" + (stopped ? " stopped" : "") },
     el("span", { class: "rank tone-" + contactRankTone(c.score), title: "Rank score out of 100" }, String(c.score)),
     el("div", { class: "who" },
