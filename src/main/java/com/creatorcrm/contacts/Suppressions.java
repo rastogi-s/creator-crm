@@ -1,6 +1,8 @@
 package com.creatorcrm.contacts;
 
+import com.creatorcrm.domain.BrandContact;
 import com.creatorcrm.domain.Suppression;
+import com.creatorcrm.repo.BrandContactRepo;
 import com.creatorcrm.repo.SuppressionRepo;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -10,9 +12,24 @@ import org.springframework.stereotype.Component;
 @Component
 public class Suppressions {
     private final SuppressionRepo repo;
+    private final BrandContactRepo contacts;
 
-    public Suppressions(SuppressionRepo repo) {
+    public Suppressions(SuppressionRepo repo, BrandContactRepo contacts) {
         this.repo = repo;
+        this.contacts = contacts;
+    }
+
+    /**
+     * Why outreach to this address must not go out, in her words: it's on the do-not-email list, or a check found
+     * the address doesn't exist. Empty when it may be sent.
+     */
+    public Optional<String> whyNot(String email) {
+        Optional<String> listed = find(email).map(Suppressions::explain);
+        if (listed.isPresent()) return listed;
+        String e = Emails.clean(email);
+        if (e == null) return Optional.empty();
+        return contacts.findByEmail(e).filter(c -> c.verified == BrandContact.Verified.INVALID)
+                .map(c -> c.email + " doesn't exist (the address check failed), so this can't be sent. Pick another contact at the brand.");
     }
 
     /** Why this address must not get outreach, or empty when it may. Matches the address and its whole domain. */
