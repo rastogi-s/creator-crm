@@ -672,6 +672,39 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "contact-finders"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Glowberry Skin" });
+    await row.waitFor();
+    await say("Want more people to pitch at a brand? Open the deal.", 3200);
+    await click(row.locator("strong"));
+    const people = drawer.locator(".card", { has: page.getByRole("heading", { name: "People at this brand" }) });
+    await people.waitFor();
+    await people.scrollIntoViewIfNeeded();
+    await point(people.getByRole("button", { name: "Find more people" }));
+    await say("Find more people asks Hunter who works there. It uses one Hunter credit, and no Claude.", 4200);
+    await click(people.getByRole("button", { name: "Find more people" }));
+    await people.locator(".contact-row", { hasText: "Priya" }).waitFor();
+    await point(people.locator(".contact-row", { hasText: "Priya" }));
+    await say("New people land here, ranked. Partnerships and PR people come first.", 4000);
+    await point(people.locator(".contact-row", { hasText: "sam.old" }));
+    await say("Hunter already knows this address doesn't exist, so it's never emailed.", 4000);
+    const check = people.locator(".contact-row", { hasText: "Marco" }).getByRole("button", { name: "Check address" });
+    await point(check);
+    await say("Check address makes sure an address exists before you pitch. Half a credit.", 4000);
+    await click(check);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await goTo(page, "settings", "accounts");
+    const card = page.locator("#finders");
+    await card.scrollIntoViewIfNeeded();
+    await point(card.locator(".stats"));
+    await say("Settings, Accounts shows the credits used this month. The app stops at Hunter's free 50.", 4400);
+    await say("People found this way are for your own pitches only, so they're never shared or sold.", 4200);
+    await say("", 600);
+  },
+
   async "safer-sending"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#drafts");

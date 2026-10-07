@@ -32,6 +32,13 @@ function contactRow(v, onChange, showBrand) {
       el("div", { class: "small muted" }, facts.join(" · ")),
       v.doNotEmail ? el("div", { class: "small warn" }, v.doNotEmail) : null),
     el("div", { class: "actions" },
+      stopped || c.verified === "VALID" || c.replies > 0 ? null : el("button", { class: "small",
+        title: "Check the address exists before you email it (free check of the brand's email first, then half a Hunter credit)",
+        onclick: action(async () => {
+          const r = await api("POST", "/api/finders/contact/" + c.id + "/check");
+          toast(r.message);
+          onChange();
+        }) }, "Check address"),
       stopped ? null : el("button", { class: "small", title: "Never send this person a pitch or follow-up",
         onclick: action(async () => { await api("POST", "/api/contacts/" + c.id + "/do-not-email"); onChange(); }, "Won't be emailed again") }, "Don't email"),
       el("button", { class: "small danger", title: "Delete everything about this person (keeps only their address so they're never added again)",
@@ -148,10 +155,34 @@ function contactsImportCard(onDone) {
     out);
 }
 
-/** Deal drawer: everyone at this brand, best first, and a quick way to add someone. */
+/** Deal drawer: everyone at this brand, best first, a way to find more (Hunter, Apollo), and a quick way to add someone. */
 async function brandContactsCard(brandId) {
   const box = el("div", { class: "card" }, el("h3", {}, "People at this brand"));
+  const notes = el("div", { class: "small" });
   const body = el("div", {});
+  const find = async (again) => {
+    const r = await api("POST", "/api/finders/brand/" + brandId + "/find" + (again ? "?again=true" : ""));
+    if (r.askFirst) {
+      if (confirm(r.askFirst)) return find(true);
+      return;
+    }
+    clear(notes).appendChild(el("p", {}, r.found ? "Found " + r.found + (r.found === 1 ? " person" : " people") + ": " + r.added + " new, "
+      + r.alreadyKnown + " already saved" + (r.skipped ? ", " + r.skipped + " on your do-not-email list" : "") + "." : ""));
+    r.notes.forEach((n) => notes.appendChild(el("p", { class: "muted" }, n)));
+    await load();
+  };
+  box.appendChild(el("div", { class: "row" },
+    el("button", { class: "small", title: "Ask Hunter (and Apollo, if you added it) who else works there. Uses 1 Hunter credit.",
+      onclick: action(() => find(false)) }, "Find more people"),
+    el("button", { class: "small", title: "Check that addresses not checked in the last six months exist. Half a Hunter credit each.",
+      onclick: action(async () => {
+        const r = await api("POST", "/api/finders/brand/" + brandId + "/check");
+        clear(notes).appendChild(el("p", {}, r.checked ? "Checked " + r.checked + ": " + r.valid + " exist, " + r.risky
+          + " can't be proven, " + r.invalid + " don't exist." : ""));
+        r.notes.forEach((n) => notes.appendChild(el("p", { class: "muted" }, n)));
+        await load();
+      }) }, "Check addresses")));
+  box.appendChild(notes);
   box.appendChild(body);
   async function load() {
     const list = await api("GET", "/api/contacts/brand/" + brandId);
@@ -185,4 +216,56 @@ async function brandContactsCard(brandId) {
   }
   await load();
   return box;
+}
+
+// ---------- Contact finders (Settings, Accounts) ----------
+// Hunter finds people at a brand's domain and checks addresses; Apollo is an optional second finder. Neither uses
+// Claude. Credits are counted per month against her own limit (Hunter Free: 50), like the Claude spending card.
+
+async function contactFindersCard(root, creds, secretField, saveSecrets) {
+  const st = await api("GET", "/api/finders").catch(() => null);
+  if (!st) return el("div");
+  const h = st.hunter, a = st.apollo;
+  const n = (x) => Number.isInteger(x) ? String(x) : x.toFixed(1);
+  const keys = el("div", { class: "grid" },
+    secretField("HUNTER_API_KEY", "Hunter API key", "From hunter.io, API keys"),
+    secretField("APOLLO_API_KEY", "Apollo API key (optional)", "From Apollo, Settings, API"));
+  const hLimit = el("input", { type: "number", min: "0", step: "1", value: h.monthlyLimit });
+  const aLimit = el("input", { type: "number", min: "0", step: "1", value: a.monthlyLimit });
+  const fromHunter = h.serviceAvailable != null
+    ? el("p", { class: "small muted" }, "Hunter says: " + (h.plan ? h.plan + " plan, " : "") + n(h.serviceUsed) + " of "
+      + n(h.serviceAvailable) + " credits used" + (h.resetDate ? ", resets " + fmtDate(h.resetDate) : "") + ".")
+    : null;
+  const alert = [h.alert, a.alert].filter(Boolean).map((x) => el("p", { class: "alert " + (x.level === "OUT" ? "error" : "warn") }, x.message));
+  const c = card("Contact finders (Hunter, Apollo)",
+    el("p", { class: "small muted" }, "Find more people at a brand with one click (Find more people, on any deal), and check that an "
+      + "address exists before you email it. No Claude is used. Hunter's free plan gives 50 credits a month: looking up a brand "
+      + "costs 1, checking one address costs half. Addresses at a brand that can't receive email are caught for free every night."),
+    h.connected || a.connected ? el("div", { class: "stats" },
+      h.connected ? stat(n(h.usedThisMonth) + " / " + h.monthlyLimit, "Hunter credits used this month") : null,
+      h.connected ? stat(n(h.remaining), "Hunter credits left") : null,
+      a.connected ? stat(n(a.usedThisMonth) + " / " + a.monthlyLimit, "Apollo credits used this month") : null) : null,
+    fromHunter,
+    ...alert,
+    keys,
+    el("div", { class: "row" },
+      el("button", { class: "primary small", onclick: saveSecrets(keys) }, "Save keys"),
+      h.connected ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/finders/refresh"); renderSettings(root); },
+        "Credits updated from Hunter") }, "Update from Hunter") : null,
+      h.connected ? el("button", { class: "small danger", onclick: action(async () => {
+        await api("PUT", "/api/settings/credentials", { HUNTER_API_KEY: "" }); renderSettings(root); }, "Hunter removed") }, "Remove Hunter") : null,
+      a.connected ? el("button", { class: "small danger", onclick: action(async () => {
+        await api("PUT", "/api/settings/credentials", { APOLLO_API_KEY: "" }); renderSettings(root); }, "Apollo removed") }, "Remove Apollo") : null),
+    el("div", { class: "grid" },
+      el("div", {}, el("label", {}, "Most Hunter credits to use a month"), hLimit),
+      el("div", {}, el("label", {}, "Most Apollo credits to use a month"), aLimit)),
+    el("div", { class: "row" }, el("button", { class: "small", onclick: action(async () => {
+      await api("PUT", "/api/finders/limits", { hunter: Number(hLimit.value), apollo: Number(aLimit.value) });
+      renderSettings(root);
+    }, "Saved") }, "Save limits")),
+    el("p", { class: "small muted" }, "No account yet? Sign up free at hunter.io, then copy the key from API keys. People found through "
+      + "Hunter or Apollo are for your own pitches only: their terms don't allow sharing or selling them, so the app keeps them out "
+      + "of anything you share."));
+  c.id = "finders";
+  return c;
 }

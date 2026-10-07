@@ -51,7 +51,8 @@ public class SettingsController {
     private static final Set<SecretName> USER_ENTERED = EnumSet.of(
             SecretName.ANTHROPIC_API_KEY, SecretName.GOOGLE_CLIENT_ID, SecretName.GOOGLE_CLIENT_SECRET,
             SecretName.INSTAGRAM_APP_ID, SecretName.INSTAGRAM_APP_SECRET, SecretName.INSTAGRAM_ACCESS_TOKEN,
-            SecretName.FACEBOOK_APP_ID, SecretName.FACEBOOK_APP_SECRET, SecretName.ERROR_REPORT_TOKEN);
+            SecretName.FACEBOOK_APP_ID, SecretName.FACEBOOK_APP_SECRET, SecretName.ERROR_REPORT_TOKEN,
+            SecretName.HUNTER_API_KEY, SecretName.APOLLO_API_KEY);
 
     public record PasswordChange(@NotBlank String currentPassword, @NotBlank @Size(max = 200) String newPassword) {}
 
@@ -72,6 +73,7 @@ public class SettingsController {
     private final InstagramStatsService instagramStats;
     private final FacebookOAuthController facebookOAuth;
     private final FacebookConnection facebook;
+    private final com.creatorcrm.contacts.ContactFinder contactFinder;
 
     public SettingsController(SettingsService settings, SecretStore secrets, CryptoService crypto,
                               List<ChannelConnector> connectors, InstagramConnector instagram,
@@ -80,7 +82,8 @@ public class SettingsController {
                               PasswordEncoder encoder, CrmProperties props,
                               com.creatorcrm.security.SessionEpoch sessions, LlmClient llm,
                               InstagramStatsService instagramStats, FacebookOAuthController facebookOAuth,
-                              FacebookConnection facebook) {
+                              FacebookConnection facebook, com.creatorcrm.contacts.ContactFinder contactFinder) {
+        this.contactFinder = contactFinder;
         this.facebookOAuth = facebookOAuth;
         this.facebook = facebook;
         this.sessions = sessions;
@@ -144,6 +147,16 @@ public class SettingsController {
             secrets.put(name, e.getValue());
             if (name == SecretName.ANTHROPIC_API_KEY && e.getValue() != null && !e.getValue().isBlank()) {
                 ingestion.processPendingAsync(); // analyze what's waiting now, not at the next sync
+            }
+            if (name == SecretName.HUNTER_API_KEY && e.getValue() != null && !e.getValue().isBlank()) {
+                try {
+                    contactFinder.refreshHunterAccount(); // checks the key and reads her plan's credits (free)
+                } catch (com.creatorcrm.contacts.HunterApi.HunterException ex) {
+                    if (ex.status == 401) {
+                        secrets.put(name, null);
+                        throw ex;
+                    } // offline or busy: keep the key, the counter updates on the next lookup
+                }
             }
             if (name == SecretName.INSTAGRAM_ACCESS_TOKEN && e.getValue() != null && !e.getValue().isBlank()) {
                 instagram.refreshIdentity(); // validates the pasted token

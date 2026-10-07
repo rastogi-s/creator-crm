@@ -26,6 +26,9 @@ public enum SecretName {
     FACEBOOK_IG_USER_ID,
     /** GitHub token allowed to open issues on the app's repo; turns on error reports. */
     ERROR_REPORT_TOKEN,
+    /** Optional contact finders: Hunter.io (free tier 50 credits a month) and Apollo.io. Their data is for her own outreach only. */
+    HUNTER_API_KEY,
+    APOLLO_API_KEY,
     /** Encrypts the automatic nightly backups. */
     BACKUP_PASSPHRASE,
     /** Stored as a SHA-256 hash only; the plain key is shown once when generated. */

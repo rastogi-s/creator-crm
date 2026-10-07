@@ -3,6 +3,7 @@ package com.creatorcrm.jobs;
 import com.creatorcrm.calendar.CalendarSync;
 import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
+import com.creatorcrm.contacts.ContactFinder;
 import com.creatorcrm.contacts.GmailContacts;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
@@ -54,14 +55,17 @@ public class ScheduledJobs {
     private final CampaignResults results;
     private final SendQueue sendQueue;
     private final GmailContacts gmailContacts;
+    private final ContactFinder contactFinder;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
                          SettingsService settings, SetupService setup, InstagramStatsService instagramStats,
                          PaymentReminders paymentReminders, WinBack winBack,
                          InstagramEngagementService instagramEngagement, CalendarSync calendar,
-                         CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts) {
+                         CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts,
+                         ContactFinder contactFinder) {
         this.gmailContacts = gmailContacts;
+        this.contactFinder = contactFinder;
         this.results = results;
         this.sendQueue = sendQueue;
         this.instagramEngagement = instagramEngagement;
@@ -113,6 +117,12 @@ public class ScheduledJobs {
             gmailContacts.refresh(); // after the sync, so today's replies count towards who ranks first
         } catch (RuntimeException e) {
             log.warn("Could not refresh brand contacts: {}", e.getMessage());
+        }
+        try {
+            int dead = contactFinder.checkMailServers(300); // free: no credits, just DNS
+            if (dead > 0) log.info("Marked {} contacts whose domain can't receive email", dead);
+        } catch (RuntimeException e) {
+            log.warn("Could not check contacts' mail servers: {}", e.getMessage());
         }
         prepareMorning();
         if (settings.followupAutoSend()) autoSendFollowUps();
@@ -169,6 +179,8 @@ public class ScheduledJobs {
                     .orElse(false);
             // One she just pressed Send on is already on its way, after its undo window
             if (!stillDue || sendQueue.isWaiting(d.id) || drafts.sendBlockedReason(d).isPresent()) continue;
+            // An address that can't be proven (the brand accepts everything) only goes out when she presses Send
+            if (contactFinder.risky(d.toAddress)) continue;
             if (Placeholders.message(d.body) != null) {
                 log.info("Follow-up draft {} has blanks to fill in; leaving it in Drafts", d.id);
                 continue;

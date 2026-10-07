@@ -12,3 +12,5 @@ crm:
     check-cron: "-"
     local-video-dir: ${CRM_DEMO_VIDEOS:}   # the recorder points this at its output, so later videos can show earlier ones
     simulate-latest: ${CRM_DEMO_LATEST:next}   # "next" = one minor version above this build
+# A made-up Hunter key, so "Find more people" can be filmed; DemoHunter answers instead of hunter.io.
+HUNTER_API_KEY: demo-hunter-key
