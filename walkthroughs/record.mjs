@@ -445,6 +445,89 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "pitch-campaigns"(page) {
+    const { pause, say, point, click } = helpers(page);
+    // Demo mode has no Gmail: the queue would show "On hold". The real app sends from here.
+    await page.route("**/api/campaigns", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const res = await route.fetch();
+      const o = await res.json();
+      o.heldBecause = null;
+      await route.fulfill({ response: res, json: o });
+    });
+    await page.goto(BASE + "/#today");
+    // Off camera: a media kit link, so the template has nothing left blank.
+    await page.evaluate(async () => {
+      const links = await api("GET", "/api/links");
+      if (!links.some((l) => /media kit/i.test(l.label))) await api("POST", "/api/links", { label: "Media kit", url: "https://ava.example/media-kit" });
+    });
+    await goTo(page, "campaigns");
+    const view = page.locator("#view-campaigns");
+    await view.locator("h1").waitFor();
+    await say("Pitch campaigns send one pitch to each brand on a list, from your own Gmail.", 4000);
+
+    const rules = view.locator(".card", { has: page.locator("h3", { hasText: "Sending rules" }) });
+    await rules.scrollIntoViewIfNeeded();
+    const address = rules.locator("textarea");
+    await click(address);
+    await address.fill("");
+    await address.pressSequentially("PO Box 123, Austin, TX 78701", { delay: 30 });
+    await say("First, your business address. A PO box works. Every pitch ends with it, and with a line saying they can reply no thanks.", 5200);
+    await point(rules.locator("input[type=number]"));
+    await say("Pitches go out slowly: 10 a day to start, growing to 30. That keeps your emails out of spam.", 4600);
+    await click(rules.getByRole("button", { name: "Save" }));
+
+    const lists = view.locator(".card", { has: page.locator("h3", { hasText: "Saved lists" }) });
+    await lists.scrollIntoViewIfNeeded();
+    await click(lists.getByRole("button", { name: "New list" }));
+    const editor = lists.locator(".list-editor");
+    await editor.waitFor();
+    await click(editor.locator("input").first());
+    await editor.locator("input").first().pressSequentially("Food and travel brands", { delay: 40 });
+    // The demo's made-up people have no job titles, so the list takes any role.
+    while (await editor.locator(".chip.active").count()) await editor.locator(".chip.active").first().click();
+    // ...and every one of the demo's brands already has a deal.
+    await editor.locator("label.check", { hasText: "already have a deal" }).locator("input").uncheck();
+    await say("A list picks people from Brand contacts. From each brand, only the best-ranked person gets the pitch.", 4800);
+    await click(editor.getByRole("button", { name: "Save list" }));
+    await pause(1200);
+
+    const start = view.locator(".card", { has: page.locator("h3", { hasText: "Start a campaign" }) });
+    await start.scrollIntoViewIfNeeded();
+    await start.locator("input").first().pressSequentially("October pitches", { delay: 40 });
+    await point(start.locator("select").nth(1));
+    await say("Pick a template. Your name, their first name, the brand and your media kit are filled in, with no Claude needed.", 5000);
+    await click(start.getByRole("button", { name: "Start campaign" }));
+    await pause(1500);
+
+    await goTo(page, "drafts");
+    await page.locator("#view-drafts .inbox-row").first().waitFor();
+    await pause(1500);
+    await click(page.locator("#view-drafts .chip", { hasText: "Campaigns" }));
+    await click(page.locator("#view-drafts .inbox-row:visible").first());
+    const draft = page.locator("#view-drafts .inbox-detail .card:not(.hidden)");
+    await point(draft.locator("textarea"));
+    await say("Each pitch waits in Drafts. Read it, change anything you like, then press Approve.", 4400);
+    await click(draft.getByRole("button", { name: "Approve", exact: true }));
+    const preview = page.locator("dialog.send-preview");
+    await preview.waitFor();
+    await say("You see exactly what the brand will get.", 3000);
+    await click(preview.getByRole("button", { name: "Approve for sending" }));
+    await pause(1200);
+
+    await goTo(page, "campaigns");
+    const sending = view.locator(".card", { has: page.locator("h3", { hasText: "Sending" }) }).first();
+    await sending.waitFor();
+    await point(sending);
+    await say("Approved pitches go out a few minutes apart, on weekdays during the brand's working hours.", 4600);
+    await say("If anyone at a brand replies, that brand gets nothing more. If someone says no thanks, they're never emailed again.", 5200);
+    await say("", 600);
+    // Off camera: end the campaign so its drafts don't show up in the videos recorded after this one.
+    await page.evaluate(async () => {
+      for (const v of (await api("GET", "/api/campaigns")).campaigns) await api("POST", "/api/campaigns/" + v.campaign.id + "/end");
+    });
+  },
+
   async "search"(page) {
     const { pause, say, point, click } = helpers(page);
     await page.goto(BASE + "/#pipeline");
@@ -575,6 +658,60 @@ const scenarios = {
     await point(table.locator(".fu-dots").first());
     await say("Hover over the dots to see each follow-up's date.", 3400);
     await say("Your phone looks exactly the same as before.", 3200);
+    await say("", 600);
+  },
+
+  async "website-contacts"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    let lead = view.locator(".item", { hasText: "Trailmix Co" });
+    if (!(await lead.count())) {
+      const query = view.locator(".find-brands .query input");
+      await point(query);
+      await query.fill("snack brands that work with outdoor creators");
+      await click(view.getByRole("button", { name: "Find brands" }));
+      lead = view.locator(".item", { hasText: "Trailmix Co" });
+      await lead.waitFor();
+    }
+    await point(lead);
+    await say("Some brands don't come with an email. Trailmix Co is one of them.", 3800);
+    const find = lead.getByRole("button", { name: "Find contacts on website" });
+    await point(find);
+    await say("Press Find contacts on website. The app reads the brand's own contact, partnerships and press pages.", 4800);
+    await click(find);
+    lead = view.locator(".item", { hasText: "creators@trailmix.example" });
+    await lead.waitFor({ timeout: 30000 });
+    await point(lead.getByRole("link", { name: "(source)" }));
+    await say("It picks the partnerships address first, and links the page it came from.", 4200);
+    await say("It's free and uses no Claude. It only reads public pages, slowly, and skips sites that ask apps not to.", 5000);
+    await say("Every night it also checks brands and suggestions that still have no contact.", 4000);
+    await say("On a deal, the same button under People at this brand saves everyone the website lists.", 4400);
+    await say("", 600);
+  },
+
+  async "category-search"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    const input = view.locator(".find-category input");
+    await point(input);
+    await say("Want brands in a category, for free? Type it here, like snack food.", 4000);
+    await input.pressSequentially("snack food", { delay: 60 });
+    await click(view.getByRole("button", { name: "Search category (free)" }));
+    const peak = view.locator(".item", { hasText: "Peak Provisions" });
+    await peak.waitFor();
+    await point(peak);
+    await say("Brands come from Wikidata, a free open database of companies, with their website and Instagram.", 4800);
+    await say("The app then reads each brand's own website for a published email, politely, in the background.", 4800);
+    await page.waitForTimeout(2500);
+    await page.reload();
+    const found = view.locator(".item", { hasText: "partners@peakprovisions.example" });
+    await found.waitFor({ timeout: 30000 });
+    await point(found);
+    await say("Here's Peak Provisions' partnerships email, with a link to the page it came from. No Claude, no cost.", 4800);
     await say("", 600);
   },
 

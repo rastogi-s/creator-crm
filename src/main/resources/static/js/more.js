@@ -96,6 +96,7 @@ async function renderMore(root) {
     link("summary", "Day summary", "What you got done today and what's lined up for tomorrow"),
     link("contacts", "Brand contacts", "Everyone at every brand, best person to pitch first"),
     link("directory", "Brand directory", "A list of brand inboxes you can share or sell, with no personal details"),
+    link("campaigns", "Pitch campaigns", "One pitch per brand from a list, approved by you, sent slowly"),
     link("links", "My links", "Your Instagram, TikTok, website and media kit, used in drafts"),
     link("settings", "Settings", "Accounts, your rates and voice, follow-ups, backups"),
     link("setup", "Setup guide", "Connect Claude and Gmail one step at a time"),

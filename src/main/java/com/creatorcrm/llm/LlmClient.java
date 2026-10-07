@@ -43,4 +43,17 @@ public interface LlmClient {
     default Map<String, MessageAnalysis> pollClassifyBatch(String batchId) {
         throw new UnsupportedOperationException("Batch classification isn't supported");
     }
+
+    /**
+     * Pitch campaigns' Personalise: one opening line per brand from Claude Haiku, in a half-price batch. Keys are
+     * caller ids echoed back by {@link #pollOpeningLines}.
+     */
+    default String submitOpeningLines(Map<String, OpeningLineInput> inputs) {
+        throw new UnsupportedOperationException("Personalised opening lines aren't supported");
+    }
+
+    /** {@code null} while the batch is still running; otherwise the lines by caller id. Missing ids failed. */
+    default Map<String, String> pollOpeningLines(String batchId) {
+        throw new UnsupportedOperationException("Personalised opening lines aren't supported");
+    }
 }

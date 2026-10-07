@@ -13,4 +13,9 @@ public interface DraftRepo extends JpaRepository<Draft, Long> {
     boolean existsByFollowupIdAndStatus(Long followupId, DraftStatus status);
 
     boolean existsByTaskIdAndStatus(Long taskId, DraftStatus status);
+
+    /** The campaign send queue: approved emails not sent yet, oldest approval first. */
+    List<Draft> findByStatusAndApprovedAtNotNullOrderByApprovedAtAscIdAsc(DraftStatus status);
+
+    List<Draft> findByCampaignTargetIdAndStatus(Long campaignTargetId, DraftStatus status);
 }
