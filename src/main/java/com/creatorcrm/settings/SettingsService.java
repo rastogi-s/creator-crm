@@ -84,6 +84,13 @@ public class SettingsService {
     /** "false" = skip the warm-up (10 a day at first, 5 more each week while bounces stay low). */
     public static final String CAMPAIGN_WARMUP = "campaignWarmup";
 
+    /**
+     * Hours an Instagram DM from a lead may wait for her reply before it becomes a to-do; 0 = no reminders.
+     * Meta lets the app answer a DM only within 24 hours of it, so the default leaves plenty of that window.
+     */
+    public static final String DM_REPLY_REMINDER_HOURS = "dmReplyReminderHours";
+    static final String DEFAULT_DM_REPLY_REMINDER_HOURS = "6";
+
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
 
@@ -93,7 +100,7 @@ public class SettingsService {
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
             WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
             CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES, SETUP_GUIDE,
-            CAMPAIGN_ADDRESS, CAMPAIGN_DAILY_CAP, CAMPAIGN_WARMUP);
+            CAMPAIGN_ADDRESS, CAMPAIGN_DAILY_CAP, CAMPAIGN_WARMUP, DM_REPLY_REMINDER_HOURS);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -230,6 +237,9 @@ public class SettingsService {
 
     public int campaignDailyCap() { return Integer.parseInt(raw(CAMPAIGN_DAILY_CAP, "30")); }
 
+    /** 0 = DM reply reminders are off. */
+    public int dmReplyReminderHours() { return Integer.parseInt(raw(DM_REPLY_REMINDER_HOURS, DEFAULT_DM_REPLY_REMINDER_HOURS)); }
+
     public boolean campaignWarmup() { return Boolean.parseBoolean(raw(CAMPAIGN_WARMUP, "true")); }
 
     public List<String> brandKeywords() {
@@ -276,6 +286,7 @@ public class SettingsService {
         m.put(CAMPAIGN_ADDRESS, campaignAddress());
         m.put(CAMPAIGN_DAILY_CAP, String.valueOf(campaignDailyCap()));
         m.put(CAMPAIGN_WARMUP, String.valueOf(campaignWarmup()));
+        m.put(DM_REPLY_REMINDER_HOURS, String.valueOf(dmReplyReminderHours()));
         return m;
     }
 
@@ -309,6 +320,11 @@ public class SettingsService {
             case CAMPAIGN_DAILY_CAP -> {
                 if (!v.isBlank() && (!v.trim().matches("\\d{1,2}") || Integer.parseInt(v.trim()) < 10 || Integer.parseInt(v.trim()) > 50)) {
                     throw new IllegalArgumentException("Pitches a day: a number from 10 to 50, e.g. 30");
+                }
+            }
+            case DM_REPLY_REMINDER_HOURS -> {
+                if (!v.isBlank() && (!v.trim().matches("\\d{1,3}") || Integer.parseInt(v.trim()) > 168)) {
+                    throw new IllegalArgumentException("DM reply reminder: a number of hours from 0 to 168 (0 = off), e.g. 6");
                 }
             }
             case CAMPAIGN_ADDRESS -> {

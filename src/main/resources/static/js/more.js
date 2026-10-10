@@ -93,6 +93,7 @@ async function renderMore(root) {
   const link = (tab, title, detail) => el("a", { class: "more-link", href: "#" + tab, "data-tab": tab },
     el("span", { class: "title" }, title), el("span", { class: "detail" }, detail));
   root.appendChild(el("div", { class: "card more-list" },
+    link("dms", "Instagram DMs", "Sort your DMs, tag leads, see who's waiting for a reply"),
     link("summary", "Day summary", "What you got done today and what's lined up for tomorrow"),
     link("contacts", "Brand contacts", "Everyone at every brand, best person to pitch first"),
     link("directory", "Brand directory", "A list of brand inboxes you can share or sell, with no personal details"),

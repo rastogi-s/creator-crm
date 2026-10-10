@@ -22,6 +22,8 @@ public interface MessageRepo extends JpaRepository<Message, Long> {
 
     List<Message> findByConversationIdOrderBySentAtAsc(Long conversationId);
 
+    List<Message> findByConversationIdInOrderBySentAtAsc(java.util.Collection<Long> conversationIds);
+
     /** New messages since the campaign watcher last looked. */
     List<Message> findTop500ByIdGreaterThanOrderByIdAsc(Long id);
 
