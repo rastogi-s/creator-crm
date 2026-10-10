@@ -291,6 +291,14 @@ async function renderSettings(root) {
     winBackQuietDays: el("input", { type: "number", min: "14", max: "999", value: p.winBackQuietDays }),
     winBackWeeklyLimit: el("input", { type: "number", min: "0", max: "20", value: p.winBackWeeklyLimit }),
   };
+  const news = {
+    brandNews: el("input", { type: "checkbox", id: "brand-news" }),
+    brandNewsWebSearch: el("input", { type: "checkbox", id: "brand-news-web" }),
+    winBackNeedsNews: el("select", { "aria-label": "When a brand has no news" },
+      [["false", "Send the usual re-pitch"], ["true", "Wait until they have news"]].map(([v, l]) => el("option", { value: v, selected: p.winBackNeedsNews === v }, l))),
+  };
+  news.brandNews.checked = p.brandNews !== "false";
+  news.brandNewsWebSearch.checked = p.brandNewsWebSearch !== "false";
   panes.deals.appendChild(settingsSection("settings-rebook", "Rebooking past brands",
     el("p", { class: "small muted" }, "Each week the app drafts a few re-pitches to brands that paid you and have gone quiet, and to brands "
       + "whose gifted collab went up at least two weeks ago. Brands with an open deal or a recent pitch are skipped. "
@@ -298,7 +306,19 @@ async function renderSettings(root) {
     el("div", { class: "grid" },
       el("div", {}, el("label", {}, "Quiet for at least (days)"), wb.winBackQuietDays),
       el("div", {}, el("label", {}, "Re-pitches per week (0 = off)"), wb.winBackWeeklyLimit)),
-    savePrefsButton(wb)));
+    el("label", { class: "check", for: "brand-news" }, news.brandNews,
+      " Open re-pitches with the brand's latest news (a launch, a teaser, a restock)"),
+    el("p", { class: "small muted" }, "Once a week the app looks at each brand's emails to you, its Instagram posts, its website and the news, "
+      + "for anything from the last 45 days. Claude sorts out sales and noise (about 1 to 5¢ per brand). Drafts show where the news came from."),
+    el("label", { class: "check", for: "brand-news-web" }, news.brandNewsWebSearch,
+      " Search the web with Claude when a brand had nothing (about 5 to 15¢ per brand)"),
+    el("div", { class: "grid" }, el("div", {}, el("label", {}, "When a brand has no fresh news"), news.winBackNeedsNews)),
+    el("p", {}, el("button", { class: "primary small", onclick: action(async () => {
+      await api("PUT", "/api/settings/preferences", { winBackQuietDays: wb.winBackQuietDays.value,
+        winBackWeeklyLimit: wb.winBackWeeklyLimit.value, brandNews: String(news.brandNews.checked),
+        brandNewsWebSearch: String(news.brandNewsWebSearch.checked), winBackNeedsNews: news.winBackNeedsNews.value });
+      renderSettings(root);
+    }, "Saved") }, "Save"))));
 
   // ----- Advanced -----
   const adv = {
@@ -480,7 +500,7 @@ async function claudeSpendCard(root) {
   const sp = await api("GET", "/api/claude-spend").catch(() => null);
   if (!sp) return el("div");
   showCreditBanner(sp);
-  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines", CONTACTS: "Reading contact pictures" };
+  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines", CONTACTS: "Reading contact pictures", NEWS: "Brand news" };
   const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
     value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
   const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

@@ -62,6 +62,20 @@ public class DemoLlm implements LlmClient {
             String what = found ? m.group(1) : "our last collab";
             String when = found ? " back in " + m.group(3) : "";
             boolean gifted = input.extraInstructions().contains("(gifted)");
+            // " News hook: <brand> recently shared this (teaser, 6 October): <headline>. Open ... for example: <idea>. Then ..."
+            java.util.regex.Matcher hook = java.util.regex.Pattern
+                    .compile("News hook: .+? recently shared this \\([^)]*\\): (.+?)\\.? Open the email.*?(?:for example: (.+?))?\\. Then recall")
+                    .matcher(input.extraInstructions());
+            if (hook.find()) {
+                String news = hook.group(1);
+                String idea = hook.group(2) != null ? hook.group(2) : "a short Reel series built around it";
+                return new DraftText(input.brandName() + " x Ava, round two?",
+                        "Hi " + who + ",\n\nI just saw " + input.brandName() + " is " + Character.toLowerCase(news.charAt(0)) + news.substring(1)
+                                + ", and I got so excited! The " + what + " we did together" + when + " is still one of my "
+                                + "favourites, and my audience still asks about it.\n\nOne idea for the launch: "
+                                + Character.toLowerCase(idea.charAt(0)) + idea.substring(1) + ". I'd love to make it happen"
+                                + (gifted ? " as a paid collab" : "") + ".\n\nWould you be open to a quick chat?\n\nBest,\nAva");
+            }
             return new DraftText("Another idea for " + input.brandName(),
                     "Hi " + who + ",\n\nI still think about the " + what + " we did together" + when + ". My audience loved it, "
                             + "and a few people still ask me about it! I'd love to work with " + input.brandName() + " again"
@@ -121,6 +135,19 @@ public class DemoLlm implements LlmClient {
             body = body + "\n\n(Demo mode: Claude would apply \"" + request + "\" here.)";
         }
         return new DraftText(current.subject(), body);
+    }
+
+    /** Demo mode: anything found counts as news, mildly on-niche. Demo news is seeded already sorted (see DemoData). */
+    @Override
+    public com.creatorcrm.llm.NewsSort sortBrandNews(com.creatorcrm.llm.NewsSortInput input) {
+        return new com.creatorcrm.llm.NewsSort(input.items().stream().map(i -> new com.creatorcrm.llm.NewsSort.Verdict(i.id(),
+                true, com.creatorcrm.domain.BrandNews.Kind.LAUNCH, i.title(), "", 60)).toList());
+    }
+
+    /** Demo mode has no web: nothing found. */
+    @Override
+    public com.creatorcrm.llm.NewsFound searchBrandNews(com.creatorcrm.llm.NewsSearchInput input) {
+        return new com.creatorcrm.llm.NewsFound(List.of());
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.creatorcrm.channels.instagram;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -69,6 +70,39 @@ public class BrandLookupService {
         return Optional.of(new Profile(username, bd.path("name").asText(""), bio, bd.path("website").asText(""),
                 bd.path("followers_count").asLong(), bd.path("media_count").asLong(),
                 partners(captions, username), firstEmail(bio)));
+    }
+
+    /** One of a brand's own posts: what it said, when, and its link. */
+    public record Post(String caption, OffsetDateTime postedAt, String permalink) {}
+
+    /**
+     * A brand's latest posts, newest first, through the same business discovery lookup: launches and teasers show
+     * up here first. Empty for personal accounts and unknown handles; throws on a real failure.
+     */
+    public List<Post> recentPosts(String handle, int limit) throws IOException, InterruptedException {
+        String h = handle == null ? "" : handle.strip().replaceFirst("^@", "").toLowerCase(Locale.ROOT);
+        if (!h.matches("[a-z0-9._]{1,30}")) return List.of();
+        JsonNode res;
+        try {
+            res = api.getFacebook(facebook.token(), "/" + facebook.igUserId(), Map.of("fields",
+                    "business_discovery.username(" + h + "){media.limit(" + Math.max(1, Math.min(limit, 25))
+                            + "){caption,timestamp,permalink}}"));
+        } catch (InstagramApi.InstagramApiException e) {
+            if (e.status == 400 && !e.getMessage().toLowerCase(Locale.ROOT).contains("token")) return List.of();
+            throw e;
+        }
+        List<Post> out = new ArrayList<>();
+        for (JsonNode m : res.path("business_discovery").path("media").path("data")) {
+            OffsetDateTime at = null;
+            try {
+                // Meta writes "2026-10-03T17:00:00+0000"
+                at = OffsetDateTime.parse(m.path("timestamp").asText(""), java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssxx"));
+            } catch (java.time.format.DateTimeParseException ignored) {
+                // no usable date: kept without one
+            }
+            out.add(new Post(m.path("caption").asText(""), at, m.path("permalink").asText("")));
+        }
+        return out;
     }
 
     /** Handles tagged in sponsored-looking captions, most frequent first, excluding the brand itself. */

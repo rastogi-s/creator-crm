@@ -12,6 +12,7 @@ import com.creatorcrm.channels.gmail.GmailConnector;
 import com.creatorcrm.digest.DigestService;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Brand;
+import com.creatorcrm.domain.BrandNews;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.DraftStatus;
@@ -24,6 +25,7 @@ import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.repo.ActivityRepo;
+import com.creatorcrm.repo.BrandNewsRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.FollowUpRepo;
@@ -72,6 +74,7 @@ class WinBackIntegrationTest {
     @Autowired FollowUpRepo followUps;
     @Autowired DigestService digest;
     @Autowired SettingsService settings;
+    @Autowired BrandNewsRepo newsRepo;
 
     private LocalDate today;
 
@@ -79,7 +82,8 @@ class WinBackIntegrationTest {
     void reset() throws Exception {
         today = settings.today();
         llm.failDraftsWith = null;
-        settings.update(Map.of(SettingsService.WIN_BACK_QUIET_DAYS, "60", SettingsService.WIN_BACK_WEEKLY_LIMIT, "5"));
+        settings.update(Map.of(SettingsService.WIN_BACK_QUIET_DAYS, "60", SettingsService.WIN_BACK_WEEKLY_LIMIT, "5",
+                SettingsService.BRAND_NEWS, "true", SettingsService.WIN_BACK_NEEDS_NEWS, "false"));
         doReturn(true).when(gmail).isConnected();
         doReturn(Optional.empty()).when(gmail).pushDraft(any());
         doAnswer(inv -> new SentMessage(UUID.randomUUID().toString(), UUID.randomUUID().toString())).when(gmail).send(any());
@@ -248,5 +252,68 @@ class WinBackIntegrationTest {
         assertThatThrownBy(() -> winBack.draftFor(open.id)).hasMessageContaining("finished collabs");
         assertThatThrownBy(() -> settings.update(Map.of(SettingsService.WIN_BACK_QUIET_DAYS, "7"))).hasMessageContaining("at least 14");
         assertThatThrownBy(() -> settings.update(Map.of(SettingsService.WIN_BACK_WEEKLY_LIMIT, "50"))).hasMessageContaining("0 to 20");
+    }
+
+    /** Sorted, on-niche news for a brand, published {@code daysAgo} days ago. */
+    private BrandNews news(Brand b, String headline, int fit, int daysAgo) {
+        BrandNews n = new BrandNews();
+        n.brandId = b.id;
+        n.source = BrandNews.Source.INSTAGRAM;
+        n.itemKey = "ig:" + UUID.randomUUID();
+        n.title = headline;
+        n.url = "https://www.instagram.com/p/" + UUID.randomUUID();
+        n.publishedAt = OffsetDateTime.now().minusDays(daysAgo);
+        n.foundAt = OffsetDateTime.now();
+        n.kind = BrandNews.Kind.TEASER;
+        n.headline = headline;
+        n.pitchIdea = "A first-sip Reel on launch day";
+        n.fit = fit;
+        return newsRepo.save(n);
+    }
+
+    @Test
+    void aBrandsFreshNewsOpensItsRepitchAndPutsItFirst() {
+        settings.update(Map.of(SettingsService.WIN_BACK_WEEKLY_LIMIT, "1"));
+        Opportunity paid = paidCollab(brand(), 100);                   // no news
+        Brand giftedBrand = brand();
+        Opportunity gifted = giftedPost(giftedBrand, 30);
+        news(giftedBrand, "Teasing Midnight Harbor, a new cold brew landing on 1 November", 85, 4);
+        news(giftedBrand, "Old launch", 90, 80);                        // too old to mention
+        BrandNews offNiche = news(giftedBrand, "A new office", 30, 2); // fit too low
+
+        List<String> names = candidateBrands();
+        assertThat(names.indexOf(giftedBrand.name)).isLessThan(names.indexOf(brands.findById(paid.brandId).orElseThrow().name));
+        assertThat(winBack.candidates(today).stream().filter(c -> c.brand().equals(giftedBrand.name)).findFirst().orElseThrow().news())
+                .startsWith("Teasing Midnight Harbor");
+
+        assertThat(winBack.draftDue(today)).isEqualTo(1);
+        assertThat(repitches(paid)).isEmpty();
+        Draft d = repitches(gifted).get(0);
+        assertThat(llm.lastDraftInput.extraInstructions())
+                .contains("News hook: " + giftedBrand.name + " recently shared this (teaser, ")
+                .contains("Teasing Midnight Harbor, a new cold brew landing on 1 November.")
+                .contains("for example: A first-sip Reel on launch day")
+                .contains("Use only the facts in that line")
+                .doesNotContain("Old launch").doesNotContain("A new office");
+        assertThat(newsRepo.findFirstByUsedInDraftId(d.id)).get().extracting(n -> n.headline).asString().startsWith("Teasing");
+        assertThat(newsRepo.findById(offNiche.id).orElseThrow().usedInDraftId).isNull();
+        assertThat(digest.morning().rebook()).filteredOn(i -> i.refId().equals(d.id)).first()
+                .satisfies(i -> assertThat(i.detail()).startsWith("New: Teasing Midnight Harbor"));
+    }
+
+    @Test
+    void onlyBrandsWithNewsGetARepitchWhenSheAsksToWaitForNews() {
+        settings.update(Map.of(SettingsService.WIN_BACK_NEEDS_NEWS, "true"));
+        Opportunity quiet = paidCollab(brand(), 100);
+        Brand launching = brand();
+        Opportunity withNews = paidCollab(launching, 90);
+        news(launching, "Launching a travel-size range on 3 November", 70, 6);
+
+        assertThat(winBack.draftDue(today)).isEqualTo(1);
+        assertThat(repitches(withNews)).hasSize(1);
+        assertThat(repitches(quiet)).isEmpty();
+        // "Pitch them again" on the deal still works without news
+        assertThat(winBack.draftFor(quiet.id).type).isEqualTo(DraftType.REPITCH);
+        assertThat(llm.lastDraftInput.extraInstructions()).doesNotContain("News hook");
     }
 }

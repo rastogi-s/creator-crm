@@ -60,6 +60,12 @@ public class SettingsService {
     /** Win back past brands: days a brand must have been quiet before a re-pitch, and re-pitches drafted per week. */
     public static final String WIN_BACK_QUIET_DAYS = "winBackQuietDays";
     public static final String WIN_BACK_WEEKLY_LIMIT = "winBackWeeklyLimit";
+    /** "false" = don't collect past brands' news (launches, teasers) for re-pitches. */
+    public static final String BRAND_NEWS = "brandNews";
+    /** "false" = no Claude web search for a brand whose own emails, posts and feeds had no news. */
+    public static final String BRAND_NEWS_WEB_SEARCH = "brandNewsWebSearch";
+    /** "true" = only re-pitch a brand when it has fresh news; "false" = a brand without news gets the usual re-pitch. */
+    public static final String WIN_BACK_NEEDS_NEWS = "winBackNeedsNews";
 
     /** Rate advisor: percent added per month of paid usage, and percent added for exclusivity. */
     public static final String RATE_USAGE_PCT = "rateUsagePercentPerMonth";
@@ -91,7 +97,7 @@ public class SettingsService {
             CREATOR_NAME, CREATOR_PROFILE, FOLLOWUP_CADENCE, CLASSIFIER_MODEL, WRITER_MODEL, TIMEZONE, BRAND_KEYWORDS,
             FOLLOWUP_TIME, FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, INVOICE_BUSINESS_NAME, INVOICE_ADDRESS, INVOICE_TAX_ID,
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
-            WIN_BACK_WEEKLY_LIMIT, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
+            WIN_BACK_WEEKLY_LIMIT, BRAND_NEWS, BRAND_NEWS_WEB_SEARCH, WIN_BACK_NEEDS_NEWS, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
             CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES, SETUP_GUIDE,
             CAMPAIGN_ADDRESS, CAMPAIGN_DAILY_CAP, CAMPAIGN_WARMUP);
 
@@ -216,6 +222,12 @@ public class SettingsService {
     /** 0 = win-back drafts are off. */
     public int winBackWeeklyLimit() { return Integer.parseInt(raw(WIN_BACK_WEEKLY_LIMIT, "5")); }
 
+    public boolean brandNews() { return Boolean.parseBoolean(raw(BRAND_NEWS, "true")); }
+
+    public boolean brandNewsWebSearch() { return Boolean.parseBoolean(raw(BRAND_NEWS_WEB_SEARCH, "true")); }
+
+    public boolean winBackNeedsNews() { return Boolean.parseBoolean(raw(WIN_BACK_NEEDS_NEWS, "false")); }
+
     public int rateUsagePercent() { return Integer.parseInt(raw(RATE_USAGE_PCT, "30")); }
 
     public int rateExclusivityPercent() { return Integer.parseInt(raw(RATE_EXCLUSIVITY_PCT, "25")); }
@@ -265,6 +277,9 @@ public class SettingsService {
         m.put(PAYMENT_REMINDER_DAYS, String.join(",", paymentReminderDays().stream().map(String::valueOf).toList()));
         m.put(WIN_BACK_QUIET_DAYS, String.valueOf(winBackQuietDays()));
         m.put(WIN_BACK_WEEKLY_LIMIT, String.valueOf(winBackWeeklyLimit()));
+        m.put(BRAND_NEWS, String.valueOf(brandNews()));
+        m.put(BRAND_NEWS_WEB_SEARCH, String.valueOf(brandNewsWebSearch()));
+        m.put(WIN_BACK_NEEDS_NEWS, String.valueOf(winBackNeedsNews()));
         m.put(RATE_USAGE_PCT, String.valueOf(rateUsagePercent()));
         m.put(RATE_EXCLUSIVITY_PCT, String.valueOf(rateExclusivityPercent()));
         m.put(CONTRACT_MAX_PAYMENT_DAYS, String.valueOf(contractMaxPaymentDays()));
@@ -314,7 +329,8 @@ public class SettingsService {
             case CAMPAIGN_ADDRESS -> {
                 if (v.length() > 300) throw new IllegalArgumentException("Postal address is too long (max 300 characters)");
             }
-            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC, CAMPAIGN_WARMUP -> {
+            case FOLLOWUP_AUTO_SEND, LEARN_FROM_HISTORY, CALENDAR_SYNC, CAMPAIGN_WARMUP, BRAND_NEWS, BRAND_NEWS_WEB_SEARCH,
+                 WIN_BACK_NEEDS_NEWS -> {
                 if (!v.isBlank() && !v.trim().matches("true|false")) throw new IllegalArgumentException(k + " must be true or false");
             }
             case SETUP_GUIDE -> {

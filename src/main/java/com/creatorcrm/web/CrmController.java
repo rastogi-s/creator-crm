@@ -22,6 +22,7 @@ import com.creatorcrm.drafts.SendQueue;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.jobs.ScheduledJobs;
 import com.creatorcrm.llm.Intent;
+import com.creatorcrm.news.BrandNewsService;
 import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.DeadlineRepo;
@@ -90,8 +91,9 @@ public class CrmController {
      * @param sendError why its last send failed after the undo window (or in the campaign queue), if it did
      * @param campaign the campaign it belongs to: it's approved for the slow send queue instead of sent
      */
+    /** @param news a re-pitch's "why now": the brand news it opens with, or null */
     public record DraftView(Draft draft, String brand, String blockedReason, OffsetDateTime sendingAt, String sendError,
-                            String campaign) {}
+                            String campaign, BrandNewsService.View news) {}
 
     /** Send was pressed: the draft goes out at {@code sendAt} unless she presses Undo first. */
     public record QueuedSend(Long draftId, OffsetDateTime sendAt, int undoSeconds) {}
@@ -135,6 +137,7 @@ public class CrmController {
     private final GmailLinks gmailLinks;
     private final CampaignTargetRepo campaignTargets;
     private final CampaignRepo campaignRepo;
+    private final BrandNewsService brandNews;
 
     public CrmController(DigestService digest, OpportunityRepo opportunities, BrandRepo brands, TaskRepo tasks,
                          FollowUpRepo followUpRepo, DeadlineRepo deadlines, MessageRepo messages, DraftRepo drafts,
@@ -143,7 +146,8 @@ public class CrmController {
                          ScheduledJobs jobs, SettingsService settings,
                          @Qualifier("applicationTaskExecutor") TaskExecutor executor, LeadScoring scoring,
                          GmailLinks gmailLinks, SendQueue sendQueue, CampaignTargetRepo campaignTargets,
-                         CampaignRepo campaignRepo) {
+                         CampaignRepo campaignRepo, BrandNewsService brandNews) {
+        this.brandNews = brandNews;
         this.campaignTargets = campaignTargets;
         this.campaignRepo = campaignRepo;
         this.sendQueue = sendQueue;
@@ -293,7 +297,8 @@ public class CrmController {
                     .flatMap(t -> campaignRepo.findById(t.campaignId)).map(c -> c.name).orElse("Campaign");
             out.add(new DraftView(d, brand, (d.campaignTargetId != null ? draftService.doNotEmailReason(d) : draftService.sendBlockedReason(d)).orElse(null),
                     sendQueue.waiting(d.id).map(SendQueue.Waiting::sendAt).orElse(null),
-                    sendQueue.failure(d.id).orElse(campaign != null ? d.error : null), campaign));
+                    sendQueue.failure(d.id).orElse(campaign != null ? d.error : null), campaign,
+                    d.type == DraftType.REPITCH ? brandNews.forDraft(d.id).orElse(null) : null));
         }
         return out;
     }

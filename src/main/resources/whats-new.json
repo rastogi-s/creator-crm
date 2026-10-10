@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.60.0",
+    "title": "Re-pitches that open with a brand's latest launch",
+    "features": [
+      {
+        "id": "brand-news",
+        "title": "Reconnect with past brands about what they just launched",
+        "body": "Once a week the app checks what brands you've worked with have launched, teased or restocked in the last 45 days: their emails to you, their Instagram posts, their website and the news. Claude sorts out sales and noise and picks what suits your audience. This week's re-pitches then open with that news and pitch one idea around it, and Drafts shows a Why now box with the link it came from, so you can check it before you send. The deal shows everything they've launched lately, with Check for news and Hide. Settings, Deals & money, Rebooking past brands turns it off, allows a web search for brands with nothing (about 5 to 15¢ each), or waits until a brand has news.",
+        "video": "brand-news.webm",
+        "tryIt": "#today"
+      }
+    ]
+  },
+  {
     "version": "1.52.0",
     "title": "Find an email for brands that didn't list one",
     "features": [

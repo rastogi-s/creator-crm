@@ -300,7 +300,10 @@ public class ContactService {
         Brand keep = brands.findById(keepId).orElseThrow(() -> new IllegalArgumentException("That brand no longer exists"));
         Brand drop = brands.findById(dropId).orElseThrow(() -> new IllegalArgumentException("That brand no longer exists"));
         contacts.flush();
-        for (String table : List.of("conversations", "opportunities", "invoices", "brand_contacts", "brand_domains")) {
+        // The same news item found for both brands is kept once
+        jdbc.update("DELETE FROM brand_news WHERE brand_id = ? AND item_key IN (SELECT item_key FROM brand_news WHERE brand_id = ?)",
+                dropId, keepId);
+        for (String table : List.of("conversations", "opportunities", "invoices", "brand_contacts", "brand_domains", "brand_news")) {
             jdbc.update("UPDATE " + table + " SET brand_id = ? WHERE brand_id = ?", keepId, dropId);
         }
         if (blank(keep.website)) keep.website = drop.website;

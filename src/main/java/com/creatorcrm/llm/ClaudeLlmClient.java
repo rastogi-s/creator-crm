@@ -55,6 +55,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final String researchSystem;
     private final String contractSystem;
     private final String pictureSystem;
+    private final String newsSystem;
 
     private AnthropicClient client;
     private String clientKeyHash;
@@ -72,6 +73,7 @@ public class ClaudeLlmClient implements LlmClient {
         this.researchSystem = resource("prompts/brand-research-system.md");
         this.contractSystem = resource("prompts/contract-system.md");
         this.pictureSystem = resource("prompts/contact-image-system.md");
+        this.newsSystem = resource("prompts/brand-news-system.md");
     }
 
     @Override
@@ -298,6 +300,40 @@ public class ClaudeLlmClient implements LlmClient {
     }
 
     @Override
+    public NewsSort sortBrandNews(NewsSortInput in) {
+        StringBuilder user = new StringBuilder()
+                .append("Today: ").append(in.today()).append('\n')
+                .append("Task: sort these items about ").append(Untrusted.escape(in.brandName()))
+                .append(", a brand the creator has worked with").append(in.lastCollab().isBlank() ? "" : " (last collab: "
+                        + Untrusted.escape(in.lastCollab()) + ")").append(".\n\n");
+        for (NewsSortInput.Item it : in.items()) {
+            user.append("<untrusted_item id=\"").append(it.id()).append("\" source=\"").append(it.source())
+                    .append("\" date=\"").append(it.date()).append("\">\nTitle: ").append(escapeItem(it.title())).append('\n')
+                    .append(escapeItem(it.text())).append("\n</untrusted_item>\n");
+        }
+        return call(ClaudeSpend.Feature.NEWS, settings.classifierModel(), settings.classifierEffort(), newsSystem,
+                creatorProfile(), user.toString(), NewsSort.class, 8000, null);
+    }
+
+    @Override
+    public NewsFound searchBrandNews(NewsSearchInput in) {
+        StringBuilder user = new StringBuilder()
+                .append("Today: ").append(in.today()).append('\n')
+                .append("Task: find what ").append(Untrusted.escape(in.brandName()))
+                .append(" has launched, teased, restocked or announced in the last ").append(in.days()).append(" days.\n");
+        if (in.website() != null && !in.website().isBlank()) user.append("Its website: ").append(Untrusted.escape(in.website())).append('\n');
+        if (in.instagram() != null && !in.instagram().isBlank()) user.append("Its Instagram: @").append(Untrusted.escape(in.instagram())).append('\n');
+        user.append("You can run at most ").append(in.depth().maxSearches).append(" web searches.\n");
+        return call(ClaudeSpend.Feature.NEWS, settings.classifierModel(), settings.classifierEffort(), newsSystem,
+                null, user.toString(), NewsFound.class, 6000, in.depth());
+    }
+
+    /** Item text can't close its own wrapper tag early. */
+    private static String escapeItem(String s) {
+        return Untrusted.escape(s).replace("<untrusted_item", "&lt;untrusted_item").replace("</untrusted_item", "&lt;/untrusted_item");
+    }
+
+    @Override
     public ContractTerms extractContractTerms(ContractInput in) {
         StringBuilder user = new StringBuilder()
                 .append("Today: ").append(in.today()).append('\n')
@@ -384,7 +420,7 @@ public class ClaudeLlmClient implements LlmClient {
             response = create(params);
             runUsd += spend.record(feature, response);
         }
-        if (webSearch != null) spend.recordResearchRun(webSearch, runUsd);
+        if (webSearch != null && feature == ClaudeSpend.Feature.RESEARCH) spend.recordResearchRun(webSearch, runUsd);
         StopReason stop = response.stopReason().orElse(null);
         if (StopReason.PAUSE_TURN.equals(stop)) throw new LlmException("Claude's web research didn't finish; try a narrower search");
         if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined this request");

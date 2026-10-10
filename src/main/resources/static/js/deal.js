@@ -43,6 +43,51 @@ function resultsCard(id, r, refresh) {
     el("p", { class: "small muted" }, "The recap thanks the brand, shares these numbers with a one-page PDF attached, and suggests working together again. It waits in Drafts until you send it."));
 }
 
+// Where a piece of brand news came from, as a link she can open to check it.
+function newsSource(n) {
+  const names = { EMAIL: "their email to you", INSTAGRAM: "their Instagram post", WEBSITE: "their website",
+    NEWS: "a news article", WEB_SEARCH: "a web page" };
+  const name = names[n.source] || "source";
+  const href = n.source === "EMAIL" && n.messageId ? "/api/messages/" + n.messageId + "/email" : n.url;
+  return href && (n.source === "EMAIL" || /^https?:\/\//i.test(href))
+    ? el("a", { href, target: "_blank", rel: "noopener noreferrer" }, name) : name;
+}
+
+// A re-pitch's "why now": the news it opens with, and where it came from, so she can check it before sending.
+function whyNow(n) {
+  if (!n) return null;
+  return el("div", { class: "why-now" },
+    el("div", {}, el("strong", {}, "Why now: "), n.headline || n.title),
+    el("div", { class: "small muted" }, "From ", newsSource(n), " · " + fmtDate(n.date) + ". Check it before you send: the email mentions it."));
+}
+
+// A past brand's recent launches and teasers, on the deal. The best fresh one opens its next re-pitch.
+function brandNewsBox(brandId, brand) {
+  const box = el("div", { class: "brand-news" });
+  const draw = (items, note) => {
+    const shown = items.filter((n) => !n.hidden).slice(0, 5);
+    clear(box).append(el("h3", {}, "What " + brand + " is up to"),
+      shown.length ? el("ul", { class: "list" }, shown.map((n) => el("li", { class: "item" },
+        el("div", { class: "body" },
+          el("div", { class: "title" }, n.kind ? el("span", { class: "badge" }, pretty(n.kind)) : null, " " + (n.headline || n.title)),
+          el("div", { class: "detail" }, newsSource(n), " · " + fmtDate(n.date) + (n.used ? " · used in a re-pitch" : ""))),
+        el("div", { class: "actions" }, el("button", { class: "small", title: "Not relevant: never open a re-pitch with this",
+          onclick: action(async () => { await api("POST", "/api/news/" + n.id + "/hide"); load(); }, "Hidden") }, "Hide")))))
+        : emptyLine("No recent launches or teasers found yet."),
+      note ? el("p", { class: "small muted" }, note) : null,
+      el("p", {}, el("button", { class: "small", onclick: action(async () => {
+        const r = await api("POST", "/api/brands/" + brandId + "/news/check");
+        draw(r.news, (r.added ? r.added + " new item" + (r.added === 1 ? "" : "s") + " found." : "Nothing new found.")
+          + (r.notes.length ? " Couldn't read: " + r.notes.join("; ") : ""));
+      }, "Checked") }, "Check for news")),
+      el("p", { class: "small muted" }, "From their emails to you, their Instagram posts, their website and the news, last 45 days. "
+        + "Checking reads their website slowly and politely, so it can take a minute."));
+  };
+  const load = async () => draw(await api("GET", "/api/brands/" + brandId + "/news"));
+  load().catch(() => draw([], "Couldn't load their news."));
+  return box;
+}
+
 function closeDrawer() {
   document.getElementById("drawer").classList.add("hidden");
   document.getElementById("drawer-backdrop").classList.add("hidden");
@@ -231,11 +276,13 @@ async function openDeal(id, focusMessageId) {
   const finished = ["POSTED", "PAYMENT_PENDING", "CLOSED"].includes(o.status) && (o.closedReason || "").indexOf("Declined") !== 0;
   if (finished && (o.status !== "CLOSED" || o.compensation === "GIFTED" || invoices.some((i) => i.status === "PAID") || o.closedReason === "Paid")) {
     drawer.appendChild(card("Work together again",
-      el("p", { class: "small muted" }, "Draft a short re-pitch that mentions this collab. Sending it starts a new pitch with " + d.summary.brand + "."),
+      el("p", { class: "small muted" }, "Draft a short re-pitch that mentions this collab, and opens with their latest launch if they have one. "
+        + "Sending it starts a new pitch with " + d.summary.brand + "."),
       el("p", {}, el("button", { class: "small", onclick: action(async () => {
         const made = await api("POST", "/api/opportunities/" + id + "/repitch");
         closeDrawer(); showDraft(made);
-      }, "Re-pitch drafted — review it before sending") }, "Pitch them again"))));
+      }, "Re-pitch drafted — review it before sending") }, "Pitch them again")),
+      d.brand && d.brand.id ? brandNewsBox(d.brand.id, d.summary.brand) : null));
   }
 
   // Drafting

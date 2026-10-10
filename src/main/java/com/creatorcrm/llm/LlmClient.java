@@ -38,6 +38,19 @@ public interface LlmClient {
         throw new UnsupportedOperationException("Reading pictures isn't supported");
     }
 
+    /**
+     * Sort a brand's newly found emails, posts and articles: which are real news (a launch, a teaser, a restock), a
+     * one-line headline, and how well each fits the creator. Cheap: the model she uses for reading messages.
+     */
+    default NewsSort sortBrandNews(NewsSortInput input) {
+        throw new UnsupportedOperationException("Sorting brand news isn't supported");
+    }
+
+    /** Look up a brand's recent launches and teasers on the web, when nothing free turned any up. */
+    default NewsFound searchBrandNews(NewsSearchInput input) {
+        throw new UnsupportedOperationException("Searching for brand news isn't supported");
+    }
+
     boolean isConfigured();
 
     /** Whether {@link #submitClassifyBatch} works: classification at half price, results within hours. */

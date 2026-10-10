@@ -2,6 +2,7 @@ package com.creatorcrm.rebook;
 
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Brand;
+import com.creatorcrm.domain.BrandNews;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Compensation;
@@ -14,6 +15,7 @@ import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.llm.LlmClient;
+import com.creatorcrm.news.BrandNewsService;
 import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.ConversationRepo;
@@ -55,7 +57,7 @@ public class WinBack {
 
     /** A brand worth re-pitching, and the collab the re-pitch will mention. */
     public record Candidate(Long brandId, String brand, Long opportunityId, String lastCollab, boolean gifted,
-                            String amount, LocalDate finishedOn, long quietDays) {}
+                            String amount, LocalDate finishedOn, long quietDays, String news) {}
 
     private record Collab(Opportunity deal, LocalDate finishedOn, BigDecimal paid, String currency) {}
 
@@ -68,9 +70,12 @@ public class WinBack {
     private final DraftService drafts;
     private final SettingsService settings;
     private final LlmClient llm;
+    private final BrandNewsService news;
 
     public WinBack(BrandRepo brands, OpportunityRepo opportunities, ConversationRepo conversations, ActivityRepo activity,
-                   InvoiceRepo invoices, DraftRepo draftRepo, DraftService drafts, SettingsService settings, LlmClient llm) {
+                   InvoiceRepo invoices, DraftRepo draftRepo, DraftService drafts, SettingsService settings, LlmClient llm,
+                   BrandNewsService news) {
+        this.news = news;
         this.brands = brands;
         this.opportunities = opportunities;
         this.conversations = conversations;
@@ -82,7 +87,10 @@ public class WinBack {
         this.llm = llm;
     }
 
-    /** Brands to re-pitch today, best first: paid collabs before gifted ones, bigger before smaller. */
+    /**
+     * Brands to re-pitch today, best first: brands with fresh news before the rest, then paid collabs before gifted
+     * ones, bigger before smaller.
+     */
     public List<Candidate> candidates(LocalDate today) {
         int quiet = settings.winBackQuietDays();
         Map<Long, List<Opportunity>> byBrand = opportunities.findAll().stream()
@@ -130,17 +138,21 @@ public class WinBack {
             String currency = last.currency() != null ? last.currency() : last.deal().currency;
             Candidate cand = new Candidate(b.id, b.name, last.deal().id, describe(last.deal()), gifted,
                     amount == null ? null : InvoicePdf.money(currency == null ? "USD" : currency, amount),
-                    last.finishedOn(), ChronoUnit.DAYS.between(since, today));
+                    last.finishedOn(), ChronoUnit.DAYS.between(since, today),
+                    news.best(b.id, today).map(n -> n.headline).orElse(null));
             out.add(cand);
             value.put(cand, amount == null ? BigDecimal.ZERO : amount);
         }
-        out.sort(Comparator.comparing(Candidate::gifted)
+        out.sort(Comparator.comparing((Candidate c) -> c.news() == null).thenComparing(Candidate::gifted)
                 .thenComparing((Candidate c) -> value.get(c), Comparator.reverseOrder())
                 .thenComparing(Candidate::finishedOn));
         return out;
     }
 
-    /** Daily run: fills this week's re-pitch allowance from the best candidates. Returns how many were drafted. */
+    /**
+     * Daily run: fills this week's re-pitch allowance from the best candidates. A brand without fresh news is
+     * skipped when she asked to re-pitch only on news. Returns how many were drafted.
+     */
     public int draftDue(LocalDate today) {
         int limit = settings.winBackWeeklyLimit();
         if (limit <= 0 || !llm.isConfigured()) return 0;
@@ -149,6 +161,7 @@ public class WinBack {
         int n = 0;
         for (Candidate c : candidates(today)) {
             if (thisWeek + n >= limit) break;
+            if (c.news() == null && settings.winBackNeedsNews()) continue;
             try {
                 draft(c, today);
                 n++;
@@ -173,7 +186,7 @@ public class WinBack {
         String currency = c.currency() != null ? c.currency() : o.currency;
         return draft(new Candidate(b.id, b.name, o.id, describe(o), gifted,
                 amount == null ? null : InvoicePdf.money(currency == null ? "USD" : currency, amount),
-                c.finishedOn(), ChronoUnit.DAYS.between(c.finishedOn(), today)), today);
+                c.finishedOn(), ChronoUnit.DAYS.between(c.finishedOn(), today), null), today);
     }
 
     private Draft draft(Candidate c, LocalDate today) {
@@ -184,11 +197,32 @@ public class WinBack {
                 + "then propose working together again with one concrete idea"
                 + (c.gifted() ? ", as a paid collaboration this time" : "")
                 + ". Keep it short, personal and easy to say yes to. Don't quote any rates.";
+        BrandNews hook = news.best(c.brandId(), today).orElse(null);
+        if (hook != null) instructions += newsHook(c.brand(), hook);
         Draft d = drafts.generate(c.opportunityId(), DraftType.REPITCH, instructions, null, null);
+        if (hook != null) news.markUsed(hook, d.id);
         Brand b = brands.findById(c.brandId()).orElseThrow();
         b.lastRepitchAt = OffsetDateTime.now();
         brands.save(b);
         return d;
+    }
+
+    /**
+     * The "why now": the brand's recent news, as Claude's sort summed it up (never the raw email or post, which is
+     * third-party text). The writer opens with it and pitches content around it.
+     */
+    static String newsHook(String brand, BrandNews hook) {
+        String when = hook.date().format(DateTimeFormatter.ofPattern("d MMMM", Locale.ENGLISH));
+        return " News hook: " + brand + " recently shared this (" + pretty(hook.kind) + ", " + when + "): " + hook.headline.strip()
+                + (hook.headline.strip().endsWith(".") ? "" : ".")
+                + " Open the email with this news in the creator's own words, as something she saw, without saying where. "
+                + "Use only the facts in that line: no extra dates, prices or details. Make the one concrete idea about this "
+                + "news" + (hook.pitchIdea == null ? "" : ", for example: " + hook.pitchIdea.strip())
+                + ". Then recall the last collab in one line.";
+    }
+
+    private static String pretty(BrandNews.Kind kind) {
+        return kind == null ? "news" : kind.name().toLowerCase(Locale.ROOT).replace('_', ' ');
     }
 
     /**

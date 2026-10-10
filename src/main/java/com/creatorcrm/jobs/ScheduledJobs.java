@@ -19,6 +19,7 @@ import com.creatorcrm.drafts.SendQueue;
 import com.creatorcrm.drafts.Placeholders;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.invoices.PaymentReminders;
+import com.creatorcrm.news.BrandNewsService;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.outreach.InstagramEngagementService;
@@ -60,6 +61,7 @@ public class ScheduledJobs {
     private final ContactFinder contactFinder;
     private final CampaignService campaigns;
     private final CampaignSender campaignSender;
+    private final BrandNewsService brandNews;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
@@ -67,7 +69,9 @@ public class ScheduledJobs {
                          PaymentReminders paymentReminders, WinBack winBack,
                          InstagramEngagementService instagramEngagement, CalendarSync calendar,
                          CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts,
-                         ContactFinder contactFinder, CampaignService campaigns, CampaignSender campaignSender) {
+                         ContactFinder contactFinder, CampaignService campaigns, CampaignSender campaignSender,
+                         BrandNewsService brandNews) {
+        this.brandNews = brandNews;
         this.campaigns = campaigns;
         this.campaignSender = campaignSender;
         this.gmailContacts = gmailContacts;
@@ -129,6 +133,13 @@ public class ScheduledJobs {
             if (dead > 0) log.info("Marked {} contacts whose domain can't receive email", dead);
         } catch (RuntimeException e) {
             log.warn("Could not check contacts' mail servers: {}", e.getMessage());
+        }
+        try {
+            // Before the re-pitches are drafted, so this week's can open with a brand's latest launch
+            int checked = brandNews.refreshDue(winBack.candidates(settings.today()).stream().map(WinBack.Candidate::brandId).toList());
+            if (checked > 0) log.info("Checked news for {} past brands", checked);
+        } catch (RuntimeException e) {
+            log.warn("Could not check past brands' news: {}", e.getMessage());
         }
         prepareMorning();
         if (settings.followupAutoSend()) autoSendFollowUps();

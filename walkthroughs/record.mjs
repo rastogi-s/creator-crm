@@ -618,6 +618,39 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "brand-news"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    const rebook = page.locator("#rebook");
+    await rebook.waitFor();
+    await rebook.scrollIntoViewIfNeeded();
+    const coastline = rebook.locator(".item", { hasText: "Coastline Coffee" });
+    await point(coastline.getByText("New: "));
+    await say("Coastline Coffee just teased a new cold brew on Instagram, so this week's re-pitch opens with that.", 4600);
+    await click(coastline.getByRole("button", { name: "Review re-pitch" }));
+    const draft = openCard(page).filter({ hasText: "Coastline Coffee — Re-pitch" });
+    await draft.waitFor();
+    await point(draft.locator(".why-now"));
+    await say("Why now shows the news and where it came from. Open the link to check it before you send.", 4600);
+    await point(draft.locator("textarea"));
+    await say("The email leads with their launch, recalls your last collab, and pitches one idea for it.", 4400);
+    await click(draft.getByRole("button", { name: "Open deal" }));
+    const news = page.locator("#drawer .brand-news");
+    await news.waitFor();
+    await news.scrollIntoViewIfNeeded();
+    await point(news.getByRole("heading"));
+    await say("On the deal you see what they've launched lately. It comes from their emails, Instagram, website and the news.", 5000);
+    await point(news.getByRole("button", { name: "Check for news" }));
+    await say("Press Check for news any time. Hide anything that isn't a good reason to reach out.", 4400);
+    await click(page.locator("#drawer").getByRole("button", { name: "Close" }));
+    await goTo(page, "settings", "deals");
+    const step = page.locator("#settings-rebook");
+    await step.waitFor();
+    await point(step.locator("#brand-news"));
+    await say("In Settings, turn news on or off, allow a web search, or only re-pitch brands that have news.", 4600);
+    await say("", 600);
+  },
+
   async "new-layout"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");
