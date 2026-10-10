@@ -185,9 +185,28 @@ async function openDeal(id, focusMessageId) {
       box.appendChild(head);
       if (c.note) box.appendChild(el("p", { class: "small muted" }, c.note));
       if (c.terms && c.terms.summary) box.appendChild(el("p", { class: "small" }, c.terms.summary));
+      // Red and amber lines get a tick box: the ones she ticks go into an email asking the brand to change or explain them
+      const askable = c.status === "CHECKED" && c.flags.some((f) => f.level !== "OK");
+      const picks = [];
       if (c.flags.length) {
-        box.appendChild(el("ul", { class: "flags" }, c.flags.map((f) => el("li", { class: "flag " + f.level.toLowerCase() },
-          el("span", { class: "mark", "aria-label": { RED: "Push back", AMBER: "Look at", OK: "Fine" }[f.level] }, icon[f.level]), el("span", {}, f.text)))));
+        box.appendChild(el("ul", { class: "flags" }, c.flags.map((f) => {
+          const mark = el("span", { class: "mark", "aria-label": { RED: "Push back", AMBER: "Look at", OK: "Fine" }[f.level] }, icon[f.level]);
+          if (!askable || f.level === "OK") return el("li", { class: "flag " + f.level.toLowerCase() }, mark, el("span", {}, f.text));
+          const tick = el("input", { type: "checkbox", checked: f.level === "RED", title: "Ask the brand about this" });
+          picks.push({ tick, text: f.text });
+          return el("li", { class: "flag pick " + f.level.toLowerCase() }, el("label", {}, tick, mark, el("span", {}, f.text)));
+        })));
+      }
+      if (askable) {
+        const note = el("input", { placeholder: "Anything else to ask, e.g. 'can we post a week later?'", maxlength: "1000" });
+        box.appendChild(el("div", { class: "ask-brand" },
+          el("p", { class: "small muted" }, "Tick what you want changed or explained, and Claude writes the brand a reply in your voice."),
+          el("div", { class: "row" }, note, el("button", { class: "primary small", onclick: action(async () => {
+            const flags = picks.filter((p) => p.tick.checked).map((p) => p.text);
+            if (!flags.length && !note.value.trim()) throw new Error("Tick at least one point to ask about");
+            const made = await api("POST", "/api/contracts/" + c.id + "/questions", { flags, note: note.value });
+            closeDrawer(); showDraft(made);
+          }, "Email drafted — review it before sending") }, "Draft email to brand"))));
       }
       if (c.terms && c.terms.deadlines && c.terms.deadlines.length) {
         box.appendChild(el("p", { class: "small" }, "Dates in the contract: " + c.terms.deadlines.map((x) => fmtDate(x.date) + " " + x.what).join("; ")));

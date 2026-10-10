@@ -25,6 +25,19 @@ public class DemoLlm implements LlmClient {
         return DemoInbox.analysisFor(input.newMessage(), input.today());
     }
 
+    /** The canned brand-facing version of a contract check line, for practice mode. */
+    static String contractAsk(String point) {
+        String p = point.toLowerCase(java.util.Locale.ROOT);
+        if (p.contains("in ads forever") || p.contains("paid usage")) return "Could we put a time limit on paid usage of the content, or add a fee for longer use?";
+        if (p.contains("paid")) return "Could we make payment within 30 days of the invoice?";
+        if (p.contains("exclusivity")) return "Could you tell me exactly which brands the exclusivity covers, and for how long?";
+        if (p.contains("revision")) return "Could we cap revisions at 2 rounds?";
+        if (p.contains("kill fee")) return "Could we add a kill fee, in case the campaign is cancelled after I've started?";
+        if (p.contains("no fee")) return "Could you add the fee we agreed to the contract?";
+        if (p.contains("fee") || p.contains("the deal is")) return "Could you check the fee? It doesn't match what we agreed.";
+        return "Could you clarify this part: " + point;
+    }
+
     @Override
     public DraftText writeDraft(DraftInput input) {
         String who = input.contactName() == null || input.contactName().isBlank() ? "there" : input.contactName();
@@ -41,6 +54,20 @@ public class DemoLlm implements LlmClient {
             return new DraftText("Re: " + input.brandName() + " collab",
                     "Hi " + who + ",\n\nThank you so much for thinking of me! It isn't quite the right fit for me right now, "
                             + "but I'd love to stay in touch for future collaborations.\n\nAll the best,\nAva");
+        }
+        if ("NEGOTIATION".equals(input.draftType()) && input.extraInstructions().startsWith("Contract changes:")) {
+            // extraInstructions: "Contract changes: ... <contract_points>\n1. ...\n</contract_points>" from ContractService.
+            StringBuilder asks = new StringBuilder();
+            int n = 0;
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^\\d+\\. (.+)$").matcher(input.extraInstructions());
+            while (m.find()) asks.append(++n).append(". ").append(contractAsk(m.group(1))).append('\n');
+            java.util.regex.Matcher own = java.util.regex.Pattern.compile("The creator's own note, to include: (.+?)(?: Still unknown in this deal|$)")
+                    .matcher(input.extraInstructions());
+            if (own.find()) asks.append(++n).append(". ").append(own.group(1).strip()).append('\n');
+            return new DraftText("Re: " + input.brandName() + " contract",
+                    "Hi " + who + ",\n\nThanks so much for sending the contract over! Before I sign, I had "
+                            + (n == 1 ? "one thing" : "a few things") + " I wanted to check:\n\n" + asks
+                            + "\nCould you send an updated version, or let me know your thoughts?\n\nThanks,\nAva");
         }
         if ("NEGOTIATION".equals(input.draftType())) {
             // extraInstructions: "Counter-offer: propose $1,250 for 1 Reel + 2 Stories, .... The creator chose ..." from RateAdvisor.
