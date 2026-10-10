@@ -301,6 +301,36 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "contract-questions"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Bloomleaf Tea" });
+    await row.waitFor();
+    await say("Bloomleaf Tea's contract has a few things you'd like changed.", 3400);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#contract-check");
+    await box.waitFor();
+    const red = box.locator("li.flag.pick.red").first();
+    await red.scrollIntoViewIfNeeded();
+    await point(red.locator("input[type=checkbox]"));
+    await say("Every red or amber point has a tick box. Red ones start ticked.", 3800);
+    const amber = box.locator("li.flag.pick.amber").first();
+    await click(amber.locator("input[type=checkbox]"));
+    await say("Tick anything else you want to ask about.", 3000);
+    const note = box.locator(".ask-brand input");
+    await click(note);
+    await note.pressSequentially("Could we post on the 20th instead?", { delay: 35 });
+    await say("Add your own question too, if you like.", 2800);
+    await click(box.getByRole("button", { name: "Draft email to brand" }));
+    const card = openCard(page);
+    await card.waitFor();
+    await point(card.locator("textarea").first());
+    await say("Claude writes a polite reply to the brand, in your voice, asking about each point.", 4400);
+    await say("It waits in Drafts until you send it, like every other email.", 3600);
+    await say("", 600);
+  },
+
   async "rate-advisor"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

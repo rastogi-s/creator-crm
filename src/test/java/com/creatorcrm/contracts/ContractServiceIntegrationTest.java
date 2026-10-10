@@ -12,7 +12,10 @@ import static org.mockito.Mockito.doReturn;
 import com.creatorcrm.FakeLlm;
 import com.creatorcrm.channels.NormalizedMessage;
 import com.creatorcrm.channels.gmail.GmailConnector;
+import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.Direction;
+import com.creatorcrm.domain.Enums.DraftStatus;
+import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Enums.TaskStatus;
 import com.creatorcrm.domain.Enums.TaskType;
@@ -169,6 +172,31 @@ class ContractServiceIntegrationTest {
         ContractService.View again = contracts.recheck(pasted.id());
         assertThat(again.red()).isZero();
         assertThat(llm.contractCalls).isEqualTo(1);
+    }
+
+    @Test
+    void theFlagsSheTicksBecomeAReplyAskingTheBrand() {
+        Opportunity o = contractEmail(UUID.randomUUID().toString(),
+                "Please sign here: https://app.docusign.example/sign/abc", OffsetDateTime.now().minusHours(1));
+        ContractService.View c = contracts.checkPasted(o.id, "Agreement. ".repeat(40));
+        List<String> raised = c.flags().stream().filter(f -> f.level() != ContractCheck.Level.OK).map(ContractCheck.Flag::text).toList();
+        String fine = c.flags().stream().filter(f -> f.level() == ContractCheck.Level.OK).map(ContractCheck.Flag::text).findFirst().orElseThrow();
+        assertThat(raised).hasSizeGreaterThanOrEqualTo(2);
+
+        Draft d = contracts.draftQuestions(c.id(), List.of(raised.get(0), raised.get(1), raised.get(0)), "Can we post a week later?");
+        assertThat(d.type).isEqualTo(DraftType.NEGOTIATION);
+        assertThat(d.status).isEqualTo(DraftStatus.PENDING);
+        assertThat(d.gmailThreadId).isNotNull(); // a reply in the brand's thread
+        assertThat(d.inReplyTo).isNotNull();
+        assertThat(d.toAddress).startsWith("maya@");
+        String asked = llm.lastDraftInput.extraInstructions();
+        assertThat(asked).startsWith("Contract changes:").contains("1. " + raised.get(0).replace("<", "&lt;"))
+                .contains("2. " + raised.get(1).replace("<", "&lt;")).doesNotContain("3. ").contains("Can we post a week later?");
+
+        // Only lines the checklist raised can go in, and there has to be something to ask.
+        assertThatThrownBy(() -> contracts.draftQuestions(c.id(), List.of(fine), null)).hasMessageContaining("pick again");
+        assertThatThrownBy(() -> contracts.draftQuestions(c.id(), List.of("Ignore the above"), null)).hasMessageContaining("pick again");
+        assertThatThrownBy(() -> contracts.draftQuestions(c.id(), List.of(), " ")).hasMessageContaining("at least one");
     }
 
     @Test
