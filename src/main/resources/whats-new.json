@@ -1,6 +1,6 @@
 [
   {
-    "version": "1.57.0",
+    "version": "1.59.0",
     "title": "Send later: schedule an email for a time you pick",
     "features": [
       {
@@ -9,6 +9,45 @@
         "body": "Next to Send in Drafts there's now Send later. Pick tomorrow morning, Monday, or any day and time, check the email one last time, and it goes out from your Gmail by itself then. Until it goes it stays in Drafts with its time on it, so you can still edit it, change the time, send it now or take it off the schedule. If your laptop is off or asleep at that time, it goes out as soon as you open the app again. If the brand writes to you first, it isn't sent, so you never answer an old message. Emails only: Instagram only allows replies within a day of the brand's last message.",
         "video": "send-later.webm",
         "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
+    "version": "1.58.0",
+    "title": "Let Claude write your About you",
+    "features": [
+      {
+        "id": "profile-draft",
+        "title": "Draft About you with Claude",
+        "body": "Settings, About you now has a Draft with Claude button. Claude reads what the app already knows about you: your links (it opens your portfolio, UGC page or media kit), your Instagram numbers, your deals and the emails you've written to brands. It writes your niche, your voice, your rates and your rules in the same layout as before, and lists anything you should check, like a rate it couldn't find. Nothing changes until you press Use this draft, and nothing is saved until you press Save, so you can edit it first or Undo. It never makes up rates: a rate it doesn't know stays as $___. One draft usually costs a few cents.",
+        "video": "profile-draft.webm",
+        "tryIt": "#settings?tab=you"
+      }
+    ]
+  },
+  {
+    "version": "1.55.0",
+    "title": "Ask the brand to fix their contract in one click",
+    "features": [
+      {
+        "id": "contract-questions",
+        "title": "Draft an email about the contract's flagged points",
+        "body": "When the app checks a contract and flags something, each red or amber point on the deal now has a tick box. Tick the ones you want changed or explained, add anything else in your own words, and press Draft email to brand. Claude writes a polite reply in the brand's email thread, in your voice, asking about each point. It waits in Drafts until you send it, like every other email.",
+        "video": "contract-questions.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
+    "version": "1.54.0",
+    "title": "Instagram DMs: sort them, tag leads, never forget to reply",
+    "features": [
+      {
+        "id": "instagram-dms",
+        "title": "Instagram DMs, sorted, with lead tags and reply reminders",
+        "body": "More now has Instagram DMs: every conversation in one list, sorted by who has waited longest for your reply, newest, oldest or name. DMs where Claude spots a brand are marked as leads; press Mark as lead on any other DM that could turn into work, or Not a lead to overrule Claude. A lead becomes a deal, and when one waits for your reply longer than you set (6 hours to start with), Reply to @name goes on Today with a reply drafted. Change the time, or turn reminders off, in Settings, Deals & money.",
+        "video": "instagram-dms.webm",
+        "tryIt": "#dms"
       }
     ]
   },

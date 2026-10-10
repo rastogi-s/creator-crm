@@ -7,6 +7,7 @@ import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.contacts.ContactFinder;
 import com.creatorcrm.contacts.GmailContacts;
+import com.creatorcrm.dms.DmReminders;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftStatus;
@@ -60,6 +61,7 @@ public class ScheduledJobs {
     private final ContactFinder contactFinder;
     private final CampaignService campaigns;
     private final CampaignSender campaignSender;
+    private final DmReminders dmReminders;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
@@ -67,7 +69,9 @@ public class ScheduledJobs {
                          PaymentReminders paymentReminders, WinBack winBack,
                          InstagramEngagementService instagramEngagement, CalendarSync calendar,
                          CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts,
-                         ContactFinder contactFinder, CampaignService campaigns, CampaignSender campaignSender) {
+                         ContactFinder contactFinder, CampaignService campaigns, CampaignSender campaignSender,
+                         DmReminders dmReminders) {
+        this.dmReminders = dmReminders;
         this.campaigns = campaigns;
         this.campaignSender = campaignSender;
         this.gmailContacts = gmailContacts;
@@ -96,6 +100,7 @@ public class ScheduledJobs {
         log.info("Sync: {}", ingestion.syncAll());
         int engaged = instagramEngagement.poll();
         if (engaged > 0) log.info("Instagram: {} new comments, tags or mentions", engaged);
+        dmReminders.run(); // after new DMs, so a reply she just sent counts
         calendar.sync(); // after new mail, so fresh deadlines show up on her calendar
     }
 
