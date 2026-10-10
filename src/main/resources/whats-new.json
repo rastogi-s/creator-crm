@@ -13,6 +13,19 @@
     ]
   },
   {
+    "version": "1.59.0",
+    "title": "Send later: schedule an email for a time you pick",
+    "features": [
+      {
+        "id": "send-later",
+        "title": "Schedule drafts",
+        "body": "Next to Send in Drafts there's now Send later. Pick tomorrow morning, Monday, or any day and time, check the email one last time, and it goes out from your Gmail by itself then. Until it goes it stays in Drafts with its time on it, so you can still edit it, change the time, send it now or take it off the schedule. If your laptop is off or asleep at that time, it goes out as soon as you open the app again. If the brand writes to you first, it isn't sent, so you never answer an old message. Emails only: Instagram only allows replies within a day of the brand's last message.",
+        "video": "send-later.webm",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.58.0",
     "title": "Let Claude write your About you",
     "features": [

@@ -423,6 +423,62 @@ public class DraftService {
     }
 
     /**
+     * Schedules an email to go out at {@code at} ({@link ScheduledSends}), with her edits saved. It is checked now
+     * like Send, and again when it goes, so a blank or a disconnected Gmail is found straight away. Only email:
+     * Instagram only allows replies within 24 hours of the brand's last message, so a later DM might not be allowed.
+     */
+    @Transactional
+    public Draft schedule(Long draftId, String editedSubject, String editedBody, OffsetDateTime at) {
+        if (at == null) throw new IllegalArgumentException("Pick when to send it");
+        OffsetDateTime now = OffsetDateTime.now();
+        if (at.isBefore(now.plusMinutes(1))) throw new IllegalArgumentException("Pick a time later than now");
+        if (at.isAfter(now.plusYears(1))) throw new IllegalArgumentException("Pick a time within the next year");
+        Draft d = pending(draftId);
+        if (d.channel != Platform.EMAIL) {
+            throw new IllegalStateException("Only emails can be scheduled. Instagram only lets you reply within 24 hours of the brand's last message, so send DMs when you're ready.");
+        }
+        d = readyToSend(draftId, editedSubject, editedBody);
+        d.scheduledAt = at;
+        d.error = null;
+        return drafts.save(d);
+    }
+
+    /** Takes a draft off the schedule: it waits in Drafts for her Send again. */
+    @Transactional
+    public Draft unschedule(Long draftId) {
+        Draft d = pending(draftId);
+        d.scheduledAt = null;
+        d.error = null;
+        return drafts.save(d);
+    }
+
+    /**
+     * Sends a scheduled email whose time has come, with the same checks as her own Send. Does nothing when she took
+     * it off the schedule or moved it later in the meantime.
+     */
+    @Transactional
+    public Draft sendScheduled(Long draftId) {
+        Draft d = pending(draftId);
+        if (d.scheduledAt == null || d.scheduledAt.isAfter(OffsetDateTime.now())) return d;
+        return deliver(d, false);
+    }
+
+    /**
+     * A scheduled email couldn't go: it comes off the schedule and stays in Drafts with the reason, so she can fix
+     * it and send or schedule it again. Nothing is retried on its own, so nothing goes out twice.
+     */
+    @Transactional
+    public void scheduledSendFailed(Long draftId, String reason) {
+        drafts.findById(draftId).filter(d -> d.status == DraftStatus.PENDING).ifPresent(d -> {
+            String when = d.scheduledAt == null ? "" : " at " + d.scheduledAt.atZoneSameInstant(settings.zone())
+                    .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", java.util.Locale.ENGLISH));
+            d.scheduledAt = null;
+            d.error = "It was scheduled to go" + when + " but couldn't: " + (reason == null ? "sending failed" : reason);
+            drafts.save(d);
+        });
+    }
+
+    /**
      * Opt-in automatic send, used by the daily follow-up run. Only email follow-ups qualify: anything else
      * (replies, rates, Instagram DMs) always waits for the creator's click.
      */

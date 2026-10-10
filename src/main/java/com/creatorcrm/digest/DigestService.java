@@ -180,6 +180,7 @@ public class DigestService {
         }
 
         List<Approval> approvals = drafts.findByStatusOrderByCreatedAtAsc(DraftStatus.PENDING).stream()
+                .filter(d -> d.scheduledAt == null) // already approved, waiting for its time
                 .map(d -> approval(d, opps, brandNames)).toList();
 
         // Win-back re-pitches waiting for her: past brands worth working with again.
