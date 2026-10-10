@@ -263,6 +263,18 @@ function leadItem(root, l, canLookUp) {
           toast(r.message);
           renderOutreach(root);
         }) }, "Find contacts on website") : null,
+      !l.contactEmail ? el("button", { class: "small", title: "Ask Hunter (and Apollo, if added) who works there and use the best person. Uses 1 Hunter credit. No Claude.",
+        onclick: action(async () => {
+          const find = async (again) => {
+            const r = await api("POST", "/api/finders/lead/" + l.id + "/find" + (again ? "?again=true" : ""));
+            if (r.askFirst) return confirm(r.askFirst) ? find(true) : null;
+            return r;
+          };
+          const r = await find(false);
+          if (!r) return;
+          toast(r.notes.join(" "), !r.email);
+          renderOutreach(root);
+        }) }, "Find email with Hunter") : null,
       canLookUp && l.instagram ? el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/leads/" + l.id + "/instagram"); renderOutreach(root);
       }, "Instagram details updated") }, l.igCheckedAt ? "Refresh Instagram" : "Check Instagram") : null,

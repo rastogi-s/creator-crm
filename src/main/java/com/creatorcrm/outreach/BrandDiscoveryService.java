@@ -62,9 +62,12 @@ public class BrandDiscoveryService {
     private final DraftService drafts;
     private final BrandLookupService lookup;
     private final ContactService contacts;
+    private final com.creatorcrm.contacts.ContactFinder finder;
 
     public BrandDiscoveryService(LlmClient llm, BrandLeadRepo leads, BrandRepo brands, OpportunityRepo opportunities,
-                                 ActivityRepo activity, DraftService drafts, BrandLookupService lookup, ContactService contacts) {
+                                 ActivityRepo activity, DraftService drafts, BrandLookupService lookup, ContactService contacts,
+                                 com.creatorcrm.contacts.ContactFinder finder) {
+        this.finder = finder;
         this.contacts = contacts;
         this.lookup = lookup;
         this.llm = llm;
@@ -305,6 +308,7 @@ public class BrandDiscoveryService {
         if (b.instagram == null) b.instagram = lead.instagram;
         b = brands.save(b);
         contacts.claimDomain(b.id, Emails.domainOfUrl(lead.website));
+        finder.importLeadPeople(b.id, lead); // people Hunter or Apollo found for it, tagged so they're never shared
         if (lead.contactEmail != null) {
             contacts.add(b.id, ContactService.Found.of(lead.contactEmail, null, ContactSource.Kind.LEAD, lead.contactSourceUrl));
         }
