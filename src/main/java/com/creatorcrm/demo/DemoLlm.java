@@ -9,6 +9,8 @@ import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
+import com.creatorcrm.llm.ProfileDraft;
+import com.creatorcrm.llm.ProfileDraftInput;
 import java.util.List;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
@@ -23,6 +25,19 @@ public class DemoLlm implements LlmClient {
     @Override
     public MessageAnalysis classify(ClassificationInput input) {
         return DemoInbox.analysisFor(input.newMessage(), input.today());
+    }
+
+    /** The canned brand-facing version of a contract check line, for practice mode. */
+    static String contractAsk(String point) {
+        String p = point.toLowerCase(java.util.Locale.ROOT);
+        if (p.contains("in ads forever") || p.contains("paid usage")) return "Could we put a time limit on paid usage of the content, or add a fee for longer use?";
+        if (p.contains("paid")) return "Could we make payment within 30 days of the invoice?";
+        if (p.contains("exclusivity")) return "Could you tell me exactly which brands the exclusivity covers, and for how long?";
+        if (p.contains("revision")) return "Could we cap revisions at 2 rounds?";
+        if (p.contains("kill fee")) return "Could we add a kill fee, in case the campaign is cancelled after I've started?";
+        if (p.contains("no fee")) return "Could you add the fee we agreed to the contract?";
+        if (p.contains("fee") || p.contains("the deal is")) return "Could you check the fee? It doesn't match what we agreed.";
+        return "Could you clarify this part: " + point;
     }
 
     @Override
@@ -41,6 +56,20 @@ public class DemoLlm implements LlmClient {
             return new DraftText("Re: " + input.brandName() + " collab",
                     "Hi " + who + ",\n\nThank you so much for thinking of me! It isn't quite the right fit for me right now, "
                             + "but I'd love to stay in touch for future collaborations.\n\nAll the best,\nAva");
+        }
+        if ("NEGOTIATION".equals(input.draftType()) && input.extraInstructions().startsWith("Contract changes:")) {
+            // extraInstructions: "Contract changes: ... <contract_points>\n1. ...\n</contract_points>" from ContractService.
+            StringBuilder asks = new StringBuilder();
+            int n = 0;
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^\\d+\\. (.+)$").matcher(input.extraInstructions());
+            while (m.find()) asks.append(++n).append(". ").append(contractAsk(m.group(1))).append('\n');
+            java.util.regex.Matcher own = java.util.regex.Pattern.compile("The creator's own note, to include: (.+?)(?: Still unknown in this deal|$)")
+                    .matcher(input.extraInstructions());
+            if (own.find()) asks.append(++n).append(". ").append(own.group(1).strip()).append('\n');
+            return new DraftText("Re: " + input.brandName() + " contract",
+                    "Hi " + who + ",\n\nThanks so much for sending the contract over! Before I sign, I had "
+                            + (n == 1 ? "one thing" : "a few things") + " I wanted to check:\n\n" + asks
+                            + "\nCould you send an updated version, or let me know your thoughts?\n\nThanks,\nAva");
         }
         if ("NEGOTIATION".equals(input.draftType())) {
             // extraInstructions: "Counter-offer: propose $1,250 for 1 Reel + 2 Stories, .... The creator chose ..." from RateAdvisor.
@@ -179,6 +208,39 @@ public class DemoLlm implements LlmClient {
         return new BrandLeads(sample.stream()
                 .filter(l -> input.excludeBrands().stream().noneMatch(l.name()::equalsIgnoreCase))
                 .limit(Math.max(1, input.count())).toList());
+    }
+
+    @Override
+    public ProfileDraft draftProfile(ProfileDraftInput input) {
+        String name = input.creatorName().isBlank() ? "Ava" : input.creatorName();
+        List<String> brands = input.deals().stream().map(d -> d.replaceFirst(" \\(.*", "")).distinct().limit(4).toList();
+        String portfolio = input.links().stream().filter(l -> l.toLowerCase().matches(".*(portfolio|ugc|media kit).*"))
+                .findFirst().map(l -> l.substring(l.indexOf(": ") + 2)).orElse("___");
+        String profile = "# About me\n"
+                + "- I make warm, practical skincare, wellness and healthy-food content: Reels, Stories and UGC videos brands can run as ads.\n"
+                + "- Audience: mostly women 25–34 in the US who want simple routines that actually work.\n"
+                + "- Platforms: Instagram ___, TikTok ___\n"
+                + "- Portfolio and media kit: " + portfolio + "\n"
+                + (brands.isEmpty() ? "" : "- Brands I've talked to or worked with: " + String.join(", ", brands) + "\n")
+                + "\n# My voice\n"
+                + "- Friendly and upbeat, but straight to the point.\n"
+                + "- Short emails: a thank-you, one or two sentences on the idea, then a clear next step.\n"
+                + "- I open with \"Hi <first name>,\" and never use emoji in emails.\n"
+                + "- Confident about rates; I never apologise for them.\n"
+                + "- Sign-off: \"Best, " + name + "\"\n"
+                + "\n# Rates (drafts will only quote what is written here)\n"
+                + "- 1 Instagram Reel: $800\n"
+                + "- 3-frame Story set: $300\n"
+                + "- UGC video, no posting (30–60s): $___\n"
+                + "- Usage rights / whitelisting: +30% per 30 days\n"
+                + "\n# Rules\n"
+                + "- Gifted-only collabs only for products I already love; never for Reels.\n"
+                + "- Budget, deliverables, timeline and usage rights must be clear before I say yes.\n"
+                + "- Payment terms: net 30 or better; 50% upfront for projects over $1,000.\n";
+        return new ProfileDraft(profile, List.of(
+                "Add your Instagram and TikTok handles and follower numbers.",
+                "Fill in your UGC video rate; none of your deals showed one.",
+                "The Reel and Story rates come from your Bloomleaf Tea deal; check they're still right."));
     }
 
     @Override

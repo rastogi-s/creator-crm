@@ -31,6 +31,8 @@ public interface MessageRepo extends JpaRepository<Message, Long> {
             + " (select o.conversationId from Opportunity o where o.conversationId is not null) order by m.sentAt desc")
     List<Message> brandMailSince(String at, String sub, OffsetDateTime since, Pageable page);
 
+    List<Message> findByConversationIdInOrderBySentAtAsc(java.util.Collection<Long> conversationIds);
+
     /** New messages since the campaign watcher last looked. */
     List<Message> findTop500ByIdGreaterThanOrderByIdAsc(Long id);
 

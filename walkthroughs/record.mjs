@@ -301,6 +301,36 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "contract-questions"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Bloomleaf Tea" });
+    await row.waitFor();
+    await say("Bloomleaf Tea's contract has a few things you'd like changed.", 3400);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#contract-check");
+    await box.waitFor();
+    const red = box.locator("li.flag.pick.red").first();
+    await red.scrollIntoViewIfNeeded();
+    await point(red.locator("input[type=checkbox]"));
+    await say("Every red or amber point has a tick box. Red ones start ticked.", 3800);
+    const amber = box.locator("li.flag.pick.amber").first();
+    await click(amber.locator("input[type=checkbox]"));
+    await say("Tick anything else you want to ask about.", 3000);
+    const note = box.locator(".ask-brand input");
+    await click(note);
+    await note.pressSequentially("Could we post on the 20th instead?", { delay: 35 });
+    await say("Add your own question too, if you like.", 2800);
+    await click(box.getByRole("button", { name: "Draft email to brand" }));
+    const card = openCard(page);
+    await card.waitFor();
+    await point(card.locator("textarea").first());
+    await say("Claude writes a polite reply to the brand, in your voice, asking about each point.", 4400);
+    await say("It waits in Drafts until you send it, like every other email.", 3600);
+    await say("", 600);
+  },
+
   async "rate-advisor"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");
@@ -1114,6 +1144,79 @@ const scenarios = {
       await point(download);
       await say("Download CSV saves it as a spreadsheet, ready to sell as a pack or share.", 3800);
     }
+    await say("", 600);
+  },
+
+  async "instagram-dms"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await goTo(page, "dms");
+    const view = page.locator("#view-dms");
+    await view.locator(".dm-list .item").first().waitFor();
+    await say("Instagram DMs now has its own page: every conversation in one list.", 3800);
+    await point(view.locator("select[aria-label=Sort]"));
+    await say("Sort by who has waited longest for you, newest, oldest, or name.", 3600);
+    const lead = view.locator(".dm-list .item", { hasText: "glowhaus.skin" });
+    await point(lead.locator(".badge").first());
+    await say("Claude marks DMs from brands as leads. The red badge says how long they've been waiting.", 4400);
+    await point(lead.locator(".badge", { hasText: "Reply" }));
+    await say("A lead left waiting gets a Reply to-do on Today, with a reply drafted for you.", 4200);
+    const shop = view.locator(".dm-list .item", { hasText: "thelittlecandleco" });
+    await point(shop);
+    await say("This small shop could be work too, but Claude wasn't sure.", 3400);
+    await click(shop.getByRole("button", { name: "Mark as lead" }));
+    await view.locator(".dm-list .item", { hasText: "thelittlecandleco" }).locator(".badge", { hasText: "Lead" }).waitFor();
+    await say("Mark as lead: it becomes a deal, and since it's been waiting, a Reply to-do goes on Today.", 4600);
+    await click(view.getByRole("button", { name: /Leads waiting for you/ }));
+    await say("Leads waiting for you shows just the ones to answer.", 3400);
+    await click(view.locator(".dm-list .item").first());
+    const drawer = page.locator("#drawer");
+    await drawer.locator(".dm-thread").waitFor();
+    await say("Open one to read the conversation, change your mind about the lead, or jump to its deal.", 4400);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await goTo(page, "settings", "deals");
+    await point(page.locator("#settings-dms"));
+    await say("Settings, Deals & money, Instagram DM reminders sets how long a lead can wait. It starts at 6 hours.", 4800);
+    await goTo(page, "today");
+    await point(page.locator("#view-today", { hasText: "Instagram DM" }).locator("li", { hasText: "Instagram DM" }).first());
+    await say("And here's the reminder on Today.", 3000);
+    await say("", 600);
+  },
+
+  async "profile-draft"(page) {
+    const { say, point, click, pause } = helpers(page);
+    await page.goto(BASE + "/#today");
+    // Demo mode has no links of its own; add two for the video and take them away again at the end.
+    const added = await page.evaluate(async () => Promise.all([
+      api("POST", "/api/links", { label: "UGC portfolio", url: "https://avarivera.example/ugc" }),
+      api("POST", "/api/links", { label: "Instagram", url: "https://instagram.com/ava.makes" }),
+    ]).then((ls) => ls.map((l) => l.id)));
+    await goTo(page, "settings", "you");
+    const about = page.locator("#settings-about");
+    await about.waitFor();
+    await point(about.locator("textarea").first());
+    await say("About you is what Claude reads before it writes any email for you: your voice, rates and rules.", 4600);
+    const btn = about.getByRole("button", { name: "Draft with Claude" });
+    await point(btn);
+    await say("Draft with Claude writes it for you, from what the app already knows.", 3800);
+    await say("It opens your portfolio from My links, and reads your deals and the emails you sent to brands.", 4400);
+    await click(btn);
+    const draft = about.locator("#profile-draft .preview-mail");
+    await draft.waitFor();
+    await point(draft.locator(".preview-head").first());
+    await say("Here's the draft, and what it was based on. Nothing has changed yet.", 4000);
+    await draft.locator(".preview-body").evaluate((n) => n.scrollTo({ top: n.scrollHeight / 2, behavior: "smooth" }));
+    await pause(1200);
+    await point(draft.getByText("Check before you save"));
+    await say("It lists what you should check, like a rate it couldn't find. It never makes up a rate.", 4400);
+    await click(about.getByRole("button", { name: "Use this draft" }));
+    await say("Use this draft puts it in the box. Change anything you like.", 3600);
+    await point(about.getByRole("button", { name: "Undo" }));
+    await say("Changed your mind? Undo brings your old text back.", 3400);
+    await point(about.getByRole("button", { name: "Save" }));
+    await say("Nothing is saved until you press Save.", 3200);
+    await click(about.getByRole("button", { name: "Undo" }));
+    await page.evaluate(async (ids) => { for (const id of ids) await api("DELETE", "/api/links/" + id); }, added);
     await say("", 600);
   },
 };

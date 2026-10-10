@@ -16,6 +16,7 @@ import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
 import com.anthropic.models.messages.StopReason;
 import com.anthropic.models.messages.TextBlockParam;
+import com.anthropic.models.messages.WebFetchTool20260209;
 import com.anthropic.models.messages.WebSearchTool20260209;
 import com.anthropic.models.messages.batches.BatchCreateParams;
 import com.anthropic.models.messages.batches.MessageBatch;
@@ -56,6 +57,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final String contractSystem;
     private final String pictureSystem;
     private final String newsSystem;
+    private final String profileSystem;
 
     private AnthropicClient client;
     private String clientKeyHash;
@@ -74,6 +76,7 @@ public class ClaudeLlmClient implements LlmClient {
         this.contractSystem = resource("prompts/contract-system.md");
         this.pictureSystem = resource("prompts/contact-image-system.md");
         this.newsSystem = resource("prompts/brand-news-system.md");
+        this.profileSystem = resource("prompts/profile-writer-system.md");
     }
 
     @Override
@@ -375,6 +378,39 @@ public class ClaudeLlmClient implements LlmClient {
         return new PictureContacts(cards.contacts() == null ? List.of() : cards.contacts(), usd);
     }
 
+    /** Pages of her own links Claude may open while drafting her profile (portfolio, media kit, website). */
+    static final long MAX_PROFILE_FETCHES = 3;
+
+    @Override
+    public ProfileDraft draftProfile(ProfileDraftInput in) {
+        return call(ClaudeSpend.Feature.PROFILE, settings.writerModel(), settings.writerEffort(), profileSystem, null,
+                profilePrompt(in), ProfileDraft.class, 8000, null, in.fetchDomains());
+    }
+
+    static String profilePrompt(ProfileDraftInput in) {
+        StringBuilder user = new StringBuilder("Creator name: ").append(Untrusted.escape(in.creatorName())).append("\n\n");
+        user.append("<current_profile>\n").append(in.currentProfile().isBlank() ? "(empty: she hasn't written one yet)"
+                : Untrusted.escape(in.currentProfile())).append("\n</current_profile>\n\n");
+        if (!in.links().isEmpty()) {
+            user.append("Her links (from her Links page):\n");
+            in.links().forEach(l -> user.append("- ").append(l).append('\n'));
+            user.append(in.fetchDomains().isEmpty() ? "\n" : "You may open up to " + MAX_PROFILE_FETCHES
+                    + " of these pages (her portfolio, UGC page, media kit or website first) to learn her niche and the kind of content she makes.\n\n");
+        }
+        if (!in.instagramStats().isBlank()) user.append(in.instagramStats()).append('\n');
+        if (!in.deals().isEmpty()) {
+            user.append("Her deals in the app (newest first):\n");
+            in.deals().forEach(d -> user.append("- ").append(d).append('\n'));
+            user.append('\n');
+        }
+        if (!in.sentMessages().isEmpty()) {
+            user.append("Messages she wrote to brands (newest first). Learn her voice from these:\n");
+            in.sentMessages().forEach(m -> user.append(m).append('\n'));
+            user.append('\n');
+        }
+        return user.append("Write her About you profile.").toString();
+    }
+
     /** Her own to-do rules from Settings, or null when she has none (keeps the cached prompt unchanged). */
     String taskRules() {
         String rules = settings.taskRules().strip();
@@ -399,6 +435,12 @@ public class ClaudeLlmClient implements LlmClient {
 
     private <T> T call(ClaudeSpend.Feature feature, String model, String effort, String system, String system2, String user,
                        Class<T> type, long maxTokens, SearchDepth webSearch) {
+        return call(feature, model, effort, system, system2, user, type, maxTokens, webSearch, List.of());
+    }
+
+    /** {@code fetchDomains}: hosts Claude may open pages on with the web fetch tool (empty = no fetching). */
+    private <T> T call(ClaudeSpend.Feature feature, String model, String effort, String system, String system2, String user,
+                       Class<T> type, long maxTokens, SearchDepth webSearch, List<String> fetchDomains) {
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
@@ -406,6 +448,10 @@ public class ClaudeLlmClient implements LlmClient {
                 .systemOfTextBlockParams(systemBlocks(system, system2))
                 .addUserMessage(user);
         if (webSearch != null) params.addTool(WebSearchTool20260209.builder().maxUses((long) webSearch.maxSearches).build());
+        if (!fetchDomains.isEmpty()) {
+            params.addTool(WebFetchTool20260209.builder().maxUses(MAX_PROFILE_FETCHES).allowedDomains(fetchDomains)
+                    .maxContentTokens(8000L).build());
+        }
         if (supportsDefaultFallback(model)) {
             // On a safety-classifier decline, let the API retry on its recommended fallback model.
             params.putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
@@ -422,7 +468,8 @@ public class ClaudeLlmClient implements LlmClient {
         }
         if (webSearch != null && feature == ClaudeSpend.Feature.RESEARCH) spend.recordResearchRun(webSearch, runUsd);
         StopReason stop = response.stopReason().orElse(null);
-        if (StopReason.PAUSE_TURN.equals(stop)) throw new LlmException("Claude's web research didn't finish; try a narrower search");
+        if (StopReason.PAUSE_TURN.equals(stop)) throw new LlmException(webSearch != null
+                ? "Claude's web research didn't finish; try a narrower search" : "Claude didn't finish reading your pages; try again");
         if (StopReason.REFUSAL.equals(stop)) throw new LlmException("Claude declined this request");
         if (StopReason.MAX_TOKENS.equals(stop)) throw new LlmException("Claude response was cut off (max tokens)");
         // With web search the reply interleaves search blocks; the structured answer is the last text block.

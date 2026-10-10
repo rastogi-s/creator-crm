@@ -7,6 +7,7 @@ import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.calendar.CalendarSync;
 import com.creatorcrm.domain.BrandNews;
 import com.creatorcrm.domain.CampaignResult;
+import com.creatorcrm.dms.DmReminders;
 import com.creatorcrm.repo.CampaignResultRepo;
 import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.contracts.ContractService;
@@ -66,6 +67,17 @@ public class DemoData implements ApplicationRunner {
     private final CampaignResultRepo resultRepo;
     private final MessageRepo messages;
     private final BrandNewsRepo brandNews;
+    private final DmReminders dmReminders;
+
+    /** Instagram DMs: who, hours ago, from her or not, text. Claude reads the brand ones as leads (see DemoInbox). */
+    record Dm(String handle, int hoursAgo, boolean mine, String text) {}
+
+    static final List<Dm> DMS = List.of(
+            new Dm("glowhaus.skin", 9, false, "Hi Ava! We're Glow Haus and we love your skincare routines. Would you be open to a paid Reel for our new SPF?"),
+            new Dm("thelittlecandleco", 20, false, "Hey! I run a small candle shop and wondered if you ever feature small businesses? Happy to send a few candles."),
+            new Dm("mia.bakes", 2, false, "omg your last reel was so good!! where is that mug from?"),
+            new Dm("urbanroots.coffee", 50, false, "Hi Ava, Urban Roots here. Could you send your media kit? We're planning a cold brew push."),
+            new Dm("urbanroots.coffee", 30, true, "Hi Kai! Of course, here it is: avarivera.example/media-kit. Happy to chat ideas."));
 
     static final String DEMO_CONTRACT = """
             INFLUENCER AGREEMENT between Bloomleaf Tea Co. ("Brand") and Ava Rivera ("Creator").
@@ -82,8 +94,10 @@ public class DemoData implements ApplicationRunner {
                     WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
                     ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
                     CalendarSync calendar, CampaignResults results, CampaignResultRepo resultRepo, MessageRepo messages,
-                    BrandNewsRepo brandNews) {
+                    BrandNewsRepo brandNews,
+                    DmReminders dmReminders) {
         this.brandNews = brandNews;
+        this.dmReminders = dmReminders;
         this.messages = messages;
         this.calendar = calendar;
         this.results = results;
@@ -126,6 +140,14 @@ public class DemoData implements ApplicationRunner {
                     "<demo-" + i + "@creator.example>", "", now.minusDays(m.daysAgo()).minusHours(i), false)));
             String html = DemoInbox.HTML.get(m.brand());
             if (html != null) messages.findByExternalId("email:demo-" + i).ifPresent(saved -> messages.saveHtml(saved.id, html));
+        }
+        int d = 0;
+        for (Dm dm : DMS) {
+            d++;
+            ingestion.store(List.of(new NormalizedMessage(Platform.INSTAGRAM, "demo-dm-" + d, "ig:" + dm.handle(),
+                    dm.mine() ? Direction.OUTBOUND : Direction.INBOUND, dm.mine() ? "ava.makes" : dm.handle(),
+                    dm.mine() ? "ava.makes" : dm.handle(), dm.mine() ? dm.handle() : "ava.makes", dm.handle(), "", dm.text(),
+                    "", "", now.minusHours(dm.hoursAgo()), false)));
         }
         ingestion.processPending();
         outreach.logPitch(new OutreachService.PitchRequest("Sunday Pantry", "Alex", "alex@sundaypantry.example", "",
@@ -204,6 +226,7 @@ public class DemoData implements ApplicationRunner {
                 });
         // Deal dates on the pretend Google Calendar, as if she had connected it.
         calendar.sync();
+        dmReminders.run(); // Glow Haus has waited past the reminder time
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
     }
 

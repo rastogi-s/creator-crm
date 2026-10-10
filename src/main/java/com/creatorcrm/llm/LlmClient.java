@@ -51,6 +51,14 @@ public interface LlmClient {
         throw new UnsupportedOperationException("Searching for brand news isn't supported");
     }
 
+    /**
+     * Draft the creator's About you profile (voice, rates, rules) from her own data in the app. Only when she asks
+     * for it; the result fills the field for her to edit and is never saved by itself.
+     */
+    default ProfileDraft draftProfile(ProfileDraftInput input) {
+        throw new UnsupportedOperationException("Drafting a profile isn't supported");
+    }
+
     boolean isConfigured();
 
     /** Whether {@link #submitClassifyBatch} works: classification at half price, results within hours. */
