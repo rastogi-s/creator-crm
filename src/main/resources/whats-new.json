@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.55.0",
+    "title": "Ask the brand to fix their contract in one click",
+    "features": [
+      {
+        "id": "contract-questions",
+        "title": "Draft an email about the contract's flagged points",
+        "body": "When the app checks a contract and flags something, each red or amber point on the deal now has a tick box. Tick the ones you want changed or explained, add anything else in your own words, and press Draft email to brand. Claude writes a polite reply in the brand's email thread, in your voice, asking about each point. It waits in Drafts until you send it, like every other email.",
+        "video": "contract-questions.webm",
+        "tryIt": "#pipeline"
+      }
+    ]
+  },
+  {
     "version": "1.54.0",
     "title": "Instagram DMs: sort them, tag leads, never forget to reply",
     "features": [

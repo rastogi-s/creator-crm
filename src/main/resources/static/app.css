@@ -532,6 +532,10 @@ details.collapsible[open] > summary { margin-bottom: .5rem; }
 #contract-check li.flag.amber .mark { background: var(--warn-soft); color: var(--warn); }
 #contract-check li.flag.ok .mark { background: var(--ok-soft, #dcfce7); color: var(--ok, #15803d); }
 #contract-check textarea { width: 100%; min-height: 8rem; }
+#contract-check li.flag.pick label { display: flex; gap: .6rem; align-items: baseline; cursor: pointer; flex: 1; }
+#contract-check li.flag.pick input[type=checkbox] { flex: 0 0 auto; width: 1.1rem; height: 1.1rem; margin: 0; align-self: center; }
+#contract-check .ask-brand { margin: .25rem 0 .75rem; }
+#contract-check .ask-brand .row input { flex: 1; min-width: 12rem; }
 
 /* Exclusivity clash on the deal, and the Google Calendar step in Settings */
 #exclusivity ul.flags { list-style: none; padding: 0; margin: .5rem 0; }
