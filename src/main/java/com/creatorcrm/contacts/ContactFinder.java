@@ -5,16 +5,25 @@ import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.BrandContact;
 import com.creatorcrm.domain.BrandContact.Verified;
 import com.creatorcrm.domain.BrandDomain;
+import com.creatorcrm.domain.BrandLead;
 import com.creatorcrm.domain.ContactSource;
 import com.creatorcrm.repo.BrandContactRepo;
 import com.creatorcrm.repo.BrandDomainRepo;
+import com.creatorcrm.repo.BrandLeadRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -70,9 +79,14 @@ public class ContactFinder {
     private final ApolloApi apollo;
     private final MailServers mail;
     private final FinderCredits credits;
+    private final BrandLeadRepo leads;
+    private final Suppressions suppressions;
 
     public ContactFinder(ContactService contacts, BrandContactRepo contactRepo, BrandRepo brands, BrandDomainRepo domains,
-                         SecretStore secrets, HunterApi hunter, ApolloApi apollo, MailServers mail, FinderCredits credits) {
+                         SecretStore secrets, HunterApi hunter, ApolloApi apollo, MailServers mail, FinderCredits credits,
+                         BrandLeadRepo leads, Suppressions suppressions) {
+        this.leads = leads;
+        this.suppressions = suppressions;
         this.contacts = contacts;
         this.contactRepo = contactRepo;
         this.brands = brands;
@@ -149,11 +163,178 @@ public class ContactFinder {
                 contacts.forBrand(b.id));
     }
 
+    /** What "Find email" did for a brand lead. {@code email}: the address the pitch will go to, or null. */
+    public record LeadResult(int found, String email, double hunterCredits, double apolloCredits, List<String> notes,
+                             String askFirst) {}
+
+    /**
+     * "Find email" on a brand lead with no published address. Leads aren't brands yet, so the best person found
+     * becomes the lead's contact, and everyone found is kept on the lead until she pitches it ({@link #importLeadPeople}).
+     */
+    public LeadResult findForLead(Long leadId, boolean again) {
+        BrandLead lead = leads.findById(leadId).orElseThrow(() -> new IllegalArgumentException("That suggestion no longer exists"));
+        boolean useHunter = hunterConnected(), useApollo = apolloConnected();
+        if (!useHunter && !useApollo) {
+            throw new IllegalStateException("Add a Hunter key first, in Settings, Accounts, Contact finders. Hunter's free plan finds people at 50 brands a month.");
+        }
+        String domain = Optional.ofNullable(Emails.domainOfUrl(lead.website)).orElseGet(() -> Emails.brandDomain(lead.contactEmail));
+        if (domain == null) throw new IllegalArgumentException("Add " + lead.name + "'s website first (Edit contact), so the finders know where to look.");
+        if (!again) {
+            Optional<LocalDate> last = credits.searchedOn(useHunter ? Provider.HUNTER : Provider.APOLLO, domain);
+            if (last.isPresent() && ChronoUnit.DAYS.between(last.get(), LocalDate.now()) < RESEARCH_DAYS) {
+                return new LeadResult(0, lead.contactEmail, 0, 0, List.of(), "You already looked up " + domain + " on " + last.get()
+                        + ". Looking again costs another credit and usually finds the same people. Look again anyway?");
+            }
+        }
+        List<Person> found = new ArrayList<>();
+        List<String> notes = new ArrayList<>();
+        double hunterCost = 0, apolloCost = 0;
+        if (useHunter) {
+            try {
+                Search s = hunterSearch(domain);
+                found.addAll(s.people());
+                notes.addAll(s.notes());
+                hunterCost = s.cost();
+            } catch (IllegalStateException e) {
+                if (!useApollo) throw e;
+                notes.add(e.getMessage());
+            }
+        }
+        if (useApollo && usable(found).size() < 3) {
+            try {
+                Search s = apolloSearch(domain);
+                found.addAll(s.people());
+                notes.addAll(s.notes());
+                apolloCost = s.cost();
+            } catch (IllegalStateException e) {
+                notes.add(e.getMessage());
+            }
+        }
+        if (!found.isEmpty() && mail.check(domain) == MailServers.Result.NO_MAIL) {
+            found = found.stream().map(p -> withVerified(p, Verified.INVALID)).toList();
+            notes.add(domain + " can't receive email, so none of these addresses will be emailed.");
+        }
+        Map<String, Person> kept = new LinkedHashMap<>();
+        for (Person p : readPeople(lead.finderContacts)) kept.put(p.email(), p);
+        for (Person p : found) {
+            String e = Emails.clean(p.email());
+            if (e != null) kept.put(e, new Person(e, p.name(), p.title(), p.phone(), p.linkedin(), p.confidence(), p.source(),
+                    p.sourceUrl(), p.verified(), p.verifiedAt()));
+        }
+        lead.finderContacts = kept.isEmpty() ? null : writePeople(new ArrayList<>(kept.values()));
+        List<Person> best = usable(new ArrayList<>(kept.values()));
+        boolean filled = false;
+        if ((lead.contactEmail == null || lead.contactEmail.isBlank()) && !best.isEmpty()) {
+            lead.contactEmail = best.get(0).email();
+            lead.contactSourceUrl = best.get(0).sourceUrl();
+            filled = true;
+        }
+        leads.save(lead);
+        int n = usable(found).size();
+        String head = n == 0 ? "Nobody with a usable email turned up at " + domain + "."
+                : "Found " + n + (n == 1 ? " person" : " people") + " at " + domain + "."
+                + (filled ? " Using " + lead.contactEmail + " for this pitch." : "");
+        List<String> all = new ArrayList<>();
+        all.add(head);
+        all.addAll(notes);
+        log.info("Contact finder for lead {} ({}): {} found", lead.id, domain, found.size());
+        return new LeadResult(n, lead.contactEmail, hunterCost, apolloCost, all, null);
+    }
+
+    /** People who may be emailed, best to pitch first: partnerships, then PR, marketing; proven addresses first. */
+    List<Person> usable(List<Person> people) {
+        return people.stream()
+                .filter(p -> Emails.clean(p.email()) != null && p.verified() != Verified.INVALID && !suppressions.blocked(p.email()))
+                .sorted(Comparator.comparingInt((Person p) -> WebsiteContacts.rank(ContactRoles.guess(Emails.clean(p.email()), p.title())))
+                        .thenComparingInt(p -> p.verified() == Verified.VALID ? 0 : p.verified() == Verified.RISKY ? 2 : 1)
+                        .thenComparingInt(p -> -(p.confidence() == null ? 0 : p.confidence())))
+                .toList();
+    }
+
+    /** When she pitches a lead, everyone the finders found for it joins the new brand's contacts, tagged where they came from. */
+    public void importLeadPeople(Long brandId, BrandLead lead) {
+        List<Person> people = readPeople(lead.finderContacts);
+        if (people.isEmpty()) return;
+        List<String> notes = saveAll(brandId, people, new Tally(), new LinkedHashSet<>());
+        notes.forEach(n -> log.info("Lead {}: {}", lead.id, n));
+        contacts.refreshPrimary(brandId);
+    }
+
+    private static Person withVerified(Person p, Verified v) {
+        return new Person(p.email(), p.name(), p.title(), p.phone(), p.linkedin(), p.confidence(), p.source(), p.sourceUrl(), v, null);
+    }
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    static String writePeople(List<Person> people) {
+        ArrayNode arr = JSON.createArrayNode();
+        for (Person p : people) {
+            ObjectNode o = arr.addObject();
+            o.put("email", p.email());
+            o.put("name", p.name());
+            o.put("title", p.title());
+            o.put("phone", p.phone());
+            o.put("linkedin", p.linkedin());
+            if (p.confidence() != null) o.put("confidence", p.confidence());
+            o.put("source", p.source().name());
+            o.put("sourceUrl", p.sourceUrl());
+            if (p.verified() != null) o.put("verified", p.verified().name());
+            if (p.verifiedAt() != null) o.put("verifiedAt", p.verifiedAt().toString());
+        }
+        return arr.toString();
+    }
+
+    static List<Person> readPeople(String json) {
+        List<Person> out = new ArrayList<>();
+        if (json == null || json.isBlank()) return out;
+        try {
+            for (JsonNode o : JSON.readTree(json)) {
+                out.add(new Person(text(o, "email"), text(o, "name"), text(o, "title"), text(o, "phone"), text(o, "linkedin"),
+                        o.hasNonNull("confidence") ? o.get("confidence").asInt() : null,
+                        ContactSource.Kind.valueOf(o.path("source").asText("HUNTER")), text(o, "sourceUrl"),
+                        o.hasNonNull("verified") ? Verified.valueOf(o.get("verified").asText()) : null,
+                        o.hasNonNull("verifiedAt") ? OffsetDateTime.parse(o.get("verifiedAt").asText()) : null));
+            }
+        } catch (IOException | RuntimeException e) {
+            log.warn("Couldn't read the people saved on a lead: {}", e.getMessage());
+        }
+        return out;
+    }
+
+    private static String text(JsonNode o, String f) {
+        return o.hasNonNull(f) ? o.get(f).asText() : null;
+    }
+
     private static final class Tally {
         int found, added, known, skipped;
     }
 
+    /**
+     * One person a finder returned, before it is saved to a brand. {@code verified}: what the finder already knows
+     * about the address (null = nothing). Leads keep these as JSON until she pitches them.
+     */
+    public record Person(String email, String name, String title, String phone, String linkedin, Integer confidence,
+                         ContactSource.Kind source, String sourceUrl, Verified verified, OffsetDateTime verifiedAt) {}
+
+    /** What one finder returned for a domain, and what it cost. */
+    record Search(List<Person> people, double cost, List<String> notes) {}
+
     private double viaHunter(Brand b, String domain, Tally t, Set<Long> touched, List<String> notes) {
+        Search s = hunterSearch(domain);
+        notes.addAll(saveAll(b.id, s.people(), t, touched));
+        notes.addAll(s.notes());
+        return s.cost();
+    }
+
+    private double viaApollo(Brand b, String domain, Tally t, Set<Long> touched, List<String> notes) {
+        Search s = apolloSearch(domain);
+        notes.addAll(saveAll(b.id, s.people(), t, touched));
+        notes.addAll(s.notes());
+        return s.cost();
+    }
+
+    /** Asks Hunter who works at the domain. Spends credits and remembers the domain was searched. */
+    Search hunterSearch(String domain) {
         String key = secrets.require(SecretName.HUNTER_API_KEY);
         credits.require(Provider.HUNTER, FinderCredits.SEARCH_PER_10);
         // People in marketing and partnerships first; everyone when that finds nobody (an empty search is free).
@@ -167,35 +348,26 @@ public class ContactFinder {
         credits.markSearched(Provider.HUNTER, domain);
         syncHunterAccount(key);
         String url = "https://hunter.io/domain-search/" + domain;
+        List<Person> out = new ArrayList<>();
         for (HunterApi.Person p : r.people()) {
-            t.found++;
-            boolean known = Emails.clean(p.email()) != null && contactRepo.findByEmail(Emails.clean(p.email())).isPresent();
-            Optional<BrandContact> saved = contacts.save(b.id, new ContactService.Found(p.email(), p.name(), p.position(),
-                    null, p.phone(), p.linkedin(), null, p.confidence(), ContactSource.Kind.HUNTER,
-                    p.sourceUrl() != null ? p.sourceUrl() : url));
-            if (saved.isEmpty()) {
-                t.skipped++;
-                continue;
-            }
-            if (known) t.known++;
-            else t.added++;
-            touched.add(saved.get().id);
-            BrandContact c = saved.get();
-            if (!c.brandId.equals(b.id)) notes.add(c.email + " is already saved under another brand, so it stayed there.");
             Verified v = r.acceptAll() && !"invalid".equals(p.verification()) ? Verified.RISKY : fromHunterStatus(p.verification());
-            if (v != null && c.replies == 0) mark(c, v, parseDate(p.verifiedOn()));
+            out.add(new Person(p.email(), p.name(), p.position(), p.phone(), p.linkedin(), p.confidence(),
+                    ContactSource.Kind.HUNTER, p.sourceUrl() != null ? p.sourceUrl() : url, v, parseDate(p.verifiedOn())));
         }
+        List<String> notes = new ArrayList<>();
         if (r.acceptAll()) notes.add(domain + " accepts every address, so Hunter can't prove any one of them exists. They're marked \"may not get through\".");
         if (cost > 0) notes.add("Used " + FinderCredits.fmt(cost) + " Hunter credit" + (cost == 1 ? "" : "s") + ".");
-        return cost;
+        return new Search(out, cost, notes);
     }
 
-    private double viaApollo(Brand b, String domain, Tally t, Set<Long> touched, List<String> notes) {
+    /** Asks Apollo who works at the domain; reveals a few emails, a credit each. */
+    Search apolloSearch(String domain) {
         String key = secrets.require(SecretName.APOLLO_API_KEY);
         List<ApolloApi.Person> people = apollo.search(key, domain, 10);
         credits.markSearched(Provider.APOLLO, domain);
         double cost = 0;
         int revealed = 0;
+        List<Person> out = new ArrayList<>();
         for (ApolloApi.Person p : people) {
             if (revealed >= APOLLO_REVEALS) break;
             ApolloApi.Person full = p;
@@ -209,26 +381,40 @@ public class ContactFinder {
                 full = got.get();
             }
             if (!domain.equals(Emails.brandDomain(full.email()))) continue; // a personal or old-employer address: skip
+            out.add(new Person(full.email(), full.name() != null ? full.name() : p.name(),
+                    full.title() != null ? full.title() : p.title(), null,
+                    full.linkedin() != null ? full.linkedin() : p.linkedin(), null, ContactSource.Kind.APOLLO,
+                    "https://app.apollo.io/", "verified".equalsIgnoreCase(full.emailStatus()) ? Verified.VALID : null, null));
+        }
+        List<String> notes = new ArrayList<>();
+        if (cost > 0) notes.add("Used " + FinderCredits.fmt(cost) + " Apollo credit" + (cost == 1 ? "" : "s") + ".");
+        return new Search(out, cost, notes);
+    }
+
+    /** Saves found people to a brand through {@link ContactService#save}, with what the finder knew about each address. */
+    private List<String> saveAll(Long brandId, List<Person> people, Tally t, Set<Long> touched) {
+        List<String> notes = new ArrayList<>();
+        for (Person p : people) {
             t.found++;
-            String clean = Emails.clean(full.email());
+            String clean = Emails.clean(p.email());
             boolean known = clean != null && contactRepo.findByEmail(clean).isPresent();
-            Optional<BrandContact> saved = contacts.save(b.id, new ContactService.Found(full.email(),
-                    full.name() != null ? full.name() : p.name(), full.title() != null ? full.title() : p.title(), null, null,
-                    full.linkedin() != null ? full.linkedin() : p.linkedin(), null, null, ContactSource.Kind.APOLLO,
-                    "https://app.apollo.io/"));
+            Optional<BrandContact> saved = contacts.save(brandId, new ContactService.Found(p.email(), p.name(), p.title(),
+                    null, p.phone(), p.linkedin(), null, p.confidence(), p.source(), p.sourceUrl()));
             if (saved.isEmpty()) {
                 t.skipped++;
                 continue;
             }
             if (known) t.known++;
             else t.added++;
-            touched.add(saved.get().id);
-            if ("verified".equalsIgnoreCase(full.emailStatus()) && saved.get().replies == 0 && saved.get().verified == Verified.UNKNOWN) {
-                mark(saved.get(), Verified.VALID, null);
-            }
+            BrandContact c = saved.get();
+            touched.add(c.id);
+            if (!c.brandId.equals(brandId)) notes.add(c.email + " is already saved under another brand, so it stayed there.");
+            // A finder's "verified" only fills in an unchecked address; its "invalid" or "risky" always counts.
+            boolean apply = p.verified() != null && c.replies == 0
+                    && (p.verified() != Verified.VALID || c.verified == Verified.UNKNOWN);
+            if (apply) mark(c, p.verified(), p.verifiedAt());
         }
-        if (cost > 0) notes.add("Used " + FinderCredits.fmt(cost) + " Apollo credit" + (cost == 1 ? "" : "s") + ".");
-        return cost;
+        return notes;
     }
 
     static double searchCost(int results) {

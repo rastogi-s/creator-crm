@@ -13,6 +13,18 @@
     ]
   },
   {
+    "version": "1.52.0",
+    "title": "Find an email for brands that didn't list one",
+    "features": [
+      {
+        "id": "lead-find-email",
+        "title": "Find email with Hunter, right on Pitching brands",
+        "body": "When Find brands to pitch turns up a brand with no published email, press Find email with Hunter on it. The app asks Hunter who works there and picks the best person to pitch: partnerships first, then PR and marketing, and never an address that doesn't exist. It uses one Hunter credit and no Claude. Everyone else Hunter found is kept too, and joins the brand's contacts when you press Draft pitch, so you never pay twice for the same brand.",
+        "tryIt": "#outreach"
+      }
+    ]
+  },
+  {
     "version": "1.51.0",
     "title": "Import contacts from any file, even a photo of a business card",
     "features": [

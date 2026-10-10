@@ -16,12 +16,14 @@ import com.creatorcrm.contacts.FinderCredits.Provider;
 import com.creatorcrm.domain.Brand;
 import com.creatorcrm.domain.BrandContact;
 import com.creatorcrm.domain.BrandContact.Verified;
+import com.creatorcrm.domain.BrandLead;
 import com.creatorcrm.domain.ContactSource;
 import com.creatorcrm.domain.Draft;
 import com.creatorcrm.domain.Enums.DraftType;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.repo.BrandContactRepo;
+import com.creatorcrm.repo.BrandLeadRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.security.SecretName;
 import com.creatorcrm.security.SecretStore;
@@ -49,6 +51,7 @@ class ContactFinderIntegrationTest {
     @Autowired BrandContactRepo contactRepo;
     @Autowired SecretStore secrets;
     @Autowired DraftService drafts;
+    @Autowired BrandLeadRepo leadRepo;
 
     @BeforeEach
     void setUp() {
@@ -186,5 +189,43 @@ class ContactFinderIntegrationTest {
         assertThat(r.contact().verified).isEqualTo(Verified.VALID);
         assertThat(r.credits()).isZero();
         verify(hunter, never()).verify(anyString(), eq("maya@replied" + t + ".com"));
+    }
+
+    @Test
+    void findsAnEmailForALeadAndKeepsEveryoneForThePitch() {
+        String t = tag();
+        String domain = "lead" + t + ".com";
+        BrandLead lead = new BrandLead();
+        lead.name = "Lead " + t;
+        lead.nameKey = Brand.key(lead.name);
+        lead.website = "https://" + domain;
+        lead.searchQuery = "test";
+        lead.status = BrandLead.Status.NEW;
+        lead.createdAt = OffsetDateTime.now();
+        lead = leadRepo.save(lead);
+        when(hunter.domainSearch(anyString(), eq(domain), eq(HunterApi.PARTNERSHIP_DEPARTMENTS), anyInt()))
+                .thenReturn(new HunterApi.DomainResult("Lead", false, null, 3, List.of(
+                        person("ceo@" + domain, "Ann", "Bo", "CEO", "valid"),
+                        person("gone@" + domain, "Old", "Hand", "Influencer Partnerships", "invalid"),
+                        person("maria@" + domain, "Maria", "Kay", "Influencer Marketing Lead", null))));
+
+        ContactFinder.LeadResult r = finder.findForLead(lead.id, false);
+
+        assertThat(r.email()).isEqualTo("maria@" + domain); // partnerships first, never the address that doesn't exist
+        assertThat(r.found()).isEqualTo(2);
+        assertThat(r.hunterCredits()).isEqualTo(1);
+        BrandLead saved = leadRepo.findById(lead.id).orElseThrow();
+        assertThat(saved.contactEmail).isEqualTo("maria@" + domain);
+        assertThat(finder.findForLead(lead.id, false).askFirst()).contains(domain);
+
+        // Pitching it: everyone joins the brand's contacts, tagged Hunter (never shared), the dead address marked
+        Brand b = brand(lead.name, lead.website);
+        finder.importLeadPeople(b.id, saved);
+        assertThat(contacts.forBrand(b.id)).hasSize(3).allSatisfy(v -> {
+            assertThat(v.sources()).contains("HUNTER");
+            assertThat(v.shareable()).isFalse();
+        });
+        assertThat(contactRepo.findByEmail("gone@" + domain).orElseThrow().verified).isEqualTo(Verified.INVALID);
+        assertThat(contactRepo.findByEmail("ceo@" + domain).orElseThrow().verified).isEqualTo(Verified.VALID);
     }
 }
