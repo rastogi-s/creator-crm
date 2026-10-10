@@ -22,6 +22,8 @@ public class Draft {
     public Long campaignTargetId;
     /** A campaign email she approved: waiting in the send queue. Null = still in Drafts for her. */
     public OffsetDateTime approvedAt;
+    /** When she scheduled this email to go out ({@code ScheduledSends}). Null = it waits for her Send. */
+    public OffsetDateTime scheduledAt;
     @Enumerated(EnumType.STRING) public DraftType type;
     @Enumerated(EnumType.STRING) public Platform channel;
     public String toAddress;

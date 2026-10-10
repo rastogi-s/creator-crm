@@ -41,6 +41,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -87,7 +88,8 @@ public class CrmController {
 
     /**
      * @param sendingAt when the draft goes out, while Send's undo window is open (null otherwise)
-     * @param sendError why its last send failed after the undo window (or in the campaign queue), if it did
+     * @param sendError why its last send failed after the undo window (or in the campaign queue, or at its scheduled
+     *                  time), if it did
      * @param campaign the campaign it belongs to: it's approved for the slow send queue instead of sent
      */
     public record DraftView(Draft draft, String brand, String blockedReason, OffsetDateTime sendingAt, String sendError,
@@ -109,6 +111,9 @@ public class CrmController {
     public record NewDraft(@NotBlank String type, @Size(max = 1000) String instructions) {}
 
     public record DraftEdit(@Size(max = 1000) String subject, @Size(max = 20000) String body) {}
+
+    public record DraftSchedule(@Size(max = 1000) String subject, @Size(max = 20000) String body,
+                                @NotNull OffsetDateTime at) {}
 
     public record DraftRevision(@Size(max = 1000) String subject, @Size(max = 20000) String body,
                                 @NotBlank @Size(max = 1000) String request) {}
@@ -293,7 +298,7 @@ public class CrmController {
                     .flatMap(t -> campaignRepo.findById(t.campaignId)).map(c -> c.name).orElse("Campaign");
             out.add(new DraftView(d, brand, (d.campaignTargetId != null ? draftService.doNotEmailReason(d) : draftService.sendBlockedReason(d)).orElse(null),
                     sendQueue.waiting(d.id).map(SendQueue.Waiting::sendAt).orElse(null),
-                    sendQueue.failure(d.id).orElse(campaign != null ? d.error : null), campaign));
+                    sendQueue.failure(d.id).orElse(d.error), campaign));
         }
         return out;
     }
@@ -319,6 +324,19 @@ public class CrmController {
     public QueuedSend sendDraft(@PathVariable Long id, @Valid @RequestBody(required = false) DraftEdit e) {
         SendQueue.Waiting w = sendQueue.send(id, e == null ? null : e.subject(), e == null ? null : e.body());
         return new QueuedSend(w.draftId(), w.sendAt(), sendQueue.undoSeconds());
+    }
+
+    /** Send later: checked now like Send, then sent at {@code at} by {@link com.creatorcrm.drafts.ScheduledSends}. */
+    @PostMapping("/drafts/{id}/schedule")
+    public Draft scheduleDraft(@PathVariable Long id, @Valid @RequestBody DraftSchedule s) {
+        sendQueue.requireNotWaiting(id);
+        return draftService.schedule(id, s.subject(), s.body(), s.at());
+    }
+
+    @PostMapping("/drafts/{id}/unschedule")
+    public Draft unscheduleDraft(@PathVariable Long id) {
+        sendQueue.requireNotWaiting(id);
+        return draftService.unschedule(id);
     }
 
     @PostMapping("/drafts/{id}/undo-send")
