@@ -40,4 +40,6 @@ public class BrandLead {
     public OffsetDateTime igCheckedAt;
     /** Last time the website was read for contact addresses; null = never. */
     public OffsetDateTime websiteCheckedAt;
+    /** People Hunter found at the lead's domain, as JSON; they join her contacts when she pitches the lead. */
+    public String finderContacts;
 }

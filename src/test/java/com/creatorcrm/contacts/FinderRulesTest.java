@@ -132,4 +132,17 @@ class FinderRulesTest {
         assertThat(k).hasSizeLessThanOrEqualTo(100);
         assertThat(k).isNotEqualTo(FinderCredits.key(FinderCredits.Provider.HUNTER, "searched." + "a".repeat(201) + ".com"));
     }
+
+    @Test
+    void peopleKeptOnALeadSurviveARoundTrip() {
+        OffsetDateTime at = OffsetDateTime.parse("2026-09-01T00:00Z");
+        List<ContactFinder.Person> people = List.of(
+                new ContactFinder.Person("a@glow.com", "A B", "PR", null, null, 90, com.creatorcrm.domain.ContactSource.Kind.HUNTER,
+                        "https://glow.com/press", Verified.VALID, at),
+                new ContactFinder.Person("c@glow.com", null, null, null, null, null, com.creatorcrm.domain.ContactSource.Kind.APOLLO,
+                        null, null, null));
+        assertThat(ContactFinder.readPeople(ContactFinder.writePeople(people))).isEqualTo(people);
+        assertThat(ContactFinder.readPeople("not json")).isEmpty();
+        assertThat(ContactFinder.readPeople(null)).isEmpty();
+    }
 }

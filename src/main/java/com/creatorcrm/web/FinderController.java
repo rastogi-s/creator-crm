@@ -58,6 +58,12 @@ public class FinderController {
         return finder.findMore(brandId, again);
     }
 
+    /** "Find email" on a brand lead that has none. */
+    @PostMapping("/lead/{leadId}/find")
+    public ContactFinder.LeadResult findForLead(@PathVariable Long leadId, @RequestParam(defaultValue = "false") boolean again) {
+        return finder.findForLead(leadId, again);
+    }
+
     @PostMapping("/brand/{brandId}/check")
     public ContactFinder.BrandCheck checkBrand(@PathVariable Long brandId) {
         return finder.checkBrand(brandId);
