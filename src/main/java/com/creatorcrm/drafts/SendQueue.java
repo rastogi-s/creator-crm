@@ -84,6 +84,21 @@ public class SendQueue {
         if (isWaiting(draftId)) throw new IllegalStateException("This draft is being sent. Press Undo first to change it.");
     }
 
+    /**
+     * Runs a send nobody is watching (a scheduled email) unless this draft is in Send's undo window or already
+     * going out. False when it was skipped; the caller tries again on its next round.
+     */
+    public boolean sendIfIdle(Long draftId, Runnable send) {
+        if (waiting.containsKey(draftId) || !inFlight.add(draftId)) return false;
+        try {
+            if (waiting.containsKey(draftId)) return false;
+            send.run();
+            return true;
+        } finally {
+            inFlight.remove(draftId);
+        }
+    }
+
     private void fire(Waiting w) {
         inFlight.add(w.draftId());
         try {

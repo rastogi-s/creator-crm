@@ -71,13 +71,14 @@ function askClaude(d, subject, body) {
  * What will go out, exactly as the brand gets it, before anything is sent. Resolves true for Send, false for
  * Keep editing (or Escape).
  */
-function sendPreview(d, brand, subject, body, campaign) {
+function sendPreview(d, brand, subject, body, campaign, when) {
   return new Promise((resolve) => {
     const email = d.channel === "EMAIL";
     const files = [d.invoiceId && email ? "Invoice PDF" : null, d.resultId && email ? "Results PDF" : null].filter(Boolean);
-    const sendBtn = el("button", { class: "primary", onclick: () => close(true) }, campaign ? "Approve for sending" : email ? "Send email" : "Send DM");
+    const sendBtn = el("button", { class: "primary", onclick: () => close(true) },
+      when ? "Schedule for " + fmtSendTime(when) : campaign ? "Approve for sending" : email ? "Send email" : "Send DM");
     const dlg = el("dialog", { class: "send-preview", "aria-labelledby": "send-preview-title" },
-      el("h2", { id: "send-preview-title" }, campaign ? "Check before approving" : "Check before sending"),
+      el("h2", { id: "send-preview-title" }, when ? "Check before scheduling" : campaign ? "Check before approving" : "Check before sending"),
       el("p", { class: "small muted" }, email ? "This is the email " + brand + " will get." : "This is the Instagram DM " + brand + " will get."),
       el("div", { class: "preview-mail" },
         el("div", { class: "preview-head" },
@@ -85,7 +86,7 @@ function sendPreview(d, brand, subject, body, campaign) {
           email ? el("div", {}, el("span", { class: "muted" }, "Subject: "), el("strong", {}, subject || "(no subject)")) : null,
           files.length ? el("div", {}, el("span", { class: "muted" }, "Attached: "), "📎 " + files.join(", ")) : null),
         el("div", { class: "preview-body" }, body)),
-      el("p", { class: "small muted" }, (campaign
+      el("p", { class: "small muted" }, (when ? scheduleNote(when) : campaign
         ? "Part of your " + campaign + " campaign. It goes out from your Gmail in the send queue, a few minutes after the one before, "
           + "on a weekday during the brand's working hours. You can take it back on the Campaigns page until then."
         : "After you press Send you have a few seconds to undo it.")
@@ -103,6 +104,69 @@ function sendPreview(d, brand, subject, body, campaign) {
     document.body.appendChild(dlg);
     dlg.showModal();
     sendBtn.focus();
+  });
+}
+
+/** "Tue, Oct 14, 9:00 AM": when a scheduled email goes out, in her own time. */
+function fmtSendTime(iso) {
+  return new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function scheduleNote(when) {
+  return "It goes out from your Gmail at " + fmtSendTime(when) + " if the app is running then. If your laptop is off or "
+    + "asleep, it goes out as soon as the app is open again. Until then it waits in Drafts, where you can change it, "
+    + "send it now or take it off the schedule. If the brand writes to you first, it isn't sent.";
+}
+
+/** The value a datetime-local box shows for a time: local, to the minute. */
+function localInputValue(date) {
+  const p = (n) => String(n).padStart(2, "0");
+  return date.getFullYear() + "-" + p(date.getMonth() + 1) + "-" + p(date.getDate()) + "T" + p(date.getHours()) + ":" + p(date.getMinutes());
+}
+
+/**
+ * "When should it go out?": a few common times and a date-and-time box. Resolves the chosen time as an ISO
+ * string, or null for Cancel (or Escape).
+ */
+function pickSendTime(current) {
+  return new Promise((resolve) => {
+    const at = (daysAhead, hour) => { const t = new Date(); t.setDate(t.getDate() + daysAhead); t.setHours(hour, 0, 0, 0); return t; };
+    const toMonday = ((8 - new Date().getDay()) % 7) || 7;
+    const choices = [["Tomorrow morning", at(1, 9)], ["Tomorrow afternoon", at(1, 14)]];
+    if (toMonday > 1) choices.push(["Monday morning", at(toMonday, 9)]);
+    const now = new Date();
+    if (now.getHours() < 13) choices.unshift(["This afternoon", at(0, 14)]);
+    const box = el("input", { type: "datetime-local", id: "send-time", min: localInputValue(now),
+      value: localInputValue(current ? new Date(current) : choices[0][1]) });
+    const error = el("div", { class: "alert error hidden", role: "alert" });
+    const quick = choices.map(([label, t]) => el("button", { class: "small", type: "button", onclick: () => { box.value = localInputValue(t); next(); } },
+      label + " · " + fmtSendTime(t.toISOString()).replace(/^[^,]+, /, "")));
+    const dlg = el("dialog", { class: "send-preview", "aria-labelledby": "send-time-title" },
+      el("h2", { id: "send-time-title" }, "When should it go out?"),
+      el("p", { class: "small muted" }, "Your time zone. Pick one, or choose a day and time."),
+      el("div", { class: "row" }, quick),
+      el("label", { for: "send-time" }, "Day and time"), box, error,
+      el("div", { class: "row" }, el("button", { class: "primary", type: "button", onclick: () => next() }, "Next"),
+        el("button", { type: "button", onclick: () => close(null) }, "Cancel")));
+    let done = false;
+    function next() {
+      const t = box.value ? new Date(box.value) : null;
+      const msg = !t || isNaN(t) ? "Pick a day and time." : t.getTime() < Date.now() + 60000 ? "Pick a time later than now." : null;
+      error.textContent = msg || "";
+      error.classList.toggle("hidden", !msg);
+      if (!msg) close(t.toISOString());
+    }
+    function close(v) {
+      if (done) return;
+      done = true;
+      dlg.close();
+      dlg.remove();
+      resolve(v);
+    }
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); close(null); });
+    document.body.appendChild(dlg);
+    dlg.showModal();
+    box.focus();
   });
 }
 
@@ -186,6 +250,7 @@ async function renderDrafts(root) {
   const save = () => savePrefs("drafts", df);
   const groups = {
     all: () => true,
+    scheduled: (d) => !!d.scheduledAt,
     campaign: (d) => !!d.campaignTargetId,
     pitch: (d) => d.type === "PITCH" || d.type === "REPITCH",
     followup: (d) => d.type === "FOLLOW_UP",
@@ -194,7 +259,7 @@ async function renderDrafts(root) {
   };
   const present = Object.keys(groups).filter((g) => g === "all" || list.some((x) => groups[g](x.draft)));
   if (!present.includes(df.type)) df.type = "all";
-  const groupNames = { all: "All", campaign: "Campaigns", pitch: "Pitches", followup: "Follow-ups", money: "Payment", reply: "Replies" };
+  const groupNames = { all: "All", scheduled: "Scheduled", campaign: "Campaigns", pitch: "Pitches", followup: "Follow-ups", money: "Payment", reply: "Replies" };
   const search = searchBox(df.q, "Search brand or text…", (v) => { df.q = v; save(); draw(); });
   const chips = el("div", {});
   const order = el("select", { "aria-label": "Order", onchange: (e) => { df.order = e.target.value; save(); draw(); } },
@@ -236,18 +301,38 @@ async function renderDrafts(root) {
       blankMark.classList.toggle("hidden", !blanksIn(body.value).length);
     };
     body.addEventListener("input", () => { checkBlanks(); showPreview(); });
+    // Send later: emails only (Instagram replies must go within 24 hours), and not campaign pitches (their own queue).
+    const canSchedule = !campaign && !blockedReason && d.channel === "EMAIL";
+    const scheduleIt = action(async (current) => {
+      if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
+      const when = await pickSendTime(typeof current === "string" ? current : null);
+      if (!when || !await sendPreview(d, brand, subject.value, body.value, null, when)) return;
+      const saved = await api("POST", "/api/drafts/" + d.id + "/schedule", { ...edits(), at: when });
+      toast("Scheduled for " + fmtSendTime(saved.scheduledAt) + ". It waits in Drafts until then.");
+      route();
+    });
     checkBlanks();
     showPreview();
     const row = el("li", {}, el("button", { class: "inbox-row", onclick: () => select(d.id, true) },
       el("span", { class: "inbox-top" }, el("strong", {}, brand), el("span", { class: "small muted" }, fmtDate(d.createdAt))),
       el("span", { class: "inbox-type small" }, pretty(d.type) + (d.channel === "EMAIL" ? "" : " · Instagram"), blankMark,
         campaign ? el("span", { class: "badge accent" }, "Campaign") : null,
-        sendingAt ? el("span", { class: "badge" }, "Sending") : null),
+        sendingAt ? el("span", { class: "badge" }, "Sending")
+          : d.scheduledAt ? el("span", { class: "badge accent", title: "Scheduled to go out " + fmtSendTime(d.scheduledAt) }, icon("clock"), " " + fmtSendTime(d.scheduledAt)) : null),
       preview));
     const node = holder.appendChild(card(null,
       el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
         el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
       el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
+      d.scheduledAt && !sendingAt ? el("div", { class: "alert info scheduled-note" },
+        el("div", {}, el("strong", {}, "Scheduled for " + fmtSendTime(d.scheduledAt) + ". "),
+          "It goes out by itself then, with any edits you save. If the app isn't open at that time, it goes out as soon as it is."),
+        el("div", { class: "row" },
+          el("button", { class: "small", onclick: () => scheduleIt(d.scheduledAt) }, "Change time"),
+          el("button", { class: "small", onclick: action(async () => {
+            await api("POST", "/api/drafts/" + d.id + "/unschedule");
+            route();
+          }, "Taken off the schedule. It waits here for you.") }, "Don't schedule"))) : null,
       d.invoiceId ? el("div", { class: "small" }, icon("clip"), " ", el("a", { href: "/api/invoices/" + d.invoiceId + "/pdf", target: "_blank", rel: "noopener" }, "Invoice PDF"), " is attached") : null,
       d.resultId && d.channel === "EMAIL" ? el("div", { class: "small" }, icon("clip"), " ", el("a", { href: "/api/opportunities/" + d.opportunityId + "/results/pdf", target: "_blank", rel: "noopener" }, "Results PDF"), " is attached") : null,
       d.type === "PAYMENT_REMINDER" ? el("div", { class: "small muted" }, "Payment reminders always wait for you here, even when follow-ups are sent automatically.") : null,
@@ -275,7 +360,8 @@ async function renderDrafts(root) {
           const q = await api("POST", "/api/drafts/" + d.id + "/send", edits());
           sendingBar(d.id, brand, q.sendAt);
           route();
-        }) }, campaign ? "Approve" : "Send"),
+        }) }, campaign ? "Approve" : d.scheduledAt ? "Send now" : "Send"),
+        canSchedule ? el("button", { onclick: () => scheduleIt(d.scheduledAt) }, icon("clock"), d.scheduledAt ? " Change time" : " Send later") : null,
         el("button", { onclick: action(async () => { await navigator.clipboard.writeText(body.value); }, "Copied") }, "Copy"),
         campaign ? null : el("button", { onclick: action(async () => { await api("POST", "/api/drafts/" + d.id + "/sent-manually"); route(); }, "Recorded as sent") }, "I sent it myself"),
         el("button", { onclick: action(async () => { await api("PUT", "/api/drafts/" + d.id, edits()); }, "Saved") }, "Save edits"),

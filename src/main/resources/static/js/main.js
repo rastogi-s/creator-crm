@@ -70,10 +70,11 @@ async function route() {
 
 async function refreshDraftCount() {
   try {
-    const d = await api("GET", "/api/drafts");
+    // Scheduled emails are already approved: they don't count as waiting for her.
+    const n = (await api("GET", "/api/drafts")).filter((x) => !x.draft.scheduledAt).length;
     const b = document.getElementById("drafts-count");
-    b.textContent = d.length;
-    b.classList.toggle("hidden", d.length === 0);
+    b.textContent = n;
+    b.classList.toggle("hidden", n === 0);
   } catch (e) { /* ignore */ }
 }
 

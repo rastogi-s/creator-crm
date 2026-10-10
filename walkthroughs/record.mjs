@@ -445,6 +445,48 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "send-later"(page) {
+    const { pause, say, point, click } = helpers(page);
+    // Demo mode has no Gmail, so the drafts list is told the email could go out, and scheduling is answered the way
+    // the real app answers it. Nothing leaves the demo either way.
+    const scheduled = {};
+    await page.route("**/api/drafts", async (route) => {
+      const res = await route.fetch();
+      const list = await res.json();
+      for (const d of list) { d.blockedReason = null; d.sendingAt = null; d.draft.scheduledAt = scheduled[d.draft.id] || null; }
+      await route.fulfill({ response: res, json: list });
+    });
+    await page.route(/\/api\/drafts\/\d+\/schedule$/, (route) => {
+      const id = Number(route.request().url().match(/drafts\/(\d+)\//)[1]);
+      scheduled[id] = route.request().postDataJSON().at;
+      route.fulfill({ json: { id, scheduledAt: scheduled[id] } });
+    });
+
+    await page.goto(BASE + "/#drafts");
+    await page.locator("#view-drafts .inbox-row").first().waitFor();
+    await pause(2500); // let the first refresh settle so the card isn't replaced mid-shot
+    let draft = await openDraft(page, "Maple & Moss", "Payment reminder");
+    await say("Written something late at night? You don't have to send it now.", 3400);
+    await click(draft.getByRole("button", { name: "Send later" }));
+    const picker = page.locator("dialog.send-preview");
+    await picker.waitFor();
+    await point(picker.locator(".row").first());
+    await say("Pick when it should go out: tomorrow morning, Monday, or any day and time you like.", 4600);
+    await click(picker.getByRole("button", { name: /^Tomorrow morning/ }));
+    const preview = page.locator("dialog.send-preview");
+    await point(preview.locator(".preview-mail"));
+    await say("You still see exactly what the brand will get, and when.", 3600);
+    await click(preview.getByRole("button", { name: /^Schedule for/ }));
+    await pause(1200);
+    draft = await openDraft(page, "Maple & Moss", "Payment reminder");
+    const note = draft.locator(".scheduled-note");
+    await note.evaluate((n) => n.scrollIntoView({ block: "center" })); // clear of the update banner at the top
+    await point(note);
+    await say("It waits here until then, and goes out from your Gmail by itself. You can still edit it, change the time, or send it now.", 5600);
+    await say("If your laptop is off at that time, it goes out as soon as you open the app again. If the brand writes first, it isn't sent.", 5600);
+    await say("", 600);
+  },
+
   async "pitch-campaigns"(page) {
     const { pause, say, point, click } = helpers(page);
     // Demo mode has no Gmail: the queue would show "On hold". The real app sends from here.
