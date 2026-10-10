@@ -20,6 +20,7 @@ import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
 import com.creatorcrm.invoices.InvoicePdf;
 import com.creatorcrm.repo.ActivityRepo;
+import com.creatorcrm.repo.BrandNewsRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.DeadlineRepo;
 import com.creatorcrm.repo.DraftRepo;
@@ -83,6 +84,7 @@ public class DigestService {
 
     private static final Set<OpportunityStatus> COUNTED = EnumSet.complementOf(EnumSet.of(OpportunityStatus.CLOSED, OpportunityStatus.COLD));
 
+    private final BrandNewsRepo brandNews;
     private final TaskRepo tasks;
     private final OpportunityRepo opportunities;
     private final BrandRepo brands;
@@ -103,7 +105,8 @@ public class DigestService {
     public DigestService(TaskRepo tasks, OpportunityRepo opportunities, BrandRepo brands, DeadlineRepo deadlines,
                          DraftRepo drafts, ActivityRepo activity, FollowUpEngine followUps, DraftService draftService,
                          SettingsService settings, InvoiceRepo invoices, LeadScoring scoring, MessageRepo messages,
-                         GmailLinks gmailLinks) {
+                         GmailLinks gmailLinks, BrandNewsRepo brandNews) {
+        this.brandNews = brandNews;
         this.messages = messages;
         this.gmailLinks = gmailLinks;
         this.invoices = invoices;
@@ -189,8 +192,9 @@ public class DigestService {
             String brand = brandNames.getOrDefault(o.brandId, "");
             String last = o.campaign != null && !o.campaign.isBlank() ? o.campaign
                     : o.deliverables != null && !o.deliverables.isBlank() ? o.deliverables : pretty(o.type.name());
+            String news = brandNews.findFirstByUsedInDraftId(d.id).map(n -> n.headline).orElse(null);
             rebook.add(new Item("REBOOK", brand + ": work together again?",
-                    "Last collab: " + last + (o.compensation == Compensation.GIFTED ? " (gifted)"
+                    (news == null ? "" : "New: " + news + " · ") + "Last collab: " + last + (o.compensation == Compensation.GIFTED ? " (gifted)"
                             : o.budgetText != null && !o.budgetText.isBlank() ? " (" + o.budgetText + ")" : "")
                             + " · re-pitch ready in Drafts",
                     null, 0, "MEDIUM", o.id, d.id, brand, 20));

@@ -1,5 +1,6 @@
 package com.creatorcrm.contacts;
 
+import com.creatorcrm.news.FeedReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
@@ -29,6 +30,7 @@ import java.util.regex.Pattern;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -98,7 +100,7 @@ public class WebsiteReader {
         BuildProperties b = build == null ? null : build.getIfAvailable();
         String version = b == null ? "dev" : b.getVersion();
         this.userAgent = "Mozilla/5.0 (compatible; " + TOKEN + "/" + version
-                + "; reads public contact pages; +https://github.com/rastogi-s/creator-crm)";
+                + "; reads public contact pages and news feeds; +https://github.com/rastogi-s/creator-crm)";
     }
 
     public String userAgent() {
@@ -148,6 +150,47 @@ public class WebsiteReader {
         return new Result(site, new ArrayList<>(hits.values()), read, problem);
     }
 
+    /** The feeds read on a brand's website. {@code problem} is a plain sentence when none could be read. */
+    public record Feeds(String site, List<FeedReader.Item> items, List<String> feedsRead, String problem) {}
+
+    /** Feeds to read per brand: the ones its homepage names, then a Shopify store's product feed. */
+    static final int MAX_FEEDS = 3;
+
+    /**
+     * Reads a brand's news and product feeds: the RSS or Atom feeds its homepage links to, a Shopify store's
+     * product feed, or WordPress's usual /feed. Same rules as {@link #read}: robots.txt, a pause between requests,
+     * the brand's own domain only. Never throws for a site that can't be read.
+     */
+    public Feeds feeds(String website) {
+        URI home = homeOf(website);
+        if (home == null) return new Feeds(website, List.of(), List.of(), "That doesn't look like a website address.");
+        String site = home.getHost();
+        String domain = Emails.registrable(site);
+        if (domain == null || neverRead(site)) return new Feeds(site, List.of(), List.of(), "Not the brand's own website.");
+        Visit v = new Visit(domain);
+        Fetched first = v.get(home);
+        if (first == null || first.doc() == null) {
+            return new Feeds(site, List.of(), List.of(), v.problem != null ? v.problem : "Couldn't open " + site + ".");
+        }
+        URI base = first.uri().resolve("/");
+        List<URI> candidates = new ArrayList<>(FeedReader.feedLinks(first.doc()));
+        boolean shopify = first.page().body().contains("cdn.shopify.com") || first.page().body().contains("Shopify.theme");
+        if (shopify) candidates.add(base.resolve("/collections/all.atom"));
+        if (candidates.isEmpty()) candidates.add(base.resolve("/feed"));
+        List<FeedReader.Item> items = new ArrayList<>();
+        List<String> read = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (URI u : candidates) {
+            if (read.size() >= MAX_FEEDS) break;
+            if (!seen.add(key(u))) continue;
+            Fetched f = v.get(u, true);
+            if (f == null || f.doc() == null) continue;
+            read.add(f.uri().toString());
+            items.addAll(FeedReader.parse(f.page().body(), f.uri().toString()));
+        }
+        return new Feeds(site, items, read, read.isEmpty() ? (v.problem != null ? v.problem : site + " has no news feed.") : null);
+    }
+
     private record Fetched(URI uri, Page page, Document doc) {}
 
     /** One site visit: robots.txt per host, the pause between requests, redirects kept on the brand's domain. */
@@ -163,6 +206,11 @@ public class WebsiteReader {
         }
 
         Fetched get(URI start) {
+            return get(start, false);
+        }
+
+        /** {@code feed}: an RSS or Atom feed is wanted, read as XML; else a web page. */
+        Fetched get(URI start, boolean feed) {
             URI u = start;
             for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
                 if (!allowed(u)) return null;
@@ -183,6 +231,10 @@ public class WebsiteReader {
                 if (p.status() != 200) {
                     if (problem == null && hop == 0 && !any) problem = u.getHost() + " didn't answer (" + p.status() + ").";
                     return null;
+                }
+                if (feed) {
+                    if (!FeedReader.looksLikeFeed(p.body())) return null;
+                    return new Fetched(u, p, Jsoup.parse(p.body(), u.toString(), Parser.xmlParser()));
                 }
                 if (!isHtml(p.contentType())) return null;
                 Document doc = Jsoup.parse(p.body(), u.toString());
@@ -255,7 +307,7 @@ public class WebsiteReader {
         requirePublic(uri.getHost());
         HttpRequest req = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(15))
                 .header("User-Agent", userAgent)
-                .header("Accept", "text/html,application/xhtml+xml,text/plain;q=0.8")
+                .header("Accept", "text/html,application/xhtml+xml,application/rss+xml,application/atom+xml,text/plain;q=0.8,application/xml;q=0.7")
                 .GET().build();
         HttpResponse<InputStream> r = http.send(req, HttpResponse.BodyHandlers.ofInputStream());
         String type = r.headers().firstValue("content-type").orElse("");

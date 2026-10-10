@@ -1,5 +1,6 @@
 package com.creatorcrm;
 
+import com.creatorcrm.domain.BrandNews;
 import com.creatorcrm.domain.Enums.Compensation;
 import com.creatorcrm.domain.Enums.DeadlineType;
 import com.creatorcrm.domain.Enums.OpportunityType;
@@ -14,6 +15,10 @@ import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
+import com.creatorcrm.llm.NewsFound;
+import com.creatorcrm.llm.NewsSearchInput;
+import com.creatorcrm.llm.NewsSort;
+import com.creatorcrm.llm.NewsSortInput;
 import com.creatorcrm.llm.StageSeen;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -101,6 +106,27 @@ public class FakeLlm implements LlmClient {
         contractCalls++;
         lastContractInput = input;
         return nextContract;
+    }
+
+    /** How brand news gets sorted: by default every item is a launch, fit 80, headlined with its title. */
+    public Function<NewsSortInput, NewsSort> newsSort = in -> new NewsSort(in.items().stream()
+            .map(i -> new NewsSort.Verdict(i.id(), true, BrandNews.Kind.LAUNCH, i.title(), "A Reel about it", 80)).toList());
+    public int newsSorts;
+
+    @Override
+    public NewsSort sortBrandNews(NewsSortInput input) {
+        newsSorts++;
+        return newsSort.apply(input);
+    }
+
+    /** What the next brand news web search finds. */
+    public NewsFound nextNewsFound = new NewsFound(List.of());
+    public int newsSearches;
+
+    @Override
+    public NewsFound searchBrandNews(NewsSearchInput input) {
+        newsSearches++;
+        return nextNewsFound;
     }
 
     @Override

@@ -22,6 +22,15 @@ public interface MessageRepo extends JpaRepository<Message, Long> {
 
     List<Message> findByConversationIdOrderBySentAtAsc(Long conversationId);
 
+    /**
+     * Mail a brand sent her outside any deal (newsletters, launch announcements, gifting invites), newest first.
+     * {@code at} and {@code sub} are lower-case LIKE patterns for the sender: "%@glowberry.com", "%.glowberry.com".
+     */
+    @Query("select m from Message m where m.direction = com.creatorcrm.domain.Enums.Direction.INBOUND and m.sentAt >= ?3"
+            + " and (lower(m.sender) like ?1 or lower(m.sender) like ?2) and m.conversationId not in"
+            + " (select o.conversationId from Opportunity o where o.conversationId is not null) order by m.sentAt desc")
+    List<Message> brandMailSince(String at, String sub, OffsetDateTime since, Pageable page);
+
     List<Message> findByConversationIdInOrderBySentAtAsc(java.util.Collection<Long> conversationIds);
 
     /** New messages since the campaign watcher last looked. */

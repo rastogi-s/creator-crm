@@ -279,7 +279,7 @@ async function renderDrafts(root) {
   const reading = (on) => { inbox.classList.toggle("showing-detail", on); root.classList.toggle("reading-draft", on); };
   reading(false);
   const cards = [];
-  for (const { draft: d, brand, blockedReason, sendingAt, sendError, campaign } of list) {
+  for (const { draft: d, brand, blockedReason, sendingAt, sendError, campaign, news } of list) {
     // Already on its way (Send was pressed moments ago, maybe before a refresh): the undo bar shows the countdown.
     if (sendingAt) sendingBar(d.id, brand, sendingAt);
     const subject = el("input", { value: d.subject || "", maxlength: "1000" });
@@ -340,6 +340,7 @@ async function renderDrafts(root) {
         + "queue (see Campaigns), a few minutes apart, during the brand's working hours. The last lines with your address and the "
         + "\"no thanks\" line are required, so they're put back if removed.") : null,
       d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
+      whyNow(news),
       d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
       el("label", {}, "Message"), body,
       askClaude(d, subject, body),

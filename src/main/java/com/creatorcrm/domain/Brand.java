@@ -17,6 +17,8 @@ public class Brand {
     public OffsetDateTime createdAt;
     /** When a win-back re-pitch to this brand was last drafted. */
     public OffsetDateTime lastRepitchAt;
+    /** When the brand's news (launches, teasers) was last collected; null = never. */
+    public OffsetDateTime newsCheckedAt;
 
     /** Normalized brand name used to detect duplicates ("Glow Co." == "glowco"). */
     public static String key(String name) {

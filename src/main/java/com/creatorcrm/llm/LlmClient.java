@@ -39,6 +39,19 @@ public interface LlmClient {
     }
 
     /**
+     * Sort a brand's newly found emails, posts and articles: which are real news (a launch, a teaser, a restock), a
+     * one-line headline, and how well each fits the creator. Cheap: the model she uses for reading messages.
+     */
+    default NewsSort sortBrandNews(NewsSortInput input) {
+        throw new UnsupportedOperationException("Sorting brand news isn't supported");
+    }
+
+    /** Look up a brand's recent launches and teasers on the web, when nothing free turned any up. */
+    default NewsFound searchBrandNews(NewsSearchInput input) {
+        throw new UnsupportedOperationException("Searching for brand news isn't supported");
+    }
+
+    /**
      * Draft the creator's About you profile (voice, rates, rules) from her own data in the app. Only when she asks
      * for it; the result fills the field for her to edit and is never saved by itself.
      */

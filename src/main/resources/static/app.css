@@ -702,6 +702,13 @@ body.practice .topbar { box-shadow: inset 0 4px 0 var(--warn); }
 .campaign-queue li:first-child { border-top: 0; }
 .list-editor { margin-top: .6rem; padding: .7rem; border-radius: 8px; background: var(--surface-2); }
 
+/* ---------- brand news: a re-pitch's "why now" ---------- */
+.why-now { border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 8px; padding: .6rem .8rem; margin: .5rem 0; }
+.why-now .small { margin-top: .2rem; }
+.brand-news { margin-top: .75rem; }
+.brand-news h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.brand-news .title .badge { margin-right: .2rem; }
+
 /* Instagram DMs */
 li.item.clickable { cursor: pointer; }
 li.item.clickable:hover { background: var(--surface-2); }

@@ -5,6 +5,7 @@ import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
 import com.creatorcrm.calendar.CalendarSync;
+import com.creatorcrm.domain.BrandNews;
 import com.creatorcrm.domain.CampaignResult;
 import com.creatorcrm.dms.DmReminders;
 import com.creatorcrm.repo.CampaignResultRepo;
@@ -15,6 +16,7 @@ import com.creatorcrm.invoices.InvoiceService;
 import com.creatorcrm.invoices.PaymentReminders;
 import com.creatorcrm.rebook.WinBack;
 import com.creatorcrm.repo.ActivityRepo;
+import com.creatorcrm.repo.BrandNewsRepo;
 import com.creatorcrm.repo.ContractRepo;
 import com.creatorcrm.repo.InvoiceRepo;
 import com.creatorcrm.repo.MessageRepo;
@@ -64,6 +66,7 @@ public class DemoData implements ApplicationRunner {
     private final CampaignResults results;
     private final CampaignResultRepo resultRepo;
     private final MessageRepo messages;
+    private final BrandNewsRepo brandNews;
     private final DmReminders dmReminders;
 
     /** Instagram DMs: who, hours ago, from her or not, text. Claude reads the brand ones as leads (see DemoInbox). */
@@ -91,7 +94,9 @@ public class DemoData implements ApplicationRunner {
                     WorkflowEngine workflow, InvoiceRepo invoiceRepo, PaymentReminders paymentReminders,
                     ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
                     CalendarSync calendar, CampaignResults results, CampaignResultRepo resultRepo, MessageRepo messages,
+                    BrandNewsRepo brandNews,
                     DmReminders dmReminders) {
+        this.brandNews = brandNews;
         this.dmReminders = dmReminders;
         this.messages = messages;
         this.calendar = calendar;
@@ -175,6 +180,18 @@ public class DemoData implements ApplicationRunner {
                     a.at = now.minusDays(21);
                     activity.save(a);
                 }));
+        // Coastline Coffee teased a new cold brew on Instagram four days ago, so its re-pitch opens with that
+        // (demo mode has no Instagram). Their autumn sale email is there too, sorted out as not news.
+        opportunities.findAll().stream()
+                .filter(o -> "Coastline Coffee".equals(workflow.brandName(o))).findFirst()
+                .ifPresent(o -> {
+                    brandNews.save(demoNews(o.brandId, BrandNews.Source.INSTAGRAM, "https://www.instagram.com/p/DemoMidnightHarbor/",
+                            "Something new is brewing... Midnight Harbor cold brew lands 1 November",
+                            BrandNews.Kind.TEASER, "Teasing Midnight Harbor, a new cold brew landing on 1 November",
+                            "A 'first sip' Reel on launch morning plus three Stories of her week with it", 86, now.minusDays(4)));
+                    brandNews.save(demoNews(o.brandId, BrandNews.Source.EMAIL, null, "Autumn sale: 20% off everything this weekend",
+                            BrandNews.Kind.OTHER, null, null, 0, now.minusDays(9)));
+                });
         winBack.draftDue(settings.today());
         // Bloomleaf Tea's contract, as if read from the PDF attached to their email (demo mode has no Gmail).
         opportunities.findAll().stream()
@@ -211,5 +228,24 @@ public class DemoData implements ApplicationRunner {
         calendar.sync();
         dmReminders.run(); // Glow Haus has waited past the reminder time
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
+    }
+
+    private static BrandNews demoNews(Long brandId, BrandNews.Source source, String url, String title, BrandNews.Kind kind,
+                                      String headline, String idea, int fit, OffsetDateTime at) {
+        BrandNews n = new BrandNews();
+        n.brandId = brandId;
+        n.source = source;
+        n.itemKey = "demo:" + title;
+        n.title = title;
+        n.snippet = title;
+        n.url = url;
+        n.publishedAt = at;
+        n.foundAt = at;
+        n.kind = kind;
+        n.headline = headline;
+        n.pitchIdea = idea;
+        n.fit = fit;
+        n.hidden = kind == BrandNews.Kind.OTHER;
+        return n;
     }
 }

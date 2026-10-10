@@ -61,7 +61,7 @@ async function renderToday(root) {
 function rebookCard(items) {
   const c = card(sectionTitle("repeat", "violet", "Rebook past brands", items.length),
     el("p", { class: "small muted" }, "Brands that paid you and have gone quiet, or gave you a gifted collab a few weeks ago. "
-      + "A short re-pitch is ready for each; nothing is sent until you approve it."),
+      + "A short re-pitch is ready for each, opening with their latest launch when they have one; nothing is sent until you approve it."),
     el("ul", { class: "list" }, items.map((it) => el("li", { class: "item" },
       el("div", { class: "body" }, el("div", { class: "title" }, it.title), el("div", { class: "detail" }, it.detail)),
       el("div", { class: "actions" },
