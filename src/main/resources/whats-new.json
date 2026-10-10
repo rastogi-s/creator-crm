@@ -13,6 +13,19 @@
     ]
   },
   {
+    "version": "1.54.0",
+    "title": "Instagram DMs: sort them, tag leads, never forget to reply",
+    "features": [
+      {
+        "id": "instagram-dms",
+        "title": "Instagram DMs, sorted, with lead tags and reply reminders",
+        "body": "More now has Instagram DMs: every conversation in one list, sorted by who has waited longest for your reply, newest, oldest or name. DMs where Claude spots a brand are marked as leads; press Mark as lead on any other DM that could turn into work, or Not a lead to overrule Claude. A lead becomes a deal, and when one waits for your reply longer than you set (6 hours to start with), Reply to @name goes on Today with a reply drafted. Change the time, or turn reminders off, in Settings, Deals & money.",
+        "video": "instagram-dms.webm",
+        "tryIt": "#dms"
+      }
+    ]
+  },
+  {
     "version": "1.52.0",
     "title": "Find an email for brands that didn't list one",
     "features": [

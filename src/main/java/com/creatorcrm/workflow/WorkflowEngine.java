@@ -99,7 +99,8 @@ public class WorkflowEngine {
         conv.brandRelated = Boolean.TRUE.equals(conv.brandRelated) || a.brandRelated();
 
         Opportunity o = opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).orElse(null);
-        if (o == null && !a.brandRelated()) {
+        // She said this DM isn't a lead: Claude seeing a brand in a later message doesn't start a deal.
+        if (o == null && (!a.brandRelated() || Conversation.NOT_LEAD.equals(conv.leadTag))) {
             conversations.save(conv);
             return Outcome.none();
         }
@@ -309,6 +310,31 @@ public class WorkflowEngine {
         activity.save(Activity.of(o.id, Activity.NEW_OPPORTUNITY,
                 (o.origin == Origin.PITCH ? "Pitched " : "New opportunity: ") + b.name
                         + (a.compensation() == Compensation.UNKNOWN ? "" : " (" + a.compensation().name().toLowerCase() + ")")));
+        return o;
+    }
+
+    /**
+     * A deal for a conversation she tagged as a lead herself (Claude didn't see a brand in it): a new lead from
+     * whoever wrote, named after them until a message names the brand.
+     */
+    @Transactional
+    public Opportunity startLead(Conversation conv, String name) {
+        Optional<Opportunity> existing = opportunities.findFirstByConversationIdOrderByIdDesc(conv.id);
+        if (existing.isPresent()) return existing.get();
+        Brand b = findOrCreateBrand(name, null, conv);
+        conv.brandId = b.id;
+        conversations.save(conv);
+        Opportunity o = new Opportunity();
+        o.brandId = b.id;
+        o.conversationId = conv.id;
+        o.origin = Origin.INBOUND;
+        o.type = OpportunityType.OTHER;
+        o.compensation = Compensation.UNKNOWN;
+        o.status = OpportunityStatus.NEW_LEAD;
+        o.createdAt = OffsetDateTime.now();
+        o.updatedAt = o.createdAt;
+        o = opportunities.save(o);
+        activity.save(Activity.of(o.id, Activity.NEW_OPPORTUNITY, "New lead from an Instagram DM: " + b.name));
         return o;
     }
 
