@@ -1083,6 +1083,42 @@ const scenarios = {
     }
     await say("", 600);
   },
+
+  async "instagram-dms"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    await goTo(page, "dms");
+    const view = page.locator("#view-dms");
+    await view.locator(".dm-list .item").first().waitFor();
+    await say("Instagram DMs now has its own page: every conversation in one list.", 3800);
+    await point(view.locator("select[aria-label=Sort]"));
+    await say("Sort by who has waited longest for you, newest, oldest, or name.", 3600);
+    const lead = view.locator(".dm-list .item", { hasText: "glowhaus.skin" });
+    await point(lead.locator(".badge").first());
+    await say("Claude marks DMs from brands as leads. The red badge says how long they've been waiting.", 4400);
+    await point(lead.locator(".badge", { hasText: "Reply" }));
+    await say("A lead left waiting gets a Reply to-do on Today, with a reply drafted for you.", 4200);
+    const shop = view.locator(".dm-list .item", { hasText: "thelittlecandleco" });
+    await point(shop);
+    await say("This small shop could be work too, but Claude wasn't sure.", 3400);
+    await click(shop.getByRole("button", { name: "Mark as lead" }));
+    await view.locator(".dm-list .item", { hasText: "thelittlecandleco" }).locator(".badge", { hasText: "Lead" }).waitFor();
+    await say("Mark as lead: it becomes a deal, and since it's been waiting, a Reply to-do goes on Today.", 4600);
+    await click(view.getByRole("button", { name: /Leads waiting for you/ }));
+    await say("Leads waiting for you shows just the ones to answer.", 3400);
+    await click(view.locator(".dm-list .item").first());
+    const drawer = page.locator("#drawer");
+    await drawer.locator(".dm-thread").waitFor();
+    await say("Open one to read the conversation, change your mind about the lead, or jump to its deal.", 4400);
+    await click(drawer.getByRole("button", { name: "Close" }));
+    await goTo(page, "settings", "deals");
+    await point(page.locator("#settings-dms"));
+    await say("Settings, Deals & money, Instagram DM reminders sets how long a lead can wait. It starts at 6 hours.", 4800);
+    await goTo(page, "today");
+    await point(page.locator("#view-today", { hasText: "Instagram DM" }).locator("li", { hasText: "Instagram DM" }).first());
+    await say("And here's the reminder on Today.", 3000);
+    await say("", 600);
+  },
 };
 
 async function signIn(page) {

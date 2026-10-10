@@ -223,6 +223,19 @@ async function renderSettings(root) {
       renderSettings(root);
     }, "Saved") }, "Save"))));
 
+  // Instagram DM reply reminders
+  const dmHours = el("select", { id: "dm-reminder-hours", "aria-label": "Remind me after" },
+    [["0", "Off"], ["1", "1 hour"], ["3", "3 hours"], ["6", "6 hours"], ["12", "12 hours"], ["24", "24 hours"], ["48", "2 days"]]
+      .concat([["0", "1", "3", "6", "12", "24", "48"].includes(String(p.dmReplyReminderHours)) ? [] : [[String(p.dmReplyReminderHours), p.dmReplyReminderHours + " hours"]]])
+      .map(([v, l]) => el("option", { value: v, selected: String(p.dmReplyReminderHours) === v }, l)));
+  panes.deals.appendChild(settingsSection("settings-dms", "Instagram DM reminders",
+    el("p", { class: "small muted" }, "When a lead's Instagram DM waits this long for your reply, \"Reply to @name\" goes on Today as a to-do, "
+      + "with a reply drafted if Claude is connected. Leads are DMs you tagged on the Instagram DMs page, or where Claude spotted a brand."),
+    el("div", { class: "grid" }, el("div", {}, el("label", { for: "dm-reminder-hours" }, "Remind me after"), dmHours)),
+    el("p", { class: "small muted" }, "Instagram lets the app send a reply only within 24 hours of their message, so a reminder within a few hours leaves time. "
+      + "After that you can still reply in the Instagram app."),
+    savePrefsButton({ dmReplyReminderHours: dmHours })));
+
   // Pitch campaigns: same card as on the Campaigns page.
   const cr = campaignRulesCard(p, () => renderSettings(root));
   cr.id = "settings-campaigns";

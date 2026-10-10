@@ -125,6 +125,16 @@ final class DemoInbox {
         if (t.contains("Fern & Field")) return a("Fern & Field", "Theo", Intent.NEGOTIATION, OpportunityType.PAID, Compensation.PAID, 600,
                 "1 Reel + 2 Stories", "3 months paid usage (Reel run as ads)", "Spring planters", List.of(), List.of("payment terms"), true,
                 Priority.HIGH, "Answer Fern & Field's $600 offer", "Fern & Field offers $600 for a Reel and two Stories, with the Reel run as an ad for 3 months.");
+        // Instagram DMs (see DemoData.DMS)
+        if (t.contains("Glow Haus")) return a("Glow Haus", "Rin", Intent.NEW_OPPORTUNITY, OpportunityType.PAID, Compensation.PAID, 0,
+                "1 Reel", "SPF launch", List.of(), List.of("budget"), true, Priority.MEDIUM,
+                "Reply to Glow Haus's DM about their SPF launch", "Glow Haus asked on Instagram about a paid Reel for their new SPF.");
+        if (t.contains("avarivera.example/media-kit")) return a("Urban Roots Coffee", "Kai", Intent.SENT_RATES_OR_MEDIA_KIT, OpportunityType.PAID,
+                Compensation.UNKNOWN, 0, "", "Cold brew", List.of(), List.of("budget"), false, Priority.LOW,
+                "", "Ava sent Urban Roots Coffee her media kit on Instagram.");
+        if (t.contains("Urban Roots")) return a("Urban Roots Coffee", "Kai", Intent.MEDIA_KIT_REQUEST, OpportunityType.PAID, Compensation.UNKNOWN, 0,
+                "", "Cold brew", List.of(), List.of("budget"), true, Priority.MEDIUM,
+                "Send Urban Roots Coffee your media kit", "Urban Roots Coffee asked for a media kit on Instagram.");
         if (t.contains("Petal & Pine")) return a("Petal & Pine", "Mia", Intent.CONTENT_POSTED, OpportunityType.GIFTED, Compensation.GIFTED, 0,
                 "1 post", "Candle gift set", List.of(), List.of(), false, Priority.LOW,
                 "", "Petal & Pine thanked Ava for posting their candle gift set.");
