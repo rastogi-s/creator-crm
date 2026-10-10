@@ -9,6 +9,8 @@ import com.creatorcrm.llm.DraftInput;
 import com.creatorcrm.llm.DraftText;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
+import com.creatorcrm.llm.ProfileDraft;
+import com.creatorcrm.llm.ProfileDraftInput;
 import java.util.List;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
@@ -179,6 +181,39 @@ public class DemoLlm implements LlmClient {
         return new BrandLeads(sample.stream()
                 .filter(l -> input.excludeBrands().stream().noneMatch(l.name()::equalsIgnoreCase))
                 .limit(Math.max(1, input.count())).toList());
+    }
+
+    @Override
+    public ProfileDraft draftProfile(ProfileDraftInput input) {
+        String name = input.creatorName().isBlank() ? "Ava" : input.creatorName();
+        List<String> brands = input.deals().stream().map(d -> d.replaceFirst(" \\(.*", "")).distinct().limit(4).toList();
+        String portfolio = input.links().stream().filter(l -> l.toLowerCase().matches(".*(portfolio|ugc|media kit).*"))
+                .findFirst().map(l -> l.substring(l.indexOf(": ") + 2)).orElse("___");
+        String profile = "# About me\n"
+                + "- I make warm, practical skincare, wellness and healthy-food content: Reels, Stories and UGC videos brands can run as ads.\n"
+                + "- Audience: mostly women 25–34 in the US who want simple routines that actually work.\n"
+                + "- Platforms: Instagram ___, TikTok ___\n"
+                + "- Portfolio and media kit: " + portfolio + "\n"
+                + (brands.isEmpty() ? "" : "- Brands I've talked to or worked with: " + String.join(", ", brands) + "\n")
+                + "\n# My voice\n"
+                + "- Friendly and upbeat, but straight to the point.\n"
+                + "- Short emails: a thank-you, one or two sentences on the idea, then a clear next step.\n"
+                + "- I open with \"Hi <first name>,\" and never use emoji in emails.\n"
+                + "- Confident about rates; I never apologise for them.\n"
+                + "- Sign-off: \"Best, " + name + "\"\n"
+                + "\n# Rates (drafts will only quote what is written here)\n"
+                + "- 1 Instagram Reel: $800\n"
+                + "- 3-frame Story set: $300\n"
+                + "- UGC video, no posting (30–60s): $___\n"
+                + "- Usage rights / whitelisting: +30% per 30 days\n"
+                + "\n# Rules\n"
+                + "- Gifted-only collabs only for products I already love; never for Reels.\n"
+                + "- Budget, deliverables, timeline and usage rights must be clear before I say yes.\n"
+                + "- Payment terms: net 30 or better; 50% upfront for projects over $1,000.\n";
+        return new ProfileDraft(profile, List.of(
+                "Add your Instagram and TikTok handles and follower numbers.",
+                "Fill in your UGC video rate; none of your deals showed one.",
+                "The Reel and Story rates come from your Bloomleaf Tea deal; check they're still right."));
     }
 
     @Override

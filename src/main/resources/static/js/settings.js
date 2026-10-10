@@ -64,6 +64,50 @@ function settingsSection(id, title, ...children) {
   return c;
 }
 
+// About you: Claude drafts the profile from her links, portfolio, deals and the emails she wrote. The draft only
+// lands in the box when she says so, and nothing is saved until she presses Save.
+function profileDraftBox(box) {
+  const out = el("div", { id: "profile-draft" });
+  let before = null;
+  const show = (...kids) => { clear(out); kids.forEach((k) => k && out.appendChild(k)); };
+  const idle = () => show(el("div", { class: "row" },
+    el("button", { class: "small", id: "profile-draft-btn", onclick: action(run) }, icon("sparkle"), " Draft with Claude"),
+    el("span", { class: "small muted" }, "Reads your links (portfolio, media kit), your deals and emails you sent to brands. Usually a few cents.")));
+  async function run() {
+    show(el("p", { class: "small muted", role: "status" }, "Claude is reading your links, deals and emails… this can take up to a minute."));
+    let r;
+    try {
+      r = await api("POST", "/api/settings/profile-draft", { current: box.value });
+    } catch (err) {
+      idle();
+      throw err;
+    }
+    const used = [];
+    if (r.sources.links) used.push(r.sources.links + (r.sources.links === 1 ? " link" : " links"));
+    if (r.sources.instagram) used.push("your Instagram stats");
+    if (r.sources.deals) used.push(r.sources.deals + (r.sources.deals === 1 ? " deal" : " deals"));
+    if (r.sources.messages) used.push(r.sources.messages + (r.sources.messages === 1 ? " email you wrote" : " emails you wrote"));
+    show(el("div", { class: "preview-mail" },
+      el("div", { class: "preview-head" }, el("strong", {}, "Claude's draft"),
+        el("span", { class: "small muted" }, used.length ? "Based on " + used.join(", ") + "." : "There wasn't much to go on yet, so check every line.")),
+      el("div", { class: "preview-body" }, r.profile),
+      r.toCheck.length ? el("div", { class: "preview-head" }, el("strong", {}, "Check before you save"),
+        el("ul", { class: "small" }, ...r.toCheck.map((t) => el("li", {}, t)))) : null),
+      el("div", { class: "row" },
+        el("button", { class: "primary small", onclick: () => {
+          before = box.value;
+          box.value = r.profile;
+          box.focus();
+          show(el("div", { class: "row" },
+            el("span", { class: "small" }, "It's in the box. Change anything you like, then press Save."),
+            el("button", { class: "small", onclick: () => { box.value = before; idle(); } }, "Undo")));
+        } }, "Use this draft"),
+        el("button", { class: "small", onclick: idle }, "Discard")));
+  }
+  idle();
+  return out;
+}
+
 async function renderSettings(root) {
   // A second render (a sync finishing, a Save) can start while this one waits on the server. Only the newest
   // one may add cards, or the page ends up with two of some cards.
@@ -195,6 +239,7 @@ async function renderSettings(root) {
   panes.you.appendChild(settingsSection("settings-about", "About you",
     el("label", {}, "Your name (used in sign-offs)"), pf.creatorName,
     el("label", {}, "Voice, rates & rules — drafts only quote rates written here"), pf.creatorProfile,
+    profileDraftBox(pf.creatorProfile),
     el("label", {}, "Time zone"), pf.timezone,
     el("label", { for: "task-rules" }, "Your rules for to-dos (Claude follows these when it reads a new email and writes the to-do and its summary)"), pf.taskRules,
     savePrefsButton(pf)));
@@ -493,7 +538,7 @@ async function claudeSpendCard(root) {
   const sp = await api("GET", "/api/claude-spend").catch(() => null);
   if (!sp) return el("div");
   showCreditBanner(sp);
-  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines", CONTACTS: "Reading contact pictures" };
+  const names = { CLASSIFY: "Reading messages", DRAFT: "Writing drafts", REVISE: "Changing drafts", RESEARCH: "Finding brands", CONTRACT: "Checking contracts", PERSONALISE: "Campaign opening lines", CONTACTS: "Reading contact pictures", PROFILE: "Drafting About you" };
   const balance = el("input", { type: "number", min: "0", step: "0.01", placeholder: "e.g. 25.00",
     value: sp.balanceUsd != null ? sp.balanceUsd.toFixed(2) : null });
   const before = el("input", { type: "number", min: "0", step: "0.01", value: sp.beforeUsd ? sp.beforeUsd.toFixed(2) : null });

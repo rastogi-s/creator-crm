@@ -1149,6 +1149,43 @@ const scenarios = {
     await say("And here's the reminder on Today.", 3000);
     await say("", 600);
   },
+
+  async "profile-draft"(page) {
+    const { say, point, click, pause } = helpers(page);
+    await page.goto(BASE + "/#today");
+    // Demo mode has no links of its own; add two for the video and take them away again at the end.
+    const added = await page.evaluate(async () => Promise.all([
+      api("POST", "/api/links", { label: "UGC portfolio", url: "https://avarivera.example/ugc" }),
+      api("POST", "/api/links", { label: "Instagram", url: "https://instagram.com/ava.makes" }),
+    ]).then((ls) => ls.map((l) => l.id)));
+    await goTo(page, "settings", "you");
+    const about = page.locator("#settings-about");
+    await about.waitFor();
+    await point(about.locator("textarea").first());
+    await say("About you is what Claude reads before it writes any email for you: your voice, rates and rules.", 4600);
+    const btn = about.getByRole("button", { name: "Draft with Claude" });
+    await point(btn);
+    await say("Draft with Claude writes it for you, from what the app already knows.", 3800);
+    await say("It opens your portfolio from My links, and reads your deals and the emails you sent to brands.", 4400);
+    await click(btn);
+    const draft = about.locator("#profile-draft .preview-mail");
+    await draft.waitFor();
+    await point(draft.locator(".preview-head").first());
+    await say("Here's the draft, and what it was based on. Nothing has changed yet.", 4000);
+    await draft.locator(".preview-body").evaluate((n) => n.scrollTo({ top: n.scrollHeight / 2, behavior: "smooth" }));
+    await pause(1200);
+    await point(draft.getByText("Check before you save"));
+    await say("It lists what you should check, like a rate it couldn't find. It never makes up a rate.", 4400);
+    await click(about.getByRole("button", { name: "Use this draft" }));
+    await say("Use this draft puts it in the box. Change anything you like.", 3600);
+    await point(about.getByRole("button", { name: "Undo" }));
+    await say("Changed your mind? Undo brings your old text back.", 3400);
+    await point(about.getByRole("button", { name: "Save" }));
+    await say("Nothing is saved until you press Save.", 3200);
+    await click(about.getByRole("button", { name: "Undo" }));
+    await page.evaluate(async (ids) => { for (const id of ids) await api("DELETE", "/api/links/" + id); }, added);
+    await say("", 600);
+  },
 };
 
 async function signIn(page) {

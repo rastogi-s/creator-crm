@@ -193,6 +193,29 @@ class ClaudeLlmClientTest {
     }
 
     @Test
+    void draftsAProfileFromHerDataAndMayOnlyOpenHerOwnSites() {
+        usage = Map.of("input_tokens", 5000, "output_tokens", 800);
+        replyText = "{\"profile\": \"# About me\\n- I make skincare UGC.\", \"toCheck\": [\"Fill in your UGC rate.\"]}";
+        ProfileDraft d = claude.draftProfile(new ProfileDraftInput("Ava", "", List.of("UGC portfolio: https://ava.example/ugc"),
+                "", List.of("Glow Co (brand reached out); paid; agreed or offered USD 800; deliverables: 1 Reel"),
+                List.of("<past_example kind=\"REPLY\">Hi Maya! Best, Ava</past_example>"), List.of("ava.example")));
+
+        assertThat(d.profile()).contains("skincare UGC");
+        assertThat(d.toCheck()).containsExactly("Fill in your UGC rate.");
+        assertThat(lastRequest.get()).contains("web_fetch_20260209").contains("\"allowed_domains\":[\"ava.example\"]")
+                .contains("https://ava.example/ugc").contains("USD 800").contains("Best, Ava")
+                .contains("(empty: she hasn't written one yet)");
+        assertThat(spend.summary().byFeature().get("PROFILE")).isGreaterThan(0);
+    }
+
+    @Test
+    void profileDraftWithoutReadableLinksHasNoFetchTool() {
+        replyText = "{\"profile\": \"# About me\", \"toCheck\": []}";
+        claude.draftProfile(new ProfileDraftInput("Ava", "# About me\n- old", List.of(), "", List.of(), List.of(), List.of()));
+        assertThat(lastRequest.get()).doesNotContain("web_fetch").contains("- old");
+    }
+
+    @Test
     void malformedReplyIsAReadableError() {
         replyText = "not json";
         assertThatThrownBy(() -> claude.classify(sample()))

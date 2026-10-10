@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.58.0",
+    "title": "Let Claude write your About you",
+    "features": [
+      {
+        "id": "profile-draft",
+        "title": "Draft About you with Claude",
+        "body": "Settings, About you now has a Draft with Claude button. Claude reads what the app already knows about you: your links (it opens your portfolio, UGC page or media kit), your Instagram numbers, your deals and the emails you've written to brands. It writes your niche, your voice, your rates and your rules in the same layout as before, and lists anything you should check, like a rate it couldn't find. Nothing changes until you press Use this draft, and nothing is saved until you press Save, so you can edit it first or Undo. It never makes up rates: a rate it doesn't know stays as $___. One draft usually costs a few cents.",
+        "video": "profile-draft.webm",
+        "tryIt": "#settings?tab=you"
+      }
+    ]
+  },
+  {
     "version": "1.55.0",
     "title": "Ask the brand to fix their contract in one click",
     "features": [
