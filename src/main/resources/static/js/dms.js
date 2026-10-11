@@ -53,7 +53,7 @@ function dmTagButtons(r, after) {
 
 async function renderDms(root) {
   const f = dmsFilter;
-  const rows = await api("GET", "/api/dms");
+  const [rows, ig] = await Promise.all([api("GET", "/api/dms"), api("GET", "/api/dms/status").catch(() => null)]);
   clear(root);
   const save = () => savePrefs("dms", f);
   root.appendChild(el("h1", {}, "Instagram DMs"));
@@ -88,8 +88,7 @@ async function renderDms(root) {
       ["OTHER", "Not leads " + n("OTHER")]], f.show, (v) => { f.show = v; save(); draw(); }, "Show"));
     clear(list);
     if (!rows.length) {
-      list.appendChild(card(null, emptyLine("No Instagram DMs yet. Once Instagram is connected in Settings, your DMs show up here "
-        + "every time the app checks for new messages.")));
+      list.appendChild(dmStatusCard(ig, root));
       return;
     }
     const shown = sortRows(rows.filter((r) => (groups[f.show] || groups[""])(r)
@@ -113,6 +112,58 @@ async function renderDms(root) {
         el("div", { class: "actions", onclick: (e) => e.stopPropagation() }, ...dmTagButtons(r, () => renderDms(root))))))));
   }
   draw();
+}
+
+// Waits (up to two minutes) for a check that was just started to finish.
+async function dmWaitForSync() {
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const st = await api("GET", "/api/sync/status").catch(() => null);
+    if (st && !st.syncing) return;
+  }
+}
+
+// An empty page says why: Instagram not connected, a check that failed, or what Instagram sent back last time.
+function dmStatusCard(ig, root) {
+  const c = card(null);
+  if (!ig || !ig.connected) {
+    c.append(emptyLine("No Instagram DMs yet, because Instagram isn't connected."),
+      el("p", {}, el("a", { class: "btn primary small", href: "#settings?tab=accounts" }, "Connect Instagram")));
+    return c;
+  }
+  const lines = [el("p", {}, el("strong", {}, "Instagram is connected" + (ig.account ? " as " + ig.account : "") + ","),
+    " but no DMs have come in yet.")];
+  if (ig.error) {
+    lines.push(el("p", { class: "small warn" }, "The last check didn't work: " + ig.error.replace(/^\S+\s+/, "")));
+  } else if (ig.fetch) {
+    const f = ig.fetch;
+    lines.push(el("p", { class: "small" }, "Last check, " + fmtDateTime(f.at) + ": Instagram sent back "
+      + f.conversations + (f.conversations === 1 ? " conversation" : " conversations")
+      + (f.conversations ? ", " + f.activeSince + " with messages since " + fmtDate(f.since)
+        + (f.newestConversation ? " (newest " + fmtDateTime(f.newestConversation) + ")" : "") : "") + "."));
+    if (!f.conversations) {
+      lines.push(el("p", { class: "small" }, "When Instagram sends back no conversations at all, message access is usually off. On her phone: "
+        + "Instagram, Settings, Messages and story replies, Message controls (or Connected tools), turn on Allow access to messages. "
+        + "Then press Check for new messages below."));
+    }
+  } else if (ig.lastCheck) {
+    lines.push(el("p", { class: "small muted" }, "Last checked " + fmtDateTime(ig.lastCheck) + ". Press Check for new messages to see what Instagram sends back."));
+  }
+  if (ig.importingSince) lines.push(el("p", { class: "small" }, "Bringing in DMs since " + fmtDate(ig.importingSince) + "…"));
+  lines.push(el("p", { class: "small muted" }, "Checks bring in new DMs. DMs from before Instagram was connected come in with Bring in older DMs."));
+  lines.push(el("div", { class: "row" },
+    el("button", { class: "small primary", onclick: action(async () => {
+      await api("POST", "/api/sync");
+      await dmWaitForSync();
+      renderDms(root);
+    }) }, "Check for new messages"),
+    el("button", { class: "small", onclick: action(async () => {
+      await api("POST", "/api/dms/import", { days: 90 });
+      await dmWaitForSync();
+      renderDms(root);
+    }) }, "Bring in older DMs")));
+  c.append(...lines);
+  return c;
 }
 
 // One conversation, with the lead switch and a link to its deal.

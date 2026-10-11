@@ -77,14 +77,22 @@ public class InstagramConnector implements ChannelConnector {
         List<NormalizedMessage> out = new ArrayList<>();
         JsonNode convs = api.get(token(), "/me/conversations", Map.of(
                 "platform", "instagram", "fields", "id,updated_time", "limit", String.valueOf(maxConversations)));
+        int seen = 0, recent = 0;
+        OffsetDateTime newest = null;
         for (JsonNode conv : convs.path("data")) {
+            seen++;
             OffsetDateTime updated = parseTime(conv.path("updated_time").asText());
+            if (updated != null && (newest == null || updated.isAfter(newest))) newest = updated;
             if (updated != null && updated.isBefore(since)) continue;
+            recent++;
             JsonNode msgs = api.get(token(), "/" + conv.path("id").asText(), Map.of(
                     "fields", "messages{id,created_time,from,to,message}"));
-            for (JsonNode m : msgs.path("messages").path("data")) {
-                OffsetDateTime at = parseTime(m.path("created_time").asText());
+            for (JsonNode listed : msgs.path("messages").path("data")) {
+                OffsetDateTime at = parseTime(listed.path("created_time").asText());
                 if (at == null || at.isBefore(since)) continue;
+                // Meta documents the details per message; ask for them when the list came back with ids only.
+                JsonNode m = listed.has("from") ? listed : details(listed.path("id").asText());
+                if (m == null) continue;
                 String fromId = m.path("from").path("id").asText();
                 String fromName = m.path("from").path("username").asText();
                 boolean outbound = fromId.equals(myId) || (!myUsername.isBlank() && fromName.equalsIgnoreCase(myUsername));
@@ -98,7 +106,32 @@ public class InstagramConnector implements ChannelConnector {
                         textOrPlaceholder(m.path("message").asText("")), "", "", at, false));
             }
         }
+        lastFetch = new FetchReport(OffsetDateTime.now(), since, seen, recent, newest, out.size());
+        log.info("Instagram: {} conversations returned ({} active since {}), {} messages", seen, recent, since, out.size());
         return out;
+    }
+
+    /** One message's sender and text; null when Instagram won't give it (only the 20 newest of a chat have details). */
+    private JsonNode details(String messageId) {
+        try {
+            return api.get(token(), "/" + messageId, Map.of("fields", "id,created_time,from,to,message"));
+        } catch (Exception e) {
+            log.debug("Could not read Instagram message {}: {}", messageId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * What Instagram sent back on the last check, so the DMs page can say why it's empty: no conversations at all
+     * usually means message access is off for the app on her Instagram account.
+     */
+    public record FetchReport(OffsetDateTime at, OffsetDateTime since, int conversations, int activeSince,
+                              OffsetDateTime newestConversation, int messages) {}
+
+    private volatile FetchReport lastFetch;
+
+    public Optional<FetchReport> lastFetch() {
+        return Optional.ofNullable(lastFetch);
     }
 
     @Override
