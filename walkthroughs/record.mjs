@@ -1044,7 +1044,7 @@ const scenarios = {
     await row.waitFor();
     await say("Everything works like the real app. Here are drafts for the sample brands.", 3800);
     await click(row);
-    const send = page.locator("#view-drafts .inbox-detail .card:not(.hidden)").getByRole("button", { name: "Send" });
+    const send = page.locator("#view-drafts .inbox-detail .card:not(.hidden)").getByRole("button", { name: "Send", exact: true });
     await point(send);
     await say("Press Send to see what happens next. In practice, Send only pretends.", 4000);
     await click(send);
