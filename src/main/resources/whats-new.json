@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.61.0",
+    "title": "Instagram DMs page says why it's empty",
+    "features": [
+      {
+        "id": "instagram-dms-status",
+        "title": "Instagram DMs: what Instagram sent back, and older DMs",
+        "body": "When the Instagram DMs page has nothing to show, it now says why: Instagram isn't connected, the last check failed, or Instagram sent back no conversations (usually because Allow access to messages is off in her Instagram settings). Check for new messages runs a check right there, and Bring in older DMs fetches the last 90 days, including DMs from before Instagram was connected.",
+        "tryIt": "#dms"
+      }
+    ]
+  },
+  {
     "version": "1.60.0",
     "title": "Re-pitches that open with a brand's latest launch",
     "features": [
