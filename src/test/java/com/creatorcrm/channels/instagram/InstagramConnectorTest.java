@@ -3,6 +3,7 @@ package com.creatorcrm.channels.instagram;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -77,5 +78,22 @@ class InstagramConnectorTest {
         assertThat(r.conversations()).isEqualTo(2);
         assertThat(r.activeSince()).isEqualTo(1);
         assertThat(r.messages()).isEqualTo(1);
+    }
+
+    @Test
+    void anEmptyFirstPageWithANextPageIsFollowed() throws Exception {
+        // What her account sent back: no chats on page one, but a "next" page.
+        when(api.get(anyString(), eq("/me/conversations"), argThat(q -> q != null && !q.containsKey("after"))))
+                .thenReturn(JSON.readTree("{\"data\":[],\"paging\":{\"cursors\":{\"after\":\"P2\"},\"next\":\"https://x\"}}"));
+        when(api.get(anyString(), eq("/me/conversations"), argThat(q -> q != null && "P2".equals(q.get("after")))))
+                .thenReturn(JSON.readTree("{\"data\":[{\"id\":\"c1\",\"updated_time\":\"2099-01-01T10:00:00+0000\"}]}"));
+        when(api.get(anyString(), eq("/c1"), any())).thenReturn(JSON.readTree(
+                "{\"messages\":{\"data\":[{\"id\":\"m1\",\"created_time\":\"2099-01-01T10:00:00+0000\","
+                        + "\"from\":{\"id\":\"b9\",\"username\":\"shubh\"},\"to\":{\"data\":[{\"id\":\"me1\"}]},\"message\":\"test\"}]}}"));
+
+        List<NormalizedMessage> out = connector.fetchSince(OffsetDateTime.now().minusDays(14));
+
+        assertThat(out).singleElement().satisfies(m -> assertThat(m.content()).isEqualTo("test"));
+        assertThat(connector.lastFetch().orElseThrow().conversations()).isEqualTo(1);
     }
 }

@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,6 +31,7 @@ public class InstagramConnector implements ChannelConnector {
     private static final Logger log = LoggerFactory.getLogger(InstagramConnector.class);
     /** Meta only allows replies within 24 hours of the user's last message. */
     public static final Duration MESSAGING_WINDOW = Duration.ofHours(24);
+    private static final int MAX_PAGES = 10;
     private static final DateTimeFormatter IG_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 
     private final SecretStore secrets;
@@ -75,11 +77,10 @@ public class InstagramConnector implements ChannelConnector {
         String myUsername = secrets.get(SecretName.INSTAGRAM_USERNAME).orElse("");
 
         List<NormalizedMessage> out = new ArrayList<>();
-        JsonNode convs = api.get(token(), "/me/conversations", Map.of(
-                "platform", "instagram", "fields", "id,updated_time", "limit", String.valueOf(maxConversations)));
+        List<JsonNode> convs = conversations(since);
         int seen = 0, recent = 0;
         OffsetDateTime newest = null;
-        for (JsonNode conv : convs.path("data")) {
+        for (JsonNode conv : convs) {
             seen++;
             OffsetDateTime updated = parseTime(conv.path("updated_time").asText());
             if (updated != null && (newest == null || updated.isAfter(newest))) newest = updated;
@@ -109,6 +110,33 @@ public class InstagramConnector implements ChannelConnector {
         lastFetch = new FetchReport(OffsetDateTime.now(), since, seen, recent, newest, out.size());
         log.info("Instagram: {} conversations returned ({} active since {}), {} messages", seen, recent, since, out.size());
         return out;
+    }
+
+    /**
+     * Her conversations, newest first, following Instagram's "next" pages. Instagram can send back an empty page that
+     * still has a next page (it filters some chats out after paging), so an empty first page doesn't mean no DMs.
+     * Stops at {@code maxConversations}, at a page whose last chat is older than {@code since}, or after MAX_PAGES.
+     */
+    private List<JsonNode> conversations(OffsetDateTime since) throws Exception {
+        List<JsonNode> all = new ArrayList<>();
+        String after = null;
+        for (int page = 0; page < MAX_PAGES && all.size() < maxConversations; page++) {
+            Map<String, String> q = new HashMap<>(Map.of("platform", "instagram", "fields", "id,updated_time",
+                    "limit", String.valueOf(maxConversations)));
+            if (after != null) q.put("after", after);
+            JsonNode res = api.get(token(), "/me/conversations", q);
+            JsonNode last = null;
+            for (JsonNode conv : res.path("data")) {
+                if (all.size() < maxConversations) all.add(conv);
+                last = conv;
+            }
+            OffsetDateTime lastUpdated = last == null ? null : parseTime(last.path("updated_time").asText());
+            if (lastUpdated != null && lastUpdated.isBefore(since)) break;
+            String next = res.path("paging").has("next") ? res.path("paging").path("cursors").path("after").asText("") : "";
+            if (next.isBlank() || next.equals(after)) break;
+            after = next;
+        }
+        return all;
     }
 
     /** One message's sender and text; null when Instagram won't give it (only the 20 newest of a chat have details). */
