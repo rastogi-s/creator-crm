@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.62.0",
+    "title": "Bring in Instagram DMs from your Instagram download",
+    "features": [
+      {
+        "id": "instagram-dms-download",
+        "title": "Instagram DMs from your Instagram download",
+        "body": "Instagram only shares brands' DMs with an app after Meta reviews it, so they couldn't come in on their own yet. Now you can download your messages from Instagram (Accounts Center, Download your information, Messages, JSON) and bring them in on the Instagram DMs page with Choose folder. Claude reads them like any DM: leads get tagged, and lead DMs waiting for your reply go on Today. Bring in a newer download any time; nothing comes in twice. Replies to these chats go from the Instagram app.",
+        "tryIt": "#dms"
+      }
+    ]
+  },
+  {
     "version": "1.61.0",
     "title": "Instagram DMs page says why it's empty",
     "features": [

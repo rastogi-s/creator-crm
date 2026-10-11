@@ -164,6 +164,11 @@ public class InstagramConnector implements ChannelConnector {
 
     @Override
     public Optional<String> sendBlockedReason(Draft draft, OffsetDateTime lastInboundAt) {
+        if (draft.toAddress == null || !draft.toAddress.matches("\\d+")) {
+            // A chat from her Instagram download: it has their username, not the id the API sends to.
+            return Optional.of("This DM came from your Instagram download, so the app can't send it. "
+                    + "Copy this draft and send it from the Instagram app.");
+        }
         if (lastInboundAt == null || lastInboundAt.isBefore(OffsetDateTime.now().minus(MESSAGING_WINDOW))) {
             return Optional.of("Instagram only allows API replies within 24 hours of the brand's last message. "
                     + "Copy this draft and send it from the Instagram app.");
