@@ -24,7 +24,8 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Controller
 public class FacebookOAuthController {
     private static final Logger log = LoggerFactory.getLogger(FacebookOAuthController.class);
-    static final String SCOPES = "instagram_basic,instagram_manage_comments,instagram_manage_insights,"
+    /** Only what brand lookups and tagged posts read; Meta rejects scopes the app's use case hasn't added. */
+    static final String SCOPES = "instagram_basic,instagram_manage_comments,"
             + "pages_show_list,pages_read_engagement,business_management";
 
     private final SecretStore secrets;
