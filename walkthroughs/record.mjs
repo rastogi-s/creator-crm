@@ -4,11 +4,13 @@
 //     java -jar target/creator-manager-*.jar --spring.profiles.active=demo &
 //   cd walkthroughs && npm install && npx playwright install chromium && node record.mjs [name ...]
 //
+// SHARD=2/4 records only the second quarter of the videos, so CI can record on several machines at once.
+//
 // Each video's file name must match a "video" in src/main/resources/whats-new.json. Needs ffmpeg on PATH.
 // CRM_DEMO_VIDEOS lets the app play videos recorded earlier in the same run (What's New shows them).
 import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -1270,7 +1272,22 @@ async function signIn(page) {
   await Promise.all([page.waitForURL((u) => !u.pathname.endsWith("login.html")), page.click("button[type=submit]")]);
 }
 
-const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(scenarios);
+// Every video, or one shard of them. Shards take turns (1, 2, …, n, 1, 2, …) so long videos spread out. What's New
+// plays the newest video, so it goes last in whichever shard records that one.
+function pick(shard) {
+  const [i, n] = shard.split("/").map(Number);
+  if (!(n >= 1 && i >= 1 && i <= n)) throw new Error("SHARD must look like 2/4, not " + shard);
+  const names = Object.keys(scenarios).filter((s) => s !== "whats-new");
+  const mine = names.filter((_, k) => k % n === i - 1);
+  const notes = JSON.parse(readFileSync(new URL("../src/main/resources/whats-new.json", import.meta.url), "utf8"));
+  const first = notes.slice().sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }))
+    .flatMap((v) => v.features || []).find((f) => f.video)?.video.replace(/\.webm$/, "");
+  const home = names.includes(first) ? names.indexOf(first) % n : 0;
+  return home === i - 1 ? [...mine, "whats-new"] : mine;
+}
+const wanted = process.argv.slice(2).length ? process.argv.slice(2)
+  : process.env.SHARD ? pick(process.env.SHARD) : Object.keys(scenarios);
+if (process.env.LIST) { console.log(wanted.join(" ")); process.exit(0); } // which videos this run would record
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 try {

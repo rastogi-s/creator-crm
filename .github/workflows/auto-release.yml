@@ -1,6 +1,6 @@
 # Every merge to main becomes a release: this picks the next version, tags the merge commit, then runs
-# release.yml for that tag (installers, walkthrough videos, Docker image, GitHub Release). Installed apps offer
-# the update within a few hours.
+# release.yml for that tag (installers, Docker image, GitHub Release; the walkthrough videos follow about 15 minutes
+# later). Installed apps offer the update within a few hours.
 #
 # Version: the next patch (1.1.0 -> 1.1.1) by default. To ship a bigger version, add its entry to
 # src/main/resources/whats-new.json in the PR (e.g. "1.2.0"): a version listed there that is newer than the
@@ -62,5 +62,6 @@ jobs:
     secrets: inherit    # Windows code signing (docs/code-signing.md); unused until it's set up
     permissions:
       contents: write   # create the GitHub Release
+      actions: write    # start walkthroughs.yml
       packages: write   # push the Docker image
       id-token: write   # sign in to Azure for Windows code signing
