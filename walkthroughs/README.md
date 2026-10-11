@@ -1,8 +1,10 @@
 # Walkthrough videos
 
 Short captioned videos of each feature, shown in the app's **What's New** page (once, after an update) and on
-the **Help** page. They are recorded automatically by the Release workflow on every version tag and attached to
-the GitHub release, so they always match the current screens. The app downloads each video the first time it's
+the **Help** page. Every release records them again (the Walkthrough videos workflow, `walkthroughs.yml`, which
+starts once the release is published) and attaches them to the GitHub release, so they always match the current
+screens. The recording runs on five machines at once (`SHARD=2/5 node record.mjs` records the second fifth);
+`LIST=1` prints which videos a run would record without recording them. The app downloads each video the first time it's
 played and keeps it in the data folder.
 
 ## Adding a video for a new feature

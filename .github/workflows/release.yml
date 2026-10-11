@@ -1,7 +1,8 @@
 # Runs automatically after every merge to main (see auto-release.yml), or by hand:  git tag v1.1.0 && git push origin v1.1.0
-# Builds and tests the app, makes installers for Windows / macOS / Linux, records the walkthrough videos, pushes a
-# Docker image to ghcr.io, and creates a GitHub Release with everything attached. Installed apps see the new
-# release within a few hours and offer "Update now". Tags with a suffix (v1.1.0-beta.1) become pre-releases, which
+# Builds and tests the app, makes installers for Windows / macOS / Linux, pushes a Docker image to ghcr.io, and
+# creates a GitHub Release with everything attached. The walkthrough videos are recorded afterwards by
+# walkthroughs.yml, which this starts, and added to the same release. Installed apps see the new release within a
+# few hours and offer "Update now". Tags with a suffix (v1.1.0-beta.1) become pre-releases, which
 # installed apps ignore: use them to try a build yourself first.
 #
 # Windows code signing (optional, see docs/code-signing.md): set the repository variables AZURE_SIGNING_ENDPOINT,
@@ -203,56 +204,14 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  walkthroughs:
-    # Records the feature videos shown in the app's What's New and Help pages, against a demo-mode copy of this
-    # exact build. See walkthroughs/README.md.
-    needs: jar
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ env.TAG }}
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "21"
-      - uses: actions/download-artifact@v8
-        with:
-          name: jar
-          path: target
-      - name: Install ffmpeg and Chromium
-        run: |
-          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
-          cd walkthroughs && npm install --no-audit --no-fund && npx playwright install --with-deps chromium
-      - name: Start the app in demo mode
-        run: |
-          mkdir -p walkthroughs/videos
-          CRM_DATA_DIR="$RUNNER_TEMP/demo" CRM_DEMO_VIDEOS="$PWD/walkthroughs/videos" \
-            nohup java -jar target/creator-manager-*.jar --spring.profiles.active=demo > "$RUNNER_TEMP/demo.log" 2>&1 &
-          for i in $(seq 1 60); do curl -fs http://localhost:8080/api/setup/status && exit 0; sleep 2; done
-          cat "$RUNNER_TEMP/demo.log"; exit 1
-      - name: Record
-        working-directory: walkthroughs
-        run: node record.mjs
-      - name: Check every video this version promises was recorded
-        run: |
-          V="${TAG#v}"; V="${V%%-*}"
-          for f in $(jq -r --arg v "$V" '.[] | select(.version == $v) | .features[].video // empty' src/main/resources/whats-new.json); do
-            test -s "walkthroughs/videos/$f" || { echo "::error::Missing walkthrough video $f (add a scenario to walkthroughs/record.mjs)"; exit 1; }
-          done
-      - if: failure()
-        run: cat "$RUNNER_TEMP/demo.log" || true
-      - uses: actions/upload-artifact@v7
-        with:
-          name: walkthroughs
-          path: walkthroughs/videos/*.webm
-
   release:
-    needs: [jar, installers, docker, walkthroughs]
+    # Doesn't wait for the walkthrough videos: walkthroughs.yml records them afterwards and adds them to this release.
+    needs: [jar, installers, docker]
     if: ${{ !cancelled() && needs.jar.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write   # start walkthroughs.yml
     steps:
       - uses: actions/checkout@v7
         with:
@@ -261,7 +220,7 @@ jobs:
         with:
           path: artifacts
           # Only our files. The Docker build action also uploads a ".dockerbuild" record that can't be extracted.
-          pattern: "{jar,installer-*,walkthroughs}"
+          pattern: "{jar,installer-*}"
       - name: Release notes from whats-new.json
         id: notes
         run: |
@@ -274,7 +233,7 @@ jobs:
       - name: Collect files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.webm' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.msi' -o -name '*.dmg' -o -name '*.deb' \) -exec cp {} release/ \;
           cp artifacts/jar/creator-manager-*.jar "release/creator-crm-${TAG#v}.jar"
           (cd release && sha256sum * > SHA256SUMS.txt)
           ls -la release
@@ -287,3 +246,8 @@ jobs:
           generate_release_notes: true
           # v1.2.0-beta.1 and similar: for testing; installed apps only offer full releases.
           prerelease: ${{ contains(env.TAG, '-') }}
+      - name: Record the walkthrough videos next (walkthroughs.yml)
+        if: ${{ !contains(env.TAG, '-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run walkthroughs.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"

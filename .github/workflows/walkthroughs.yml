@@ -1,0 +1,96 @@
+# Records the walkthrough videos shown in the app's What's New and Help pages and attaches them to a release that
+# is already published. release.yml starts this right after publishing, so the update itself never waits for
+# videos. The videos are recorded on five machines at once (about 15 minutes instead of 50), against a demo-mode
+# copy of the release's own jar. See walkthroughs/README.md.
+#
+# A video opened in the app before its recording lands simply loads the next time it's opened. To re-record a
+# release's videos by hand: Actions > Walkthrough videos > Run workflow, with its tag (e.g. v1.60.0).
+name: Walkthrough videos
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to record videos for, e.g. v1.60.0
+        required: true
+        type: string
+
+# A newer release records every video again, so an older recording still running is no longer needed.
+concurrency:
+  group: walkthroughs
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+  SHARDS: 5
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Download the release's jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$TAG" --pattern 'creator-crm-*.jar' --output app.jar
+      - name: Install ffmpeg and Chromium
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+          cd walkthroughs && npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Start the app in demo mode
+        run: |
+          mkdir -p walkthroughs/videos
+          CRM_DATA_DIR="$RUNNER_TEMP/demo" CRM_DEMO_VIDEOS="$PWD/walkthroughs/videos" \
+            nohup java -jar app.jar --spring.profiles.active=demo > "$RUNNER_TEMP/demo.log" 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://localhost:8080/api/setup/status && exit 0; sleep 2; done
+          cat "$RUNNER_TEMP/demo.log"; exit 1
+      - name: Record
+        working-directory: walkthroughs
+        env:
+          SHARD: ${{ matrix.shard }}/${{ env.SHARDS }}
+        run: node record.mjs
+      - if: failure()
+        run: cat "$RUNNER_TEMP/demo.log" || true
+      - uses: actions/upload-artifact@v7
+        with:
+          name: walkthroughs-${{ matrix.shard }}
+          path: walkthroughs/videos/*.webm
+
+  attach:
+    needs: record
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # add the videos to the release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: walkthroughs-*
+          path: videos
+          merge-multiple: true
+      - name: Check every video this version promises was recorded
+        run: |
+          V="${TAG#v}"; V="${V%%-*}"
+          for f in $(jq -r --arg v "$V" '.[] | select(.version == $v) | .features[].video // empty' src/main/resources/whats-new.json); do
+            test -s "videos/$f" || { echo "::error::Missing walkthrough video $f (add a scenario to walkthroughs/record.mjs)"; exit 1; }
+          done
+          ls -la videos
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" videos/*.webm --clobber
