@@ -301,6 +301,8 @@ svg.ico-inline[class*="tone-"] { color: var(--tone); }
 details > summary h3:has(.sec-ico) { flex: 1; }
 .see-all { margin: .75rem 0 0; font-weight: 600; }
 details.fold > summary { cursor: pointer; color: var(--accent); font-weight: 600; margin: .25rem 0; }
+details.lead-others .row { gap: .4rem; flex-wrap: wrap; margin: .2rem 0; }
+details.lead-others .row > span:first-child { overflow-wrap: anywhere; }
 .chip .ico-inline { margin-right: .3rem; }
 .links-empty-art .ico-inline { width: 2.5rem; height: 2.5rem; color: var(--accent); }
 

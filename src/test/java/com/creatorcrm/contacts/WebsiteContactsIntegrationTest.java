@@ -149,5 +149,10 @@ class WebsiteContactsIntegrationTest {
         assertThat(after.websiteCheckedAt).isNotNull();
         assertThat(r.message()).contains("Using collabs@");
         assertThat(website.leadsToRead(OffsetDateTime.now().minusDays(60))).extracting(l -> l.id).doesNotContain(lead.id);
+        // Every address is kept on the lead, not just the one the pitch goes to; reading again adds nothing twice
+        assertThat(ContactFinder.readPeople(after.finderContacts)).extracting(ContactFinder.Person::email)
+                .containsExactly("collabs@lead" + t + ".example", "hello@lead" + t + ".example", "gone@lead" + t + ".example");
+        assertThat(website.forLead(lead.id).message()).contains("You already had them all");
+        assertThat(ContactFinder.readPeople(leads.findById(lead.id).orElseThrow().finderContacts)).hasSize(3);
     }
 }

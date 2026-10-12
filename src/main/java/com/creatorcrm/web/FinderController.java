@@ -64,6 +64,14 @@ public class FinderController {
         return finder.findForLead(leadId, again);
     }
 
+    public record Use(String email) {}
+
+    /** "Use this": another address found for a lead becomes the one its pitch goes to. */
+    @PostMapping("/lead/{leadId}/use")
+    public com.creatorcrm.domain.BrandLead useForLead(@PathVariable Long leadId, @RequestBody Use u) {
+        return finder.useForLead(leadId, u.email());
+    }
+
     @PostMapping("/brand/{brandId}/check")
     public ContactFinder.BrandCheck checkBrand(@PathVariable Long brandId) {
         return finder.checkBrand(brandId);

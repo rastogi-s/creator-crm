@@ -798,6 +798,44 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "lead-more-emails"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-outreach");
+    await page.goto(BASE + "/#outreach");
+    await view.locator("h1").waitFor();
+    let lead = view.locator(".item", { hasText: "Trailmix Co" });
+    if (!(await lead.count())) {
+      const query = view.locator(".find-brands .query input");
+      await point(query);
+      await query.fill("snack brands that work with outdoor creators");
+      await click(view.getByRole("button", { name: "Find brands" }));
+      lead = view.locator(".item", { hasText: "Trailmix Co" });
+      await lead.waitFor();
+    }
+    const first = lead.getByRole("button", { name: "Find contacts on website" });
+    if (await first.count()) {
+      await click(first);
+      lead = view.locator(".item", { hasText: "creators@trailmix.example" });
+      await lead.waitFor({ timeout: 30000 });
+    }
+    await point(lead);
+    await say("Trailmix Co already has an email. You can still look for more people there.", 4000);
+    await point(lead.getByRole("button", { name: "More from website" }));
+    await say("More from website reads the brand's contact, partnerships and press pages again.", 4200);
+    await point(lead.getByRole("button", { name: "More from Hunter" }));
+    await say("More from Hunter asks Hunter for marketing, PR and partnerships people first. Looking again searches wider.", 5000);
+    const more = lead.locator("details.lead-others > summary");
+    await click(more);
+    await say("Every address found is kept here, with where it came from.", 3800);
+    const press = lead.locator("details.lead-others .row", { hasText: "press@trailmix.example" });
+    await point(press);
+    await say("Want the pitch to go to someone else? Press Use this.", 3600);
+    await click(press.getByRole("button", { name: "Use this" }));
+    await view.locator(".item", { hasText: "press@trailmix.example" }).locator(".small", { hasText: "press@" }).first().waitFor();
+    await say("When you pitch the brand, everyone found joins its contacts, with no duplicates.", 4400);
+    await say("", 600);
+  },
+
   async "category-search"(page) {
     const { say, point, click } = helpers(page);
     const view = page.locator("#view-outreach");

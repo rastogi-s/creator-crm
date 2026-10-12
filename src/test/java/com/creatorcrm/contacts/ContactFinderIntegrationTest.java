@@ -228,4 +228,51 @@ class ContactFinderIntegrationTest {
         assertThat(contactRepo.findByEmail("gone@" + domain).orElseThrow().verified).isEqualTo(Verified.INVALID);
         assertThat(contactRepo.findByEmail("ceo@" + domain).orElseThrow().verified).isEqualTo(Verified.VALID);
     }
+
+    @Test
+    void looksWiderForALeadThatAlreadyHasAnEmailAndKeepsEveryAddress() {
+        String t = tag();
+        String domain = "more" + t + ".com";
+        BrandLead lead = new BrandLead();
+        lead.name = "More " + t;
+        lead.nameKey = Brand.key(lead.name);
+        lead.website = "https://" + domain;
+        lead.contactEmail = "hello@" + domain; // from the website already
+        lead.searchQuery = "test";
+        lead.status = BrandLead.Status.NEW;
+        lead.createdAt = OffsetDateTime.now();
+        lead = leadRepo.save(lead);
+        when(hunter.domainSearch(anyString(), eq(domain), eq(HunterApi.PARTNERSHIP_DEPARTMENTS), anyInt()))
+                .thenReturn(new HunterApi.DomainResult("More", false, null, 1, List.of(
+                        person("priya@" + domain, "Priya", "Shah", "Influencer Marketing Manager", "valid"))));
+
+        ContactFinder.LeadResult first = finder.findForLead(lead.id, false);
+        assertThat(first.email()).isEqualTo("hello@" + domain); // what she had stays until she picks another
+        assertThat(first.notes().get(0)).contains("1 new");
+
+        // Looking again: shared inboxes, then every team; the person already found isn't counted twice
+        when(hunter.roleInboxes(anyString(), eq(domain), anyInt()))
+                .thenReturn(new HunterApi.DomainResult("More", false, null, 1, List.of(
+                        person("collabs@" + domain, null, null, null, "valid"))));
+        when(hunter.domainSearch(anyString(), eq(domain), isNull(), anyInt()))
+                .thenReturn(new HunterApi.DomainResult("More", false, null, 2, List.of(
+                        person("priya@" + domain, "Priya", "Shah", "Influencer Marketing Manager", "valid"),
+                        person("dev@" + domain, "Dev", "Rao", "Engineer", null))));
+        assertThat(finder.findForLead(lead.id, false).askFirst()).contains("wider");
+        ContactFinder.LeadResult again = finder.findForLead(lead.id, true);
+        assertThat(again.hunterCredits()).isEqualTo(2);
+        assertThat(again.notes().get(0)).contains("2 new");
+        BrandLead saved = leadRepo.findById(lead.id).orElseThrow();
+        assertThat(ContactFinder.readPeople(saved.finderContacts)).extracting(ContactFinder.Person::email)
+                .containsExactlyInAnyOrder("collabs@" + domain, "priya@" + domain, "dev@" + domain)
+                .last().isEqualTo("dev@" + domain); // partnerships people first
+
+        // She picks another address; the one it replaces is kept for the brand's contacts
+        finder.useForLead(lead.id, "priya@" + domain);
+        saved = leadRepo.findById(lead.id).orElseThrow();
+        assertThat(saved.contactEmail).isEqualTo("priya@" + domain);
+        assertThat(ContactFinder.readPeople(saved.finderContacts)).extracting(ContactFinder.Person::email).contains("hello@" + domain);
+        Long id = lead.id;
+        assertThatThrownBy(() -> finder.useForLead(id, "nobody@" + domain)).hasMessageContaining("isn't one found");
+    }
 }

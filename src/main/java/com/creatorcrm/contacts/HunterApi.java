@@ -72,6 +72,15 @@ public class HunterApi {
         return parseDomain(ok(call(key, "domain-search", q)));
     }
 
+    /** Up to {@code limit} shared inboxes at the domain (partnerships@, press@, collabs@): Hunter's "generic" type. */
+    public DomainResult roleInboxes(String key, String domain, int limit) {
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("domain", domain);
+        q.put("limit", String.valueOf(limit));
+        q.put("type", "generic");
+        return parseDomain(ok(call(key, "domain-search", q)));
+    }
+
     public Verification verify(String key, String email) {
         Reply r = call(key, "email-verifier", Map.of("email", email));
         if (r.status() == 202) return new Verification("unknown", null, null, true); // still checking; ask again later

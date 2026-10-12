@@ -273,6 +273,8 @@ public class BrandDiscoveryService {
     public BrandLead updateContact(Long id, String email, String instagram) {
         BrandLead lead = leads.findById(id).orElseThrow();
         if (email != null) {
+            String typed = email.isBlank() ? null : email(email);
+            if (typed == null || !typed.equals(lead.contactEmail)) com.creatorcrm.contacts.ContactFinder.keepCurrent(lead); // the old address isn't lost
             lead.contactEmail = email.isBlank() ? null : email(email);
             if (!email.isBlank() && lead.contactEmail == null) throw new IllegalArgumentException("That email address doesn't look right");
             lead.contactSourceUrl = null; // entered by the creator

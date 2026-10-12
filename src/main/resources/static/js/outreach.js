@@ -236,6 +236,25 @@ function leadItem(root, l, canLookUp) {
   const contact = l.contactEmail
     ? el("span", {}, icon("mail"), " " + l.contactEmail, safeUrl(l.contactSourceUrl) ? el("a", { href: l.contactSourceUrl, target: "_blank", rel: "noopener noreferrer", class: "small" }, " (source)") : null)
     : el("span", { class: "muted" }, "No published email found");
+  // Everyone else the website or Hunter turned up for this brand: any of them can become the pitch's address,
+  // and all of them join the brand's contacts when she pitches.
+  let others = [];
+  try { others = JSON.parse(l.finderContacts || "[]"); } catch (e) { /* unreadable: show none */ }
+  const current = (l.contactEmail || "").toLowerCase();
+  others = others.filter((p) => p.email && p.email.toLowerCase() !== current);
+  const sourceName = { HUNTER: "Hunter", APOLLO: "Apollo", WEBSITE: "Website", LEAD: "Earlier" };
+  const otherList = others.length ? el("details", { class: "small fold lead-others" },
+    el("summary", {}, others.length + " more email" + (others.length === 1 ? "" : "s") + " found"),
+    others.map((p) => el("div", { class: "row" },
+      el("span", {}, p.email),
+      [p.name, p.title].filter(Boolean).length ? el("span", { class: "muted" }, [p.name, p.title].filter(Boolean).join(", ")) : null,
+      sourceName[p.source] ? el("span", { class: "badge" }, sourceName[p.source]) : null,
+      p.verified === "INVALID" ? el("span", { class: "muted" }, "doesn't exist")
+        : el("span", {}, p.verified === "RISKY" ? el("span", { class: "muted" }, "may not get through ") : null,
+          el("button", { class: "small", onclick: action(async () => {
+            await api("POST", "/api/finders/lead/" + l.id + "/use", { email: p.email });
+            renderOutreach(root);
+          }, "Pitch goes to " + p.email + " now") }, "Use this"))))) : null;
   return el("div", { class: "item" },
     el("div", { class: "body" },
       el("div", { class: "row" }, el("strong", {}, l.name),
@@ -249,6 +268,7 @@ function leadItem(root, l, canLookUp) {
         l.igBio, l.igPartners ? "Works with " + l.igPartners.split(",").map((h) => "@" + h).join(", ") : null].filter(Boolean).join(" · ")) : null,
       l.pitchAngle ? el("div", { class: "detail" }, icon("bulb"), " " + l.pitchAngle) : null,
       el("div", { class: "small" }, contact),
+      otherList,
       contactEdit),
     el("div", { class: "actions" },
       el("button", { class: "small primary", onclick: action(async () => {
@@ -256,14 +276,14 @@ function leadItem(root, l, canLookUp) {
         showDraft(made);
       }, "Pitch drafted. Review it in Drafts") }, "Draft pitch"),
       el("button", { class: "small", onclick: () => contactEdit.classList.toggle("hidden") }, "Edit contact"),
-      !l.contactEmail && safeUrl(l.website) ? el("button", { class: "small", title: "Reads the brand's contact, partnerships and press pages for a published email. Free, no Claude.",
+      safeUrl(l.website) ? el("button", { class: "small", title: "Reads the brand's contact, partnerships and press pages for published emails. Free, no Claude.",
         onclick: action(async (e) => {
           e.currentTarget.textContent = "Reading website…";
           const r = await api("POST", "/api/leads/" + l.id + "/website");
           toast(r.message);
           renderOutreach(root);
-        }) }, "Find contacts on website") : null,
-      !l.contactEmail ? el("button", { class: "small", title: "Ask Hunter (and Apollo, if added) who works there and use the best person. Uses 1 Hunter credit. No Claude.",
+        }) }, l.contactEmail ? "More from website" : "Find contacts on website") : null,
+      el("button", { class: "small", title: "Ask Hunter (and Apollo, if added) who works there: marketing, PR and partnerships people first. Uses 1 Hunter credit. No Claude.",
         onclick: action(async () => {
           const find = async (again) => {
             const r = await api("POST", "/api/finders/lead/" + l.id + "/find" + (again ? "?again=true" : ""));
@@ -274,7 +294,7 @@ function leadItem(root, l, canLookUp) {
           if (!r) return;
           toast(r.notes.join(" "), !r.email);
           renderOutreach(root);
-        }) }, "Find email with Hunter") : null,
+        }) }, l.contactEmail ? "More from Hunter" : "Find email with Hunter"),
       canLookUp && l.instagram ? el("button", { class: "small", onclick: action(async () => {
         await api("POST", "/api/leads/" + l.id + "/instagram"); renderOutreach(root);
       }, "Instagram details updated") }, l.igCheckedAt ? "Refresh Instagram" : "Check Instagram") : null,

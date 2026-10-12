@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.63.0",
+    "title": "Find more emails for a brand you're pitching",
+    "features": [
+      {
+        "id": "lead-more-emails",
+        "title": "More emails for brands you're pitching",
+        "body": "Brands on the Pitching page that already have an email now have More from website and More from Hunter. The website button reads the brand's contact and press pages again; Hunter looks for marketing, PR and partnerships people first, and when you look again it searches wider: shared inboxes like partnerships@ and press@, and people in every team. Every address found is kept under the brand (tap \"more emails found\"), with Use this to send the pitch to a different person. When you pitch, all of them join the brand's contacts, with no duplicates.",
+        "tryIt": "#outreach",
+        "video": "lead-more-emails.webm"
+      }
+    ]
+  },
+  {
     "version": "1.62.0",
     "title": "Bring in Instagram DMs from your Instagram download",
     "features": [
