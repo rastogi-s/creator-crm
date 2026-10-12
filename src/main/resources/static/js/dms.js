@@ -89,6 +89,7 @@ async function renderDms(root) {
     clear(list);
     if (!rows.length) {
       list.appendChild(dmStatusCard(ig, root));
+      list.appendChild(dmExportCard(root, true));
       return;
     }
     const shown = sortRows(rows.filter((r) => (groups[f.show] || groups[""])(r)
@@ -110,6 +111,7 @@ async function renderDms(root) {
           el("div", { class: "detail small" }, [fmtDateTime(r.lastAt), r.brand && r.brand !== r.handle ? r.brand : null,
             r.status].filter(Boolean).join(" · "))),
         el("div", { class: "actions", onclick: (e) => e.stopPropagation() }, ...dmTagButtons(r, () => renderDms(root))))))));
+    list.appendChild(dmExportCard(root, false));
   }
   draw();
 }
@@ -142,9 +144,9 @@ function dmStatusCard(ig, root) {
       + (f.conversations ? ", " + f.activeSince + " with messages since " + fmtDate(f.since)
         + (f.newestConversation ? " (newest " + fmtDateTime(f.newestConversation) + ")" : "") : "") + "."));
     if (!f.conversations) {
-      lines.push(el("p", { class: "small" }, "When Instagram sends back no conversations at all, message access is usually off. On her phone: "
-        + "Instagram, Settings, Messages and story replies, Message controls (or Connected tools), turn on Allow access to messages. "
-        + "Then press Check for new messages below."));
+      lines.push(el("p", { class: "small" }, "Instagram only shares chats with people who have a role on your Meta app until Meta approves "
+        + "the app (App Review), so brands' DMs don't come through yet. Bring them in from your Instagram download below. "
+        + "Also check Allow access to messages is on: Instagram, Settings, Messages and story replies, Connected tools."));
     }
   } else if (ig.lastCheck) {
     lines.push(el("p", { class: "small muted" }, "Last checked " + fmtDateTime(ig.lastCheck) + ". Press Check for new messages to see what Instagram sends back."));
@@ -164,6 +166,48 @@ function dmStatusCard(ig, root) {
     }) }, "Bring in older DMs")));
   c.append(...lines);
   return c;
+}
+
+// Instagram only lets an app read DMs from brands once Meta approves it (App Review), so until then her DMs come in
+// from her own Instagram download: Messages, JSON. Only the chat files are sent, not photos or videos.
+const DM_EXPORT_FILE = /(^|\/)((inbox|message_requests)\/[^/]+\/message_\d+\.json|personal_information\.json)$/;
+
+function dmExportCard(root, open) {
+  const days = el("select", { "aria-label": "How far back" },
+    [["30", "Last 30 days"], ["90", "Last 90 days"], ["365", "Last year"]].map(([v, l]) => el("option", { value: v, selected: v === "90" }, l)));
+  const out = el("div", {});
+  const picker = el("input", { type: "file", webkitdirectory: "", directory: "", multiple: "", class: "hidden",
+    onchange: action(async (e) => {
+      const files = [...e.target.files].filter((f) => DM_EXPORT_FILE.test(f.webkitRelativePath || f.name));
+      e.target.value = "";
+      if (!files.length) {
+        toast("No Instagram messages in that folder. Pick the folder you extracted from the download.", true);
+        return;
+      }
+      clear(out).appendChild(el("p", { class: "small muted" }, "Reading " + files.length + " files…"));
+      const sent = await Promise.all(files.map(async (f) => ({ path: f.webkitRelativePath || f.name, text: await f.text() })));
+      const r = await api("POST", "/api/dms/import-export", { files: sent, days: Number(days.value) });
+      clear(out).appendChild(el("p", { class: "small" }, r.newMessages
+        ? "Brought in " + r.newMessages + " new messages from " + r.chats + (r.chats === 1 ? " chat" : " chats")
+          + ". Claude is reading them now; leads and reply to-dos show up as it goes."
+        : "Nothing new: those " + r.messages + " messages are already here."));
+      toast("Instagram DMs imported");
+      setTimeout(() => renderDms(root), 1500);
+    }) });
+  return el("details", { class: "card", open: open || null },
+    el("summary", {}, el("strong", {}, "Bring in DMs from your Instagram download")),
+    el("p", { class: "small" }, "Instagram only shares brands' DMs with an app after Meta reviews it. Until then, "
+      + "download your messages from Instagram and bring them in here."),
+    el("ol", { class: "small" },
+      el("li", {}, "In Instagram: Settings, Accounts Center, Your information and permissions, Download your information."),
+      el("li", {}, "Pick Some of your information, tick Messages, then Download to device. Set Format to JSON and the date range to Last 3 months, and create the files."),
+      el("li", {}, "When Instagram emails you, download the zip on this laptop. Right-click it and choose Extract All."),
+      el("li", {}, "Press Choose folder below and pick the extracted folder.")),
+    el("div", { class: "row" }, days,
+      el("button", { class: "small primary", onclick: () => picker.click() }, "Choose folder"), picker),
+    el("p", { class: "small muted" }, "Only the message files are read, not photos or videos. Bring in a newer download any time; nothing comes in twice. "
+      + "Replies to these chats go from the Instagram app."),
+    out);
 }
 
 // One conversation, with the lead switch and a link to its deal.

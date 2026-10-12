@@ -1,6 +1,7 @@
 package com.creatorcrm.web;
 
 import com.creatorcrm.channels.instagram.InstagramConnector;
+import com.creatorcrm.dms.DmExportImport;
 import com.creatorcrm.dms.DmInbox;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.ingest.IngestionService;
@@ -31,13 +32,17 @@ public class DmsController {
 
     public record ImportRequest(int days) {}
 
+    public record ExportRequest(List<DmExportImport.ExportFile> files, Integer days) {}
+
     private final DmInbox inbox;
     private final InstagramConnector instagram;
     private final IngestionService ingestion;
     private final TaskExecutor executor;
+    private final DmExportImport exportImport;
 
     public DmsController(DmInbox inbox, InstagramConnector instagram, IngestionService ingestion,
-                         @Qualifier("applicationTaskExecutor") TaskExecutor executor) {
+                         @Qualifier("applicationTaskExecutor") TaskExecutor executor, DmExportImport exportImport) {
+        this.exportImport = exportImport;
         this.inbox = inbox;
         this.instagram = instagram;
         this.ingestion = ingestion;
@@ -58,6 +63,12 @@ public class DmsController {
         ingestion.startImport(Platform.INSTAGRAM, r.days());
         executor.execute(ingestion::syncAll);
         return status();
+    }
+
+    /** DMs from her Instagram download (Messages, JSON): the chat files from the folder she picked. */
+    @PostMapping("/import-export")
+    public DmExportImport.Result importExport(@RequestBody ExportRequest r) {
+        return exportImport.importFiles(r.files(), r.days() == null ? 90 : r.days());
     }
 
     @GetMapping
