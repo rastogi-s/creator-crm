@@ -376,6 +376,8 @@ button.link:hover { background: none; color: var(--text); }
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b665e' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m16 16 4 4'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: .7rem center; background-size: 1rem;
   }
+  /* Stay inside the bar while typing too (the laptop-size rule below widens it to 17rem, past the screen edge). */
+  .topbar .global-search input:focus, .topbar .global-search input:not(:placeholder-shown) { width: 100%; }
   #sync-btn { display: none; }
   /* iPhone Safari zooms in on any box with text under 16px when she taps it, and stays zoomed, so the whole page
      slides around under her finger. 16px boxes never trigger that zoom. */
@@ -743,3 +745,20 @@ li.item.clickable:hover { background: var(--surface-2); }
 #content-ideas .caption { white-space: pre-wrap; background: var(--surface-2); border-radius: 8px; padding: .4rem .6rem; margin: .3rem 0; overflow-wrap: anywhere; }
 #content-ideas textarea { width: 100%; min-height: 6rem; }
 #content-ideas .row input { flex: 1; min-width: 12rem; }
+
+/* ---------- clear (×) button on search boxes ---------- */
+/* Every search box gets a round × that empties it in one tap; it hides while the box is empty. */
+.search-wrap { position: relative; display: block; }
+.search-wrap > input { padding-right: 2.2rem; }
+.topbar .global-search.search-wrap > input { padding-right: 2.2rem; }
+.search-wrap > input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+.search-clear {
+  position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
+  width: 1.6rem; height: 1.6rem; padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--surface-2); color: var(--muted); font: inherit; font-size: 1.1rem; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; z-index: 1;
+}
+.search-clear:hover { color: var(--text); background: var(--border); }
+.search-wrap > input:placeholder-shown ~ .search-clear { display: none; }
+/* Deals: the suggestion list lines up under the box rather than the right edge of the header. */
+.search-results.suggest { left: 0; right: auto; width: max(100%, min(420px, 92vw)); }

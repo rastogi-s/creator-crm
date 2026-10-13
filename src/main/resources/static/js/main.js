@@ -93,6 +93,7 @@ document.getElementById("sync-btn").addEventListener("click", syncNow);
   const box = document.getElementById("global-results");
   const groups = [["DEAL", "Deals"], ["MESSAGE", "Emails and DMs"], ["INVOICE", "Invoices"]];
   let hits = [], active = -1, timer, seq = 0;
+  input.after(clearButton(input));
 
   function close() { box.classList.add("hidden"); input.setAttribute("aria-expanded", "false"); active = -1; }
   function open(hit) {
@@ -120,7 +121,7 @@ document.getElementById("sync-btn").addEventListener("click", syncNow);
   }
   async function run() {
     const q = input.value.trim();
-    if (q.length < 2) { hits = []; close(); return; }
+    if (q.length < 2) { seq++; hits = []; close(); return; }
     const mine = ++seq;
     try {
       const found = await api("GET", "/api/search?q=" + encodeURIComponent(q));
@@ -129,7 +130,7 @@ document.getElementById("sync-btn").addEventListener("click", syncNow);
       hits = groups.flatMap(([kind]) => found.filter((h) => h.kind === kind)); active = -1; paint();
     } catch (err) { toast(err.message, true); }
   }
-  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 250); });
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, input.value ? 250 : 0); });
   input.addEventListener("focus", () => { if (hits.length && input.value.trim().length >= 2) paint(); });
   input.addEventListener("blur", () => setTimeout(close, 150));
   input.addEventListener("keydown", (e) => {
