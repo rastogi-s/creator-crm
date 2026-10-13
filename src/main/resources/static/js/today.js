@@ -64,14 +64,15 @@ function closedForYouCard(items) {
   const c = el("details", { class: "card more-items" },
     el("summary", {}, el("h3", {}, sectionTitle("check", "green", "Closed for you", items.length))),
     el("p", { class: "small muted" }, "The app closes a to-do when the work is done or no longer needed: you replied, "
-      + "the brand moved the deal on, an invoice was paid, or the date passed. Reopen any that still need you."),
+      + "the brand moved the deal on, an invoice was paid, the date passed, or an email bounced. Reopen any that still need you."),
     el("ul", { class: "list" }, items.map((it) => el("li", { class: "item closed-item" },
       el("div", { class: "body" },
         el("div", { class: "title" }, it.title),
         el("div", { class: "detail" }, it.reason + " · " + fmtDateTime(it.at))),
       el("div", { class: "actions" },
         el("button", { class: "small", title: "This still needs you: put it back on your list", onclick: action(async () => {
-          await api("POST", (it.kind === "DEADLINE" ? "/api/deadlines/" : "/api/tasks/") + it.refId + "/reopen"); route();
+          const base = it.kind === "DEADLINE" ? "/api/deadlines/" : it.kind === "FOLLOW_UP" ? "/api/followups/" : "/api/tasks/";
+          await api("POST", base + it.refId + "/reopen"); route();
         }, "Back on your list") }, "Reopen"),
         it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null)))));
   c.id = "closed-for-you";

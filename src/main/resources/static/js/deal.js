@@ -378,7 +378,8 @@ async function openDeal(id, focusMessageId) {
   const fuItems = d.followUps.map((f) => el("li", { class: "item" }, el("div", { class: "body" },
     el("div", { class: "title" }, "Follow-up #" + f.number),
     el("div", { class: "detail" }, f.status === "DONE" ? "Sent " + fmtDate(f.completedDate)
-      : f.status === "SCHEDULED" ? "Due " + fmtDate(f.scheduledDate) : "Cancelled (brand replied or stopped)"))));
+      : f.status === "SCHEDULED" ? "Due " + fmtDate(f.scheduledDate)
+      : f.stoppedReason ? "Stopped: " + f.stoppedReason : "Cancelled (brand replied or stopped)"))));
   drawer.appendChild(card("Follow-ups",
     fuItems.length ? el("ul", { class: "list" }, fuItems) : emptyLine("No follow-ups yet."),
     el("div", { class: "row" },

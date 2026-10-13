@@ -4,8 +4,10 @@ import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.channels.NormalizedMessage;
 import com.creatorcrm.channels.PartialFetchException;
 import com.creatorcrm.config.CrmProperties;
+import com.creatorcrm.contacts.Bounces;
 import com.creatorcrm.domain.AppState;
 import com.creatorcrm.domain.Conversation;
+import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.llm.ClassificationInput;
@@ -16,6 +18,7 @@ import com.creatorcrm.llm.OutOfCreditsException;
 import com.creatorcrm.repo.AppStateRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.MessageRepo;
+import com.creatorcrm.workflow.BounceWatcher;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -52,6 +55,7 @@ public class IngestionService {
     private final LlmClient llm;
     private final TaskExecutor executor;
     private final CrmProperties props;
+    private final BounceWatcher bounces;
     private final ReentrantLock syncLock = new ReentrantLock();
     private final ReentrantLock processLock = new ReentrantLock();
     /** Bumped whenever stored data changes, so open pages know to refresh. */
@@ -59,7 +63,8 @@ public class IngestionService {
 
     public IngestionService(List<ChannelConnector> connectors, ConversationRepo conversations, MessageRepo messages,
                             AppStateRepo state, PreFilter preFilter, MessageProcessor processor, LlmClient llm,
-                            @Qualifier("applicationTaskExecutor") TaskExecutor executor, CrmProperties props) {
+                            @Qualifier("applicationTaskExecutor") TaskExecutor executor, CrmProperties props,
+                            BounceWatcher bounces) {
         this.connectors = connectors;
         this.conversations = conversations;
         this.messages = messages;
@@ -69,6 +74,7 @@ public class IngestionService {
         this.llm = llm;
         this.executor = executor;
         this.props = props;
+        this.bounces = bounces;
     }
 
     public record SyncReport(Map<String, String> channels, int stored, int processed) {}
@@ -195,6 +201,11 @@ public class IngestionService {
                     result.put(c.platform().name(), "error: " + e.getMessage());
                 }
             }
+            try {
+                bounces.scan(); // before analysis: a bounce stops its follow-ups without Claude
+            } catch (RuntimeException e) {
+                log.warn("Could not check for bounced emails: {}", e.getMessage());
+            }
             return new SyncReport(result, stored, processPending());
         } finally {
             syncLock.unlock();
@@ -217,7 +228,9 @@ public class IngestionService {
                 return c;
             });
             if (conv.subject == null || conv.subject.isBlank()) conv.subject = nm.subject();
-            if (nm.counterparty() != null && !nm.counterparty().isBlank()) conv.counterparty = nm.counterparty();
+            boolean bounce = nm.direction() == Direction.INBOUND && Bounces.isBounce(nm.sender(), nm.subject());
+            // A bounce notice threads with her email, but the mail system isn't who she's talking to.
+            if (!bounce && nm.counterparty() != null && !nm.counterparty().isBlank()) conv.counterparty = nm.counterparty();
             if (conv.lastMessageAt == null || nm.sentAt().isAfter(conv.lastMessageAt)) conv.lastMessageAt = nm.sentAt();
             conv = conversations.save(conv);
 

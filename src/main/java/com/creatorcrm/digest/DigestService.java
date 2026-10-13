@@ -239,6 +239,12 @@ public class DigestService {
             out.add(new ClosedForYou("DEADLINE", d.id, brand + " — " + pretty(d.type.name()) + " " + InvoicePdf.date(d.dueDate),
                     d.doneReason, d.doneAt, d.opportunityId, brand));
         }
+        for (FollowUp f : followUps.stoppedSince(since)) {
+            Opportunity o = opps.get(f.opportunityId);
+            String brand = o == null ? "" : brandNames.getOrDefault(o.brandId, "");
+            out.add(new ClosedForYou("FOLLOW_UP", f.id, brand + " — Follow-up #" + f.number, f.stoppedReason, f.stoppedAt,
+                    f.opportunityId, brand));
+        }
         out.sort(Comparator.comparing(ClosedForYou::at).reversed());
         return out.size() > 30 ? out.subList(0, 30) : out;
     }

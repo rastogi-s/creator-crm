@@ -29,6 +29,7 @@ import com.creatorcrm.repo.DraftRepo;
 import com.creatorcrm.repo.FollowUpRepo;
 import com.creatorcrm.security.SetupService;
 import com.creatorcrm.settings.SettingsService;
+import com.creatorcrm.workflow.BounceWatcher;
 import com.creatorcrm.workflow.FollowUpEngine;
 import com.creatorcrm.workflow.StaleWork;
 import java.time.LocalDate;
@@ -66,6 +67,7 @@ public class ScheduledJobs {
     private final BrandNewsService brandNews;
     private final DmReminders dmReminders;
     private final StaleWork staleWork;
+    private final BounceWatcher bounces;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
@@ -75,8 +77,9 @@ public class ScheduledJobs {
                          CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts,
                          ContactFinder contactFinder, CampaignService campaigns, CampaignSender campaignSender,
                          BrandNewsService brandNews,
-                         DmReminders dmReminders, StaleWork staleWork) {
+                         DmReminders dmReminders, StaleWork staleWork, BounceWatcher bounces) {
         this.staleWork = staleWork;
+        this.bounces = bounces;
         this.brandNews = brandNews;
         this.dmReminders = dmReminders;
         this.campaigns = campaigns;
@@ -191,6 +194,7 @@ public class ScheduledJobs {
         int drafted = 0;
         for (FollowUp f : followUps.dueOnOrBefore(settings.today())) {
             try {
+                if (bounces.stopIfUnreachable(f)) continue; // bounced, opted out or doesn't exist: nobody to chase
                 // Campaign pitches are chased with their template's follow-up text, no Claude needed
                 if (campaigns.draftFollowUp(f)) drafted++;
                 else if (llm.isConfigured() && drafts.draftForFollowUp(f).isPresent()) drafted++;

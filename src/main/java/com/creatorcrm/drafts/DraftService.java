@@ -2,6 +2,7 @@ package com.creatorcrm.drafts;
 
 import com.creatorcrm.channels.ChannelConnector;
 import com.creatorcrm.contacts.Emails;
+import com.creatorcrm.contacts.Bounces;
 import com.creatorcrm.contacts.Suppressions;
 import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Attachment;
@@ -170,6 +171,39 @@ public class DraftService {
     }
 
     /**
+     * Emails to {@code bounced} bounced, and {@code address} is the brand's next best contact: the pitch again, to
+     * that address, in the deal's email thread when there is one (else as a new email). Empty when that address is
+     * on her do-not-email list.
+     */
+    @Transactional
+    public Optional<Draft> draftAfterBounce(Long opportunityId, String bounced, String address, Long taskId) {
+        Opportunity o = opportunities.findById(opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
+        if (suppressions.blocked(address)) return Optional.empty();
+        Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
+        boolean inThread = conv != null && conv.platform == Platform.EMAIL;
+        if (conv != null && !inThread) return Optional.empty();
+        String note = "Her earlier email to " + bounced + " bounced, so it never reached them. This email goes to " + address
+                + ", who hasn't seen the earlier emails: make the pitch again in full, as a first email to them. "
+                + "Don't mention the bounce or write as a reply.";
+        return Optional.of(create(o.id, DraftType.PITCH, note, taskId, null, null, null, null, null,
+                inThread ? null : address, null, inThread ? address : null));
+    }
+
+    /** Who the deal's next email would go to (its email thread, else the brand's contact), when it goes by email. */
+    public Optional<String> nextEmailTo(Opportunity o) {
+        Brand b = brands.findById(o.brandId).orElse(null);
+        if (b == null) return Optional.empty();
+        Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
+        Draft d = new Draft();
+        try {
+            route(d, b, conv, conv == null ? List.of() : messages.findByConversationIdOrderBySentAtAsc(conv.id));
+        } catch (IllegalStateException e) {
+            return Optional.empty();
+        }
+        return d.channel == Platform.EMAIL && d.toAddress != null && !d.toAddress.isBlank() ? Optional.of(d.toAddress) : Optional.empty();
+    }
+
+    /**
      * An email about an invoice ({@link DraftType#INVOICE} or {@link DraftType#PAYMENT_REMINDER}): the PDF goes out
      * attached, to {@code invoice.billToEmail} when set. If Claude can't write the note (no API key, outage),
      * {@code fallback} is used so invoicing never depends on AI. Replaces a pending draft of the same kind.
@@ -331,7 +365,7 @@ public class DraftService {
         if (conv != null) {
             d.channel = conv.platform;
             if (conv.platform == Platform.EMAIL) {
-                Message lastIn = thread.stream().filter(m -> m.direction == Direction.INBOUND)
+                Message lastIn = thread.stream().filter(m -> m.direction == Direction.INBOUND && !Bounces.isBounce(m.sender, m.subject))
                         .reduce((a, x) -> x).orElse(null);
                 Message last = thread.isEmpty() ? null : thread.get(thread.size() - 1);
                 d.toAddress = lastIn == null ? conv.counterparty
