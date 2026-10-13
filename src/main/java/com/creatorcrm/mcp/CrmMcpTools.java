@@ -24,6 +24,7 @@ import com.creatorcrm.llm.SearchDepth;
 import com.creatorcrm.outreach.BrandDiscoveryService;
 import com.creatorcrm.calendar.Exclusivity;
 import com.creatorcrm.contracts.ContractService;
+import com.creatorcrm.ideas.ContentIdeasService;
 import com.creatorcrm.results.CampaignResults;
 import com.creatorcrm.rates.RateAdvisor;
 import com.creatorcrm.rebook.WinBack;
@@ -72,6 +73,7 @@ public class CrmMcpTools {
     private final LeadScoring scoring;
     private final RateAdvisor rates;
     private final ContractService contracts;
+    private final ContentIdeasService ideas;
     private final Exclusivity exclusivity;
     private final CampaignResults results;
     private final BrandDiscoveryService discovery;
@@ -82,7 +84,8 @@ public class CrmMcpTools {
                        OutreachService outreach, IngestionService ingestion, SettingsService settings,
                        CrmProperties props, InvoiceService invoices, WinBack winBack, LeadScoring scoring,
                        BrandDiscoveryService discovery, InstagramStatsService instagram, RateAdvisor rates,
-                       ContractService contracts, Exclusivity exclusivity, CampaignResults results) {
+                       ContractService contracts, Exclusivity exclusivity, CampaignResults results, ContentIdeasService ideas) {
+        this.ideas = ideas;
         this.results = results;
         this.contracts = contracts;
         this.exclusivity = exclusivity;
@@ -189,6 +192,24 @@ public class CrmMcpTools {
             c.flags().forEach(f -> sb.append("- ").append(f.level()).append(": ").append(f.text()).append('\n'));
         }
         return sb.toString().strip();
+    }
+
+    @McpTool(name = "get_content_ideas", description = "The newest reel and video ideas for a deal, written from the brand's content guidelines and the creator's profile and past posts: the brief's must-dos and don'ts, then each idea's hook, shots and caption.")
+    public String contentIdeas(@McpToolParam(description = "Opportunity id") Long id) {
+        return ideas.latest(id).map(v -> {
+            StringBuilder sb = new StringBuilder();
+            if (v.error() != null) sb.append(v.error()).append('\n');
+            if (v.briefSummary() != null) sb.append(v.briefSummary()).append('\n');
+            v.mustInclude().forEach(x -> sb.append("Must include: ").append(x).append('\n'));
+            v.avoid().forEach(x -> sb.append("Avoid: ").append(x).append('\n'));
+            for (var i : v.ideas()) {
+                sb.append("\n").append(i.title()).append(" (").append(i.format()).append(")\nHook: ").append(i.hook())
+                        .append('\n').append(i.concept()).append('\n');
+                if (i.shots() != null) i.shots().forEach(x -> sb.append("- ").append(x).append('\n'));
+                sb.append("Caption: ").append(i.caption()).append('\n');
+            }
+            return sb.toString().strip();
+        }).orElse("No content ideas on this deal yet.");
     }
 
     @McpTool(name = "get_campaign_results", description = "How a deal's post did: its link, posting date, and reach, views, likes, comments, saves and shares (from Instagram Insights a week after posting, or typed in by the creator), plus whether a results recap was drafted.")

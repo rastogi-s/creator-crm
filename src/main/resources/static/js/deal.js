@@ -88,6 +88,57 @@ function brandNewsBox(brandId, brand) {
   return box;
 }
 
+// Reel and video ideas for a deal, written from the brand's guidelines, her profile and how her posts did.
+function ideasCard(id, brand, v, refresh) {
+  const box = el("div", { class: "card", id: "content-ideas" });
+  const note = el("input", { maxlength: "1000", "aria-label": "What to change",
+    placeholder: "Anything to change? e.g. funnier, no talking to camera, film it outdoors" });
+  const paste = el("textarea", { maxlength: "60000", "aria-label": "The brand's brief",
+    placeholder: "Paste the brief's text, e.g. copied from the Google Doc or Canva deck" });
+  const go = el("button", { class: "small primary", onclick: action(async () => {
+    go.disabled = true;
+    go.textContent = "Writing ideas…";
+    try {
+      await api("POST", "/api/opportunities/" + id + "/ideas", { note: note.value, guidelines: paste.value });
+      refresh();
+    } finally {
+      go.disabled = false;
+    }
+  }, "New ideas ready") }, v ? "Refresh ideas" : "Get ideas");
+  box.append(el("div", { class: "row" }, el("h2", {}, "Content ideas"), el("div", { class: "spacer" }),
+    v && v.createdAt ? el("span", { class: "small muted" }, "Written " + fmtDateTime(v.createdAt)) : null));
+  if (!v) {
+    box.append(el("p", { class: "small muted" }, "When " + brand + " sends the brief (in the email, or as a PDF, Word or PowerPoint file), "
+      + "Claude writes reel and video ideas here by itself. You can also get ideas now from the deal details."));
+  } else if (v.status === "FAILED") {
+    box.append(el("p", { class: "small warn" }, v.error || "Claude couldn't write the ideas. Try again."));
+  } else if (v.error) {
+    box.append(el("p", { class: "small warn" }, v.error));
+  }
+  if (v && v.briefSummary) box.append(el("p", {}, v.briefSummary));
+  const checks = (title, items, kind, mark) => items.length ? [el("h3", {}, title),
+    el("ul", { class: "checks " + kind }, items.map((x) => el("li", {}, el("span", { class: "mark", "aria-hidden": "true" }, mark), el("span", {}, x))))] : null;
+  if (v) box.append(...[checks("Must include", v.mustInclude, "must", "✓"), checks("Avoid", v.avoid, "avoid", "✕")].flat().filter(Boolean));
+  if (v && v.ideas.length) {
+    box.append(el("h3", {}, v.ideas.length + " ideas"));
+    v.ideas.forEach((idea, i) => box.append(el("details", Object.assign({ class: "idea" }, i === 0 ? { open: true } : {}),
+      el("summary", {}, el("span", {}, (i + 1) + ". " + idea.title), idea.format ? el("span", { class: "badge" }, idea.format) : null),
+      idea.hook ? el("div", { class: "hook" }, el("strong", {}, "Hook: "), idea.hook) : null,
+      idea.concept ? el("p", {}, idea.concept) : null,
+      idea.shots && idea.shots.length ? el("ol", { class: "shots" }, idea.shots.map((s) => el("li", {}, s))) : null,
+      idea.caption ? [el("div", { class: "row" }, el("strong", { class: "small" }, "Caption"), el("div", { class: "spacer" }),
+        el("button", { class: "small", onclick: action(async () => { await navigator.clipboard.writeText(idea.caption); }, "Caption copied") }, "Copy")),
+        el("div", { class: "caption" }, idea.caption)] : null,
+      idea.whyItFits ? el("p", { class: "small muted" }, "Why it fits you: " + idea.whyItFits) : null)));
+  }
+  const pasteOpen = v ? v.source === "DEAL" || (v.error || "").includes("Paste its text") : false;
+  box.append(el("div", { class: "row" }, note, go),
+    el("details", pasteOpen ? { open: true } : {}, el("summary", { class: "small" }, "Brief behind a link? Paste its text"), paste),
+    el("p", { class: "small muted" }, "Based on " + (v && v.fileNames ? brand + "'s brief (" + v.fileNames + ")" : v && v.hasGuidelines ? brand + "'s brief" : "the deal")
+      + ", your About you, your recent Instagram posts and how your past brand posts did. Each refresh costs a few cents of Claude."));
+  return box;
+}
+
 function closeDrawer() {
   document.getElementById("drawer").classList.add("hidden");
   document.getElementById("drawer-backdrop").classList.add("hidden");
@@ -276,6 +327,13 @@ async function openDeal(id, focusMessageId) {
     drawer.appendChild(box);
   }
 
+  // Content ideas: written by themselves when the brand sends its brief, or on demand
+  const ideas = await api("GET", "/api/opportunities/" + id + "/ideas");
+  if (ideas || ["PRODUCT_PENDING", "PRODUCT_RECEIVED", "CONTENT_TO_CREATE", "AWAITING_APPROVAL"].includes(o.status)
+      || ["PRODUCT", "CREATE_CONTENT"].includes(o.stage)) {
+    drawer.appendChild(ideasCard(id, d.summary.brand, ideas, refresh));
+  }
+
   // Invoices
   const invoiceAsked = d.tasks.some((t) => t.status === "OPEN" && t.type === "SEND_INVOICE");
   if (o.compensation !== "GIFTED" || invoices.length) {
@@ -410,6 +468,13 @@ async function openDeal(id, focusMessageId) {
     e.currentTarget.remove();
   } }, "Show all " + d.activity.length) : null;
   drawer.appendChild(card("Activity", d.activity.length ? [activityList, moreActivity] : emptyLine("—")));
+}
+
+// Opens a deal at one of its cards, e.g. the content ideas from a "create content" to-do.
+async function openDealAt(id, cardId) {
+  await openDeal(id);
+  const node = document.getElementById(cardId);
+  if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function facts(pairs) {

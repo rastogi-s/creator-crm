@@ -179,6 +179,51 @@ public class DemoLlm implements LlmClient {
         return new com.creatorcrm.llm.NewsFound(List.of());
     }
 
+    /** Demo mode's ideas: Nova Nest Home's cozy-corner Reel (see DemoInbox), or a general set for any other deal. */
+    @Override
+    public com.creatorcrm.llm.ContentIdeaList contentIdeas(com.creatorcrm.llm.ContentIdeasInput input) {
+        String brand = input.brandName();
+        boolean nest = brand.contains("Nova Nest");
+        String product = nest ? "the Nova Nest throw and lamp" : "the " + brand + " product";
+        String tag = "@" + brand.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]", "");
+        String refresh = input.note() == null || input.note().isBlank() ? "" : " (" + input.note().strip() + ")";
+        return new com.creatorcrm.llm.ContentIdeaList(
+                nest ? "Nova Nest Home wants one paid Reel ($900) of a cozy reading corner styled with their throws and lamps. "
+                        + "The draft Reel is due in 5 days, and there's a month of exclusivity for home and lifestyle brands after it goes live."
+                        : brand + " wants content showing " + product + " in your everyday routine.",
+                List.of("Tag " + tag + " in the caption and on the video", "Show " + product + " in the first 3 seconds",
+                        "Say it's an ad: #ad in the caption and the paid-partnership label", nest ? "Send the draft Reel for approval before posting" : "Mention ___ (the key message from the brief)"),
+                List.of("No other home or lifestyle brands in the video", "Don't name prices or discounts"),
+                List.of(
+                        new com.creatorcrm.llm.ContentIdeaList.Idea((nest ? "Empty corner to coziest spot" : "Before and after") + refresh, "Instagram Reel",
+                                "\"This corner was wasted space. Watch.\"",
+                                "A fast before-and-after: the bare corner, then you style it piece by piece until it's the coziest spot in the flat. Ends with you curled up reading.",
+                                List.of("Wide shot: the empty corner, lights off", "Quick cuts: chair in, rug down, " + product + " unfolded",
+                                        "Close-up: switch the lamp on, warm glow fills the frame", "Slow pan: the finished corner", "You settle in with a book and a mug"),
+                                "Turned the saddest corner of my flat into my favourite place to read 🕯️ Styled with " + product + " " + tag + " #ad #cozycorner #readingnook",
+                                "Your before-and-after room Reels get the most saves, and this one ends on the calm, cozy mood your audience loves."),
+                        new com.creatorcrm.llm.ContentIdeaList.Idea("Sunday reset, 5pm", "Instagram Reel",
+                                "\"My Sunday reset always ends here.\"",
+                                "A slow, ASMR-style Sunday evening: tidy, tea, then light the corner and read. The product is part of the ritual, not the focus.",
+                                List.of("Hands folding laundry, soft daylight", "Kettle on, pouring tea", "Fluff the cushions, drape " + product,
+                                        "Lamp on as the light fades", "Book open, cup in hand, last frame held for 2 seconds"),
+                                "The best part of my Sunday reset 🍵 " + tag + " #ad #sundayreset #slowliving",
+                                "Your calm routine videos keep people watching to the end, which is what a brand wants from a Reel."),
+                        new com.creatorcrm.llm.ContentIdeaList.Idea("3 ways to style one corner", "Instagram Reel",
+                                "\"Same corner, three moods.\"",
+                                "Style the corner three ways (morning coffee, work-from-home, movie night) to show how versatile the product is.",
+                                List.of("Title card: 3 ways to style one corner", "Morning: daylight, coffee, throw folded neatly",
+                                        "Work: laptop, lamp on, throw over the chair", "Night: blankets piled, lamp dimmed, film on"),
+                                "Which one is your vibe: 1, 2 or 3? 👇 " + tag + " #ad #homestyling",
+                                "A question in the caption invites comments, and your comment counts are strongest on posts that ask one."),
+                        new com.creatorcrm.llm.ContentIdeaList.Idea("Honest first impressions", "Story set",
+                                "\"Unboxing the cozy stuff Nova Nest sent me.\"".replace("Nova Nest", nest ? "Nova Nest" : brand),
+                                "Three to five Stories: unbox, first touch, and where it's going in your home, with a poll for your followers.",
+                                List.of("Box on the doorstep", "Unbox, close-up of the texture", "Poll sticker: which corner should it go in?", "Link sticker to the brand"),
+                                "Stories have no caption: add " + tag + " and the paid-partnership label on each one.",
+                                "Polls in your Stories get lots of taps, and they warm people up for the Reel.")));
+    }
+
     @Override
     public ContractTerms extractContractTerms(ContractInput input) {
         // The demo contract is Bloomleaf Tea's (see DemoData): long payment wait, a year of ads, unlimited revisions.

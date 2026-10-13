@@ -276,6 +276,24 @@ public class GmailConnector implements ChannelConnector {
      * {@code maxBytes}. Needs only the read-only scope the app already has.
      */
     public List<FileAttachment> pdfAttachments(String messageId, int max, long maxBytes) throws Exception {
+        return attachments(messageId, max, maxBytes, (name, mime) -> "application/pdf".equalsIgnoreCase(mime)
+                || name.toLowerCase().endsWith(".pdf"), "contract.pdf");
+    }
+
+    /** File types a brand's content brief comes in that the app can read: PDF, Word, PowerPoint and plain text. */
+    static final java.util.regex.Pattern BRIEF_FILE = java.util.regex.Pattern.compile("(?i).+\\.(pdf|docx|pptx|txt|md)$");
+
+    /**
+     * The files of a brand's brief email the app can read (see {@link #BRIEF_FILE}), for content ideas: at most
+     * {@code max} files, each at most {@code maxBytes}. Pictures and videos are skipped without downloading them.
+     */
+    public List<FileAttachment> briefAttachments(String messageId, int max, long maxBytes) throws Exception {
+        return attachments(messageId, max, maxBytes, (name, mime) -> BRIEF_FILE.matcher(name).matches()
+                || "application/pdf".equalsIgnoreCase(mime), "brief.pdf");
+    }
+
+    private List<FileAttachment> attachments(String messageId, int max, long maxBytes,
+                                             java.util.function.BiPredicate<String, String> wanted, String unnamed) throws Exception {
         Gmail gmail = gmail();
         Message m = gmail.users().messages().get("me", messageId).setFormat("full").execute();
         List<MessagePart> parts = new ArrayList<>();
@@ -284,14 +302,13 @@ public class GmailConnector implements ChannelConnector {
         for (MessagePart p : parts) {
             if (out.size() >= max) break;
             String name = p.getFilename() == null ? "" : p.getFilename();
-            boolean pdf = "application/pdf".equalsIgnoreCase(p.getMimeType()) || name.toLowerCase().endsWith(".pdf");
-            if (!pdf || p.getBody() == null) continue;
+            if (!wanted.test(name, p.getMimeType() == null ? "" : p.getMimeType()) || p.getBody() == null) continue;
             Integer size = p.getBody().getSize();
             if (size != null && size > maxBytes) continue;
             byte[] data = p.getBody().getAttachmentId() != null
                     ? gmail.users().messages().attachments().get("me", messageId, p.getBody().getAttachmentId()).execute().decodeData()
                     : p.getBody().decodeData();
-            if (data != null && data.length > 0 && data.length <= maxBytes) out.add(new FileAttachment(name.isBlank() ? "contract.pdf" : name, data));
+            if (data != null && data.length > 0 && data.length <= maxBytes) out.add(new FileAttachment(name.isBlank() ? unnamed : name, data));
         }
         return out;
     }

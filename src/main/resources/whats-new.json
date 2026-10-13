@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.66.0",
+    "title": "Content ideas for every deal",
+    "features": [
+      {
+        "id": "content-ideas",
+        "title": "Reel and video ideas from the brand's brief",
+        "body": "When a brand sends its content guidelines, in the email itself or as a PDF, Word or PowerPoint file, Claude now writes reel and video ideas for that deal by itself. Open the deal to see Content ideas: what the brief asks for as a checklist of must-dos and don'ts, then four to six ideas with a hook for the first seconds, the shots to film and a ready caption with the right tags. They're based on your About you, your recent Instagram posts and how your past brand posts did. Press Refresh ideas for new ones, and say what to change (\"funnier\", \"film it outdoors\"). If the brief is behind a Google Drive or Canva link, paste its text on the deal. Create-content to-dos on Today have a Content ideas button too.",
+        "tryIt": "#pipeline",
+        "video": "content-ideas.webm"
+      }
+    ]
+  },
+  {
     "version": "1.65.0",
     "title": "To-dos that close themselves",
     "features": [

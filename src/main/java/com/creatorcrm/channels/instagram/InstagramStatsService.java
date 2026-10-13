@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -106,6 +108,35 @@ public class InstagramStatsService {
         } catch (Exception e) {
             log.info("Instagram reach not available ({}); reconnect Instagram to grant insights access.", e.getMessage());
             return null;
+        }
+    }
+
+    /** One of her own posts, for planning content: what it was and how it did. Likes are null when she hid them. */
+    public record Post(String caption, String type, Long likes, Long comments, String postedAt, String permalink) {}
+
+    /**
+     * Her latest posts, newest first, straight from Instagram. Empty when Instagram isn't connected or the call fails:
+     * content ideas are still written without them.
+     */
+    public List<Post> recentPosts(int limit) {
+        if (!secrets.has(SecretName.INSTAGRAM_ACCESS_TOKEN)) return List.of();
+        try {
+            JsonNode media = api.get(secrets.require(SecretName.INSTAGRAM_ACCESS_TOKEN), "/me/media", Map.of(
+                    "fields", "caption,media_type,media_product_type,like_count,comments_count,timestamp,permalink",
+                    "limit", String.valueOf(limit)));
+            List<Post> out = new ArrayList<>();
+            for (JsonNode m : media.path("data")) {
+                String type = "REELS".equals(m.path("media_product_type").asText()) ? "Reel"
+                        : "CAROUSEL_ALBUM".equals(m.path("media_type").asText()) ? "Carousel"
+                        : "VIDEO".equals(m.path("media_type").asText()) ? "Video" : "Photo";
+                out.add(new Post(m.path("caption").asText(""), type, m.has("like_count") ? m.path("like_count").asLong() : null,
+                        m.has("comments_count") ? m.path("comments_count").asLong() : null, m.path("timestamp").asText(""),
+                        m.path("permalink").asText("")));
+            }
+            return out;
+        } catch (Exception e) {
+            log.info("Could not read recent Instagram posts: {}", e.getMessage());
+            return List.of();
         }
     }
 

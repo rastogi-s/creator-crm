@@ -8,6 +8,8 @@ import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.llm.BrandLeads;
 import com.creatorcrm.llm.BrandSearchInput;
 import com.creatorcrm.llm.ClassificationInput;
+import com.creatorcrm.llm.ContentIdeaList;
+import com.creatorcrm.llm.ContentIdeasInput;
 import com.creatorcrm.llm.ContractInput;
 import com.creatorcrm.llm.ContractTerms;
 import com.creatorcrm.llm.DraftInput;
@@ -127,6 +129,20 @@ public class FakeLlm implements LlmClient {
     public NewsFound searchBrandNews(NewsSearchInput input) {
         newsSearches++;
         return nextNewsFound;
+    }
+
+    public java.util.function.Function<ContentIdeasInput, ContentIdeaList> ideas = in -> new ContentIdeaList(
+            "Show the product in a cozy routine.", List.of("Tag @brand"), List.of("No competitors"),
+            List.of(new ContentIdeaList.Idea("Before and after", "Instagram Reel", "Watch this corner change", "Style it step by step.",
+                    List.of("Empty corner", "Finished corner"), "Cozy #ad @brand", "Her room videos do well.")));
+    public ContentIdeasInput lastIdeasInput;
+    public int ideasCalls;
+
+    @Override
+    public ContentIdeaList contentIdeas(ContentIdeasInput input) {
+        ideasCalls++;
+        lastIdeasInput = input;
+        return ideas.apply(input);
     }
 
     @Override
