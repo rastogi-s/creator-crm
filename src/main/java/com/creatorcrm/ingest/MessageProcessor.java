@@ -104,6 +104,9 @@ public class MessageProcessor {
         if (recent && m.direction == Direction.INBOUND && ContentIdeasService.carriesBrief(analysis.intent(), m)) {
             // The brand's content guidelines: plan reels and videos from them while she waits for (or has) the product.
             opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).ifPresent(o -> ideas.onBrief(m, o));
+        } else if (recent && m.direction == Direction.INBOUND) {
+            // Brands often attach the brief to an email that reads as something else ("here you go!").
+            opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).ifPresent(o -> ideas.onAttachments(m, o));
         }
         // A newer email in the thread would supersede the draft at once (common when importing history).
         if (m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF))
