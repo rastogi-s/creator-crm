@@ -11,6 +11,8 @@ public interface TaskRepo extends JpaRepository<Task, Long> {
 
     List<Task> findByOpportunityIdAndStatus(Long opportunityId, TaskStatus status);
 
+    List<Task> findBySourceMessageIdAndStatus(Long sourceMessageId, TaskStatus status);
+
     List<Task> findByOpportunityIdOrderByCreatedAtDesc(Long opportunityId);
 
     List<Task> findByStatusAndCompletedAtAfter(TaskStatus status, OffsetDateTime after);

@@ -1,5 +1,6 @@
 package com.creatorcrm.campaigns;
 
+import com.creatorcrm.contacts.Bounces;
 import com.creatorcrm.contacts.ContactService;
 import com.creatorcrm.contacts.Emails;
 import com.creatorcrm.contacts.OptOut;
@@ -41,9 +42,6 @@ public class CampaignWatcher {
     static final int BOUNCES_TO_PAUSE = 2;
     static final int OPT_OUTS_TO_PAUSE = 1;
 
-    private static final Pattern BOUNCE_SENDER = Pattern.compile("(?i)^(mailer-daemon|postmaster|mail-daemon|mail\\.delivery\\.subsystem)@.*");
-    private static final Pattern BOUNCE_SUBJECT = Pattern.compile("(?i)(delivery status notification|undeliver|delivery has failed|"
-            + "delivery failure|mail delivery (failed|subsystem)|returned mail|failure notice|address not found|message not delivered)");
     private static final Pattern QUOTE_START = Pattern.compile("(?m)^(On .+wrote:|-----Original Message-----|>|From: )");
     /** The answer the opt-out line in every campaign email asks for, and close cousins. Short replies only. */
     private static final Pattern NO_THANKS = Pattern.compile("(?i)^\\W*(no,? thanks?( you)?|no thank you|not interested|"
@@ -130,7 +128,7 @@ public class CampaignWatcher {
     }
 
     private boolean bounce(Message m) {
-        Set<String> failed = new LinkedHashSet<>(Emails.findAll((m.subject == null ? "" : m.subject) + "\n" + (m.content == null ? "" : m.content)));
+        Set<String> failed = new LinkedHashSet<>(Bounces.addressesIn(m.subject, m.content));
         OffsetDateTime month = OffsetDateTime.now().minusDays(30);
         boolean any = false;
         for (String addr : failed) {
@@ -147,8 +145,7 @@ public class CampaignWatcher {
     }
 
     static boolean isBounce(Message m) {
-        return (m.sender != null && BOUNCE_SENDER.matcher(m.sender.strip()).matches())
-                || (m.subject != null && BOUNCE_SUBJECT.matcher(m.subject).find());
+        return Bounces.isBounce(m.sender, m.subject);
     }
 
     /** "Remove me", or a short "no thanks" (what the footer asks people to reply). */

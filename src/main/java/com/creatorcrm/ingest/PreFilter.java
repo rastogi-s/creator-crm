@@ -1,6 +1,7 @@
 package com.creatorcrm.ingest;
 
 import com.creatorcrm.channels.NormalizedMessage;
+import com.creatorcrm.contacts.Bounces;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Enums.Platform;
@@ -26,7 +27,11 @@ public class PreFilter {
         this.settings = settings;
     }
 
+    /** Why a bounce notice skips Claude: it isn't the brand writing, and reading it as a reply would stop follow-ups wrongly. */
+    public static final String BOUNCE = "delivery failure notice (handled without AI)";
+
     public String skipReason(NormalizedMessage m, Conversation conv) {
+        if (m.direction() == Direction.INBOUND && Bounces.isBounce(m.sender(), m.subject())) return BOUNCE;
         if (Boolean.TRUE.equals(conv.brandRelated)) return null; // known brand conversation: always analyze
         if (m.platform() == Platform.INSTAGRAM) return null;       // DMs are low-volume and casual: always analyze
 

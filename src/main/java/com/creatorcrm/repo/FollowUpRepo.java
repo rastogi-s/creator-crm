@@ -16,5 +16,7 @@ public interface FollowUpRepo extends JpaRepository<FollowUp, Long> {
 
     List<FollowUp> findByStatusAndCompletedDate(FollowUpStatus status, LocalDate date);
 
+    List<FollowUp> findByStoppedReasonIsNotNullAndStoppedAtAfterOrderByStoppedAtDesc(java.time.OffsetDateTime after);
+
     List<FollowUp> findByNumberAndStatusAndCompletedDateLessThanEqual(int number, FollowUpStatus status, LocalDate date);
 }

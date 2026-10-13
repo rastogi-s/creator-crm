@@ -36,6 +36,11 @@ public interface MessageRepo extends JpaRepository<Message, Long> {
     /** New messages since the campaign watcher last looked. */
     List<Message> findTop500ByIdGreaterThanOrderByIdAsc(Long id);
 
+    /** Conversations where she emailed this address ({@code pattern}: lower-case LIKE pattern, e.g. "%ana@glowberry.com%"). */
+    @Query("select distinct m.conversationId from Message m where m.direction = com.creatorcrm.domain.Enums.Direction.OUTBOUND"
+            + " and lower(m.recipient) like ?1")
+    List<Long> conversationsWrittenTo(String pattern);
+
     @Query("select max(m.id) from Message m")
     Long maxId();
 

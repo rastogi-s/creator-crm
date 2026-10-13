@@ -94,6 +94,40 @@ public class FollowUpEngine {
         onBrandReply(o);
     }
 
+    /**
+     * The app stopping the deal's follow-ups on its own, saying why (shown in the deal and under "Closed for you").
+     * Returns true if a scheduled follow-up was stopped.
+     */
+    @Transactional
+    public boolean stop(Opportunity o, String why) {
+        Optional<FollowUp> current = scheduled(o.id);
+        current.ifPresent(fu -> {
+            fu.status = FollowUpStatus.CANCELLED;
+            fu.stoppedReason = why == null ? null : why.length() > 500 ? why.substring(0, 500) : why;
+            fu.stoppedAt = OffsetDateTime.now();
+            followUps.save(fu);
+            activity.save(Activity.of(o.id, Activity.STATUS_CHANGED, "Follow-ups stopped: " + why));
+        });
+        return current.isPresent();
+    }
+
+    /** Follow-ups the app stopped on its own since then, newest first. */
+    public List<FollowUp> stoppedSince(OffsetDateTime since) {
+        return followUps.findByStoppedReasonIsNotNullAndStoppedAtAfterOrderByStoppedAtDesc(since);
+    }
+
+    /** Puts a follow-up the app stopped back on the schedule, due today. False when the deal already has one scheduled. */
+    @Transactional
+    public boolean reopen(FollowUp fu) {
+        if (fu.status != FollowUpStatus.CANCELLED || scheduled(fu.opportunityId).isPresent()) return false;
+        fu.status = FollowUpStatus.SCHEDULED;
+        fu.scheduledDate = settings.today();
+        fu.stoppedReason = null;
+        fu.stoppedAt = null;
+        followUps.save(fu);
+        return true;
+    }
+
     /** Follow-ups due on or before the date, for open deals. */
     public List<FollowUp> dueOnOrBefore(LocalDate date) {
         return followUps.findByStatusAndScheduledDateLessThanEqualOrderByScheduledDateAsc(FollowUpStatus.SCHEDULED, date)

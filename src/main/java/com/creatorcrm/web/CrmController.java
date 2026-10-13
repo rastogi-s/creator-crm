@@ -249,6 +249,14 @@ public class CrmController {
         return view(o);
     }
 
+    /** The app stopped this follow-up but she still wants it: due again today. */
+    @PostMapping("/followups/{id}/reopen")
+    public FollowUp reopenFollowUp(@PathVariable Long id) {
+        FollowUp fu = followUpRepo.findById(id).orElseThrow();
+        if (!followUps.reopen(fu)) throw new IllegalStateException("This deal already has a follow-up scheduled.");
+        return fu;
+    }
+
     @PostMapping("/opportunities/{id}/drafts")
     public Draft newDraft(@PathVariable Long id, @Valid @RequestBody NewDraft d) {
         return draftService.generate(id, DraftType.valueOf(d.type()), d.instructions(), null, null);
