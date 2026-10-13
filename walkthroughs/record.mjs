@@ -700,9 +700,12 @@ const scenarios = {
     await point(tabSearch);
     await say("Each list has its own search and filters too. Deals, Pitching brands, Money and Drafts all have them.", 4400);
     await tabSearch.pressSequentially("glow", { delay: 90 });
-    await pause(600);
-    await tabSearch.fill("");
-    await pause(400);
+    const suggestion = page.locator("#view-pipeline .suggest .hit").first();
+    await suggestion.waitFor();
+    await point(suggestion);
+    await say("Matching deals drop down as you type. Click one to open it.", 3800);
+    await click(page.locator("#view-pipeline .search-clear"));
+    await say("The × clears any search in one tap.", 3000);
     await click(page.locator("#view-pipeline th button", { hasText: "Updated" }));
     await say("Click a column name to sort by it. Click it again to flip the order.", 3800);
     // The first pill is All; pick a stage so the filter visibly changes the list.
