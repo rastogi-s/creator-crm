@@ -1,7 +1,11 @@
 package com.creatorcrm.ingest;
 
+import com.creatorcrm.contacts.ContactService;
+import com.creatorcrm.contacts.Emails;
 import com.creatorcrm.contracts.ContractService;
+import com.creatorcrm.domain.Activity;
 import com.creatorcrm.domain.Brand;
+import com.creatorcrm.domain.ContactSource;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Enums.Direction;
 import com.creatorcrm.domain.Message;
@@ -13,6 +17,7 @@ import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmClient;
 import com.creatorcrm.llm.MessageAnalysis;
 import com.creatorcrm.llm.Untrusted;
+import com.creatorcrm.repo.ActivityRepo;
 import com.creatorcrm.repo.BrandRepo;
 import com.creatorcrm.repo.ConversationRepo;
 import com.creatorcrm.repo.MessageRepo;
@@ -22,6 +27,7 @@ import com.creatorcrm.workflow.WorkflowEngine;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,10 +49,15 @@ public class MessageProcessor {
     private final BrandRepo brands;
     private final SettingsService settings;
     private final ContractService contracts;
+    private final ContactService contacts;
+    private final ActivityRepo activity;
 
     public MessageProcessor(LlmClient llm, WorkflowEngine workflow, DraftService drafts, ConversationRepo conversations,
                             MessageRepo messages, OpportunityRepo opportunities, BrandRepo brands,
-                            SettingsService settings, ContractService contracts) {
+                            SettingsService settings, ContractService contracts, ContactService contacts,
+                            ActivityRepo activity) {
+        this.contacts = contacts;
+        this.activity = activity;
         this.contracts = contracts;
         this.llm = llm;
         this.workflow = workflow;
@@ -90,12 +101,54 @@ public class MessageProcessor {
         // A newer email in the thread would supersede the draft at once (common when importing history).
         if (m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF))
                 || messages.existsByConversationIdAndSentAtAfter(conv.id, m.sentAt)) return;
+        String instead = m.direction == Direction.INBOUND && outcome.opportunityId() != null
+                ? emailInstead(m, analysis) : null;
+        if (instead != null && writeInstead(m, outcome, analysis, instead)) return;
         for (Task t : outcome.tasksToDraft()) {
             try {
                 drafts.draftForTask(t);
             } catch (RuntimeException e) {
                 log.warn("Could not draft a reply for task {}: {}", t.id, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * The other address the brand asked her to write to, when it really is in the message and isn't the sender's
+     * own (or hers). Null when there is none.
+     */
+    static String emailInstead(Message m, MessageAnalysis a) {
+        String e = Emails.clean(a.emailInstead());
+        if (e == null || m.content == null || !m.content.toLowerCase(Locale.ROOT).contains(e)) return null;
+        for (String own : new String[] {m.sender, m.replyTo, m.recipient}) {
+            if (Emails.findAll(own).contains(e)) return null;
+        }
+        return e;
+    }
+
+    /**
+     * The brand said to email {@code address} instead: save it as the brand's contact and draft the pitch to that
+     * address (in place of a reply to the sender). False when no draft could be made, so the usual reply is drafted.
+     */
+    private boolean writeInstead(Message m, WorkflowEngine.Outcome outcome, MessageAnalysis a, String address) {
+        Opportunity o = opportunities.findById(outcome.opportunityId()).orElse(null);
+        if (o == null) return false;
+        contacts.add(o.brandId, ContactService.Found.of(address, null, ContactSource.Kind.GMAIL, null));
+        brands.findById(o.brandId).ifPresent(b -> {
+            b.contactEmail = address;
+            brands.save(b);
+        });
+        String who = m.senderName != null && !m.senderName.isBlank() ? m.senderName.strip()
+                : a.contactName() != null && !a.contactName().isBlank() ? a.contactName() : null;
+        Long taskId = outcome.tasksToDraft().isEmpty() ? null : outcome.tasksToDraft().get(0).id;
+        try {
+            if (drafts.draftToNewAddress(o.id, address, who, taskId).isEmpty()) return false;
+            activity.save(Activity.of(o.id, Activity.BRAND_REPLIED,
+                    "Asked to email " + address + " instead; drafted the pitch to that address"));
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Could not draft to {} for deal {}: {}", address, o.id, e.getMessage());
+            return false;
         }
     }
 

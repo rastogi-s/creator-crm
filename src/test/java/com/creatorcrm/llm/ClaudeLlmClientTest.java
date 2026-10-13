@@ -128,10 +128,12 @@ class ClaudeLlmClientTest {
                  "deadlines": [], "missingInfo": ["budget"], "requiresReply": true, "urgency": "MEDIUM",
                  "suggestedAction": "Reply to Glow Co with UGC rates", "updatedSummary": "Glow Co asked for rates.",
                  "taskBrief": "Glow Co wants your rates for one UGC video.",
-                 "links": [{"label": "Brief", "url": "https://glow.example/brief"}, {"label": "Bad", "url": "javascript:alert(1)"}]}
+                 "links": [{"label": "Brief", "url": "https://glow.example/brief"}, {"label": "Bad", "url": "javascript:alert(1)"}],
+                 "emailInstead": " partners@glow.example "}
                 """;
 
         MessageAnalysis a = claude.classify(sample());
+        assertThat(a.emailInstead()).isEqualTo("partners@glow.example");
         assertThat(a.taskBrief()).isEqualTo("Glow Co wants your rates for one UGC video.");
         assertThat(a.links()).containsExactly(new MessageAnalysis.TaskLink("Brief", "https://glow.example/brief"));
         assertThat(a.brandName()).isEqualTo("Glow Co");
@@ -143,7 +145,7 @@ class ClaudeLlmClientTest {
         Map<?, ?> schema = (Map<?, ?>) ((Map<?, ?>) ((Map<?, ?>) req.get("output_config")).get("format")).get("schema");
         assertThat(schema.get("type")).isEqualTo("object");
         assertThat(schema.get("additionalProperties")).isEqualTo(false);
-        assertThat(strings(schema.get("required"))).contains("brandRelated", "intent", "updatedSummary", "deadlines", "taskBrief", "links");
+        assertThat(strings(schema.get("required"))).contains("brandRelated", "intent", "updatedSummary", "deadlines", "taskBrief", "links", "emailInstead");
         Map<?, ?> props = (Map<?, ?>) schema.get("properties");
         assertThat(((Map<?, ?>) props.get("brandName")).get("description")).asString().contains("brand's name");
         assertThat(strings(((Map<?, ?>) props.get("intent")).get("enum"))).contains("RATES_REQUEST", "CONTRACT_SENT");

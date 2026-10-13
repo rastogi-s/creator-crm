@@ -51,8 +51,13 @@ public class SendQueue {
 
     /** Saves her edits, checks the draft can go, and sends it after the undo window. Throws if it can't be sent. */
     public Waiting send(Long draftId, String subject, String body) {
+        return send(draftId, null, subject, body);
+    }
+
+    /** {@link #send(Long, String, String)}, also saving the "To" address she typed ({@code to}, null = unchanged). */
+    public Waiting send(Long draftId, String to, String subject, String body) {
         requireNotWaiting(draftId);
-        Draft d = drafts.readyToSend(draftId, subject, body);
+        Draft d = drafts.readyToSend(draftId, to, subject, body);
         failures.remove(d.id);
         Waiting w = new Waiting(d.id, OffsetDateTime.now().plusSeconds(undoSeconds));
         if (waiting.putIfAbsent(d.id, w) != null) throw new IllegalStateException("This draft is already being sent");

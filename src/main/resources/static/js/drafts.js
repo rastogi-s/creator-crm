@@ -285,7 +285,12 @@ async function renderDrafts(root) {
     const subject = el("input", { value: d.subject || "", maxlength: "1000" });
     const body = el("textarea", { class: "tall", maxlength: "20000" });
     body.value = d.body;
-    const edits = () => ({ subject: subject.value, body: body.value });
+    // She can send an email to someone else, e.g. when the brand replied "please write to partnerships@ instead".
+    // Campaign emails keep theirs: each goes to the contact picked for it.
+    const toEditable = d.channel === "EMAIL" && !campaign;
+    const to = el("input", { type: "email", value: d.toAddress || "", maxlength: "320", autocomplete: "off", spellcheck: "false" });
+    const edits = () => toEditable ? { to: to.value.trim(), subject: subject.value, body: body.value } : { subject: subject.value, body: body.value };
+    const shown = () => toEditable ? { ...d, toAddress: to.value.trim() } : d;
     // Blanks like [RATE FOR 1 REEL] that Claude left for her. The server refuses to send while any remain.
     const blanksNote = el("div", { class: "alert warn hidden", role: "status" });
     const checkBlanks = () => {
@@ -306,7 +311,7 @@ async function renderDrafts(root) {
     const scheduleIt = action(async (current) => {
       if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
       const when = await pickSendTime(typeof current === "string" ? current : null);
-      if (!when || !await sendPreview(d, brand, subject.value, body.value, null, when)) return;
+      if (!when || !await sendPreview(shown(), brand, subject.value, body.value, null, when)) return;
       const saved = await api("POST", "/api/drafts/" + d.id + "/schedule", { ...edits(), at: when });
       toast("Scheduled for " + fmtSendTime(saved.scheduledAt) + ". It waits in Drafts until then.");
       route();
@@ -323,7 +328,7 @@ async function renderDrafts(root) {
     const node = holder.appendChild(card(null,
       el("div", { class: "row" }, el("h3", {}, brand + " — " + pretty(d.type)), el("div", { class: "spacer" }),
         el("span", { class: "badge" }, d.channel === "EMAIL" ? "Email" : "Instagram DM")),
-      el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
+      toEditable ? null : el("div", { class: "small muted" }, "To: " + (d.toAddress || "—") + (d.gmailDraftId ? " · also saved in your Gmail Drafts" : "")),
       d.scheduledAt && !sendingAt ? el("div", { class: "alert info scheduled-note" },
         el("div", {}, el("strong", {}, "Scheduled for " + fmtSendTime(d.scheduledAt) + ". "),
           "It goes out by itself then, with any edits you save. If the app isn't open at that time, it goes out as soon as it is."),
@@ -341,6 +346,8 @@ async function renderDrafts(root) {
         + "\"no thanks\" line are required, so they're put back if removed.") : null,
       d.type === "REPITCH" ? el("div", { class: "small muted" }, "A new email to a brand you've worked with before. Sending it adds a new pitch for " + brand + " to your pipeline, with follow-ups like any pitch.") : null,
       whyNow(news),
+      toEditable ? el("div", {}, el("label", {}, "To"), to,
+        d.gmailDraftId ? el("div", { class: "small muted" }, "Also saved in your Gmail Drafts") : null) : null,
       d.channel === "EMAIL" ? el("div", {}, el("label", {}, "Subject"), subject) : null,
       el("label", {}, "Message"), body,
       askClaude(d, subject, body),
@@ -351,7 +358,7 @@ async function renderDrafts(root) {
       el("div", { class: "row" + (sendingAt ? " hidden" : "") },
         blockedReason ? null : el("button", { class: "primary", onclick: action(async () => {
           if (checkBlanks().length) { body.focus(); throw new Error(blanksNote.textContent); }
-          if (!await sendPreview(d, brand, subject.value, body.value, campaign)) return;
+          if (!await sendPreview(shown(), brand, subject.value, body.value, campaign)) return;
           if (campaign) {
             await api("POST", "/api/campaigns/drafts/" + d.id + "/approve", edits());
             toast("Approved. It's in the send queue.");

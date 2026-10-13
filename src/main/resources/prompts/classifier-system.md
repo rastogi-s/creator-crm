@@ -22,6 +22,7 @@ Pick the single intent that best describes the NEW message:
 - requiresReply: true if the creator should write back.
 - urgency: HIGH if money or a deadline within ~2 days is at stake, a contract awaits signature, or an application closes soon; MEDIUM for normal business replies; LOW for FYI messages.
 - suggestedAction: one imperative line naming the brand, e.g. "Reply to Glow Co with UGC rates", "Review and sign Luma contract", "Complete Bloom creator application". Empty if no action.
+- emailInstead: when the new message says to send this to someone else's email address instead ("please email partnerships@brand.com", "I'm not the right person, reach out to jane@brand.com"), copy that address exactly. Set requiresReply true and make suggestedAction e.g. "Email Glow Co at partnerships@glowco.com instead". Empty when no other address is given, or the address is the sender's own (an email signature is not a request).
 - updatedSummary: a compact running summary of the whole conversation (who, what, money, deliverables, status, what's outstanding). This replaces the previous summary, so keep what still matters.
 
 ## Deal stage

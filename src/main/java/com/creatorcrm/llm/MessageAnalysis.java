@@ -48,7 +48,21 @@ public record MessageAnalysis(
         @JsonPropertyDescription("Links in the new message she needs for the to-do: forms, applications, briefs, contracts, product pages, shared folders. Copy each URL exactly as it appears in the message. Skip unsubscribe, tracking-pixel, social-footer and logo links. Empty list if none.")
         List<TaskLink> links,
         @JsonPropertyDescription("Where the whole deal stands right after this message, judged from the whole conversation. See 'Deal stage' in the instructions.")
-        StageSeen dealStage) {
+        StageSeen dealStage,
+        @JsonPropertyDescription("Only when the new message asks the creator to write to a different email address instead, e.g. 'please send this to partnerships@brand.com' or 'reach out to Jane at jane@brand.com, she handles creators': that address, copied exactly from the message. Empty otherwise, and empty when the address is the sender's own.")
+        String emailInstead) {
+
+    /** Without {@code emailInstead}: the message names no other address to write to. */
+    public MessageAnalysis(boolean brandRelated, String brandName, String contactName, Intent intent,
+                           OpportunityType opportunityType, Compensation compensation, double budgetAmount,
+                           String currency, String budgetText, String deliverables, String usageRights,
+                           String campaign, List<ExtractedDeadline> deadlines, List<String> missingInfo,
+                           boolean requiresReply, Priority urgency, String suggestedAction, String updatedSummary,
+                           String taskBrief, List<TaskLink> links, StageSeen dealStage) {
+        this(brandRelated, brandName, contactName, intent, opportunityType, compensation, budgetAmount, currency,
+                budgetText, deliverables, usageRights, campaign, deadlines, missingInfo, requiresReply, urgency,
+                suggestedAction, updatedSummary, taskBrief, links, dealStage, "");
+    }
 
     public record TaskLink(
             @JsonPropertyDescription("Short label, e.g. 'Application form' or 'Campaign brief'.")
