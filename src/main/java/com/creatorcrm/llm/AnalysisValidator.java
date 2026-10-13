@@ -42,7 +42,8 @@ final class AnalysisValidator {
                 clip(a.updatedSummary(), 2000),
                 clip(a.taskBrief(), 1200),
                 links(a.links()),
-                a.dealStage() == null || !a.brandRelated() ? StageSeen.UNCLEAR : a.dealStage());
+                a.dealStage() == null || !a.brandRelated() ? StageSeen.UNCLEAR : a.dealStage(),
+                clip(a.emailInstead(), 320));
     }
 
     /** Web links only, at most 6; whether each one really is in the message is checked by the workflow. */

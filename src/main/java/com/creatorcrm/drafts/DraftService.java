@@ -153,6 +153,23 @@ public class DraftService {
     }
 
     /**
+     * The brand replied asking her to write to {@code address} instead: the pitch again, to that address, in the
+     * deal's email thread so the new person's answer lands with the deal. Empty when the deal isn't an email thread
+     * or the address is on her do-not-email list.
+     */
+    @Transactional
+    public Optional<Draft> draftToNewAddress(Long opportunityId, String address, String askedBy, Long taskId) {
+        Opportunity o = opportunities.findById(opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
+        Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
+        if (conv == null || conv.platform != Platform.EMAIL || suppressions.blocked(address)) return Optional.empty();
+        String who = askedBy == null || askedBy.isBlank() ? "the brand" : askedBy;
+        String note = who + " replied that this should go to " + address + " instead. This email goes to " + address
+                + ", who hasn't seen the earlier emails: open with one line saying " + who
+                + " suggested she get in touch, then make the pitch again in full. Don't write as a reply to " + who + ".";
+        return Optional.of(create(o.id, DraftType.PITCH, note, taskId, null, null, null, null, null, null, null, address));
+    }
+
+    /**
      * An email about an invoice ({@link DraftType#INVOICE} or {@link DraftType#PAYMENT_REMINDER}): the PDF goes out
      * attached, to {@code invoice.billToEmail} when set. If Claude can't write the note (no API key, outage),
      * {@code fallback} is used so invoicing never depends on AI. Replaces a pending draft of the same kind.
@@ -194,10 +211,20 @@ public class DraftService {
         return create(opportunityId, type, instructions, taskId, followupId, invoice, result, fallback, written, null, null);
     }
 
-    /** {@code written}: use this text and skip Claude. {@code toAddress}: the recipient of a new email thread. */
     private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
                          Invoice invoice, CampaignResult result, DraftText fallback, DraftText written,
                          String toAddress, Long campaignTargetId) {
+        return create(opportunityId, type, instructions, taskId, followupId, invoice, result, fallback, written,
+                toAddress, campaignTargetId, null);
+    }
+
+    /**
+     * {@code written}: use this text and skip Claude. {@code toAddress}: the recipient of a new email thread.
+     * {@code writeTo}: send it to this address even in the deal's email thread (the brand asked to email someone else).
+     */
+    private Draft create(Long opportunityId, DraftType type, String instructions, Long taskId, Long followupId,
+                         Invoice invoice, CampaignResult result, DraftText fallback, DraftText written,
+                         String toAddress, Long campaignTargetId, String writeTo) {
         Opportunity o = opportunities.findById(opportunityId).orElseThrow(() -> new IllegalArgumentException("Unknown opportunity"));
         Brand b = brands.findById(o.brandId).orElseThrow();
         Conversation conv = o.conversationId == null ? null : conversations.findById(o.conversationId).orElse(null);
@@ -221,6 +248,7 @@ public class DraftService {
             d.subject = "";
         } else {
             route(d, b, conv, thread);
+            if (writeTo != null && d.channel == Platform.EMAIL) d.toAddress = writeTo;
         }
         d.campaignTargetId = campaignTargetId;
 
@@ -412,7 +440,13 @@ public class DraftService {
      */
     @Transactional
     public Draft readyToSend(Long draftId, String editedSubject, String editedBody) {
-        Draft d = edit(draftId, editedSubject, editedBody);
+        return readyToSend(draftId, null, editedSubject, editedBody);
+    }
+
+    /** {@link #readyToSend(Long, String, String)}, also saving the "To" address she typed ({@code editedTo}). */
+    @Transactional
+    public Draft readyToSend(Long draftId, String editedTo, String editedSubject, String editedBody) {
+        Draft d = edit(draftId, editedTo, editedSubject, editedBody);
         if (d.campaignTargetId != null) {
             throw new IllegalStateException("This is a campaign email: press Approve, and it goes out in the slow send queue.");
         }
@@ -429,6 +463,11 @@ public class DraftService {
      */
     @Transactional
     public Draft schedule(Long draftId, String editedSubject, String editedBody, OffsetDateTime at) {
+        return schedule(draftId, null, editedSubject, editedBody, at);
+    }
+
+    @Transactional
+    public Draft schedule(Long draftId, String editedTo, String editedSubject, String editedBody, OffsetDateTime at) {
         if (at == null) throw new IllegalArgumentException("Pick when to send it");
         OffsetDateTime now = OffsetDateTime.now();
         if (at.isBefore(now.plusMinutes(1))) throw new IllegalArgumentException("Pick a time later than now");
@@ -437,7 +476,7 @@ public class DraftService {
         if (d.channel != Platform.EMAIL) {
             throw new IllegalStateException("Only emails can be scheduled. Instagram only lets you reply within 24 hours of the brand's last message, so send DMs when you're ready.");
         }
-        d = readyToSend(draftId, editedSubject, editedBody);
+        d = readyToSend(draftId, editedTo, editedSubject, editedBody);
         d.scheduledAt = at;
         d.error = null;
         return drafts.save(d);
@@ -549,10 +588,36 @@ public class DraftService {
 
     @Transactional
     public Draft edit(Long draftId, String subject, String body) {
+        return edit(draftId, null, subject, body);
+    }
+
+    /**
+     * Saves her edits. {@code to}: the address an email goes to, when she changed it (e.g. the brand asked her to
+     * write to someone else); null keeps it. Campaign emails keep theirs: each one belongs to a picked contact.
+     */
+    @Transactional
+    public Draft edit(Long draftId, String to, String subject, String body) {
         Draft d = pending(draftId);
         if (body != null && !body.isBlank()) d.body = body.strip();
         if (subject != null && d.channel == Platform.EMAIL) d.subject = subject.strip();
+        if (to != null && !to.strip().equalsIgnoreCase(d.toAddress == null ? "" : d.toAddress.strip())) {
+            d.toAddress = recipient(d, to);
+        }
         return drafts.save(d);
+    }
+
+    /** The new "To" address, checked: one real email address, on an email that isn't part of a campaign. */
+    private static String recipient(Draft d, String to) {
+        if (d.channel != Platform.EMAIL) throw new IllegalArgumentException("Only an email's address can be changed");
+        if (d.campaignTargetId != null) {
+            throw new IllegalArgumentException("A campaign email goes to the contact picked for it. Change the campaign's contacts instead.");
+        }
+        String typed = to.strip();
+        if (typed.startsWith("<") && typed.endsWith(">")) typed = typed.substring(1, typed.length() - 1).strip();
+        if (typed.isEmpty() || typed.length() > 320 || !typed.matches("[^\\s@<>,;\"]+@[^\\s@<>,;\"]+\\.[^\\s@<>,;\"]+")) {
+            throw new IllegalArgumentException("Type one email address, like name@brand.com");
+        }
+        return typed;
     }
 
     private Draft pending(Long id) {

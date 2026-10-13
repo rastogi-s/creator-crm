@@ -112,10 +112,10 @@ public class CrmController {
 
     public record NewDraft(@NotBlank String type, @Size(max = 1000) String instructions) {}
 
-    public record DraftEdit(@Size(max = 1000) String subject, @Size(max = 20000) String body) {}
+    public record DraftEdit(@Size(max = 1000) String subject, @Size(max = 20000) String body, @Size(max = 320) String to) {}
 
     public record DraftSchedule(@Size(max = 1000) String subject, @Size(max = 20000) String body,
-                                @NotNull OffsetDateTime at) {}
+                                @NotNull OffsetDateTime at, @Size(max = 320) String to) {}
 
     public record DraftRevision(@Size(max = 1000) String subject, @Size(max = 20000) String body,
                                 @NotBlank @Size(max = 1000) String request) {}
@@ -311,7 +311,7 @@ public class CrmController {
     @PutMapping("/drafts/{id}")
     public Draft editDraft(@PathVariable Long id, @Valid @RequestBody DraftEdit e) {
         sendQueue.requireNotWaiting(id);
-        return draftService.edit(id, e.subject(), e.body());
+        return draftService.edit(id, e.to(), e.subject(), e.body());
     }
 
     /** Claude rewrites the draft as asked and saves it; it still waits for Send. */
@@ -327,7 +327,7 @@ public class CrmController {
      */
     @PostMapping("/drafts/{id}/send")
     public QueuedSend sendDraft(@PathVariable Long id, @Valid @RequestBody(required = false) DraftEdit e) {
-        SendQueue.Waiting w = sendQueue.send(id, e == null ? null : e.subject(), e == null ? null : e.body());
+        SendQueue.Waiting w = sendQueue.send(id, e == null ? null : e.to(), e == null ? null : e.subject(), e == null ? null : e.body());
         return new QueuedSend(w.draftId(), w.sendAt(), sendQueue.undoSeconds());
     }
 
@@ -335,7 +335,7 @@ public class CrmController {
     @PostMapping("/drafts/{id}/schedule")
     public Draft scheduleDraft(@PathVariable Long id, @Valid @RequestBody DraftSchedule s) {
         sendQueue.requireNotWaiting(id);
-        return draftService.schedule(id, s.subject(), s.body(), s.at());
+        return draftService.schedule(id, s.to(), s.subject(), s.body(), s.at());
     }
 
     @PostMapping("/drafts/{id}/unschedule")

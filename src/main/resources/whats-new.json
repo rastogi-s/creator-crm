@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.64.0",
+    "title": "Write to the address a brand asks for",
+    "features": [
+      {
+        "id": "email-instead",
+        "title": "When a brand says \"email someone else\"",
+        "body": "When a brand replies to your pitch with \"please send this to partnerships@...\" or \"reach out to Jane instead\", the app now saves that address as the brand's contact and drafts your pitch to it, ready in Drafts. You can also change who any email goes to: the To line on a draft is now a box you can edit before you press Send.",
+        "tryIt": "#drafts"
+      }
+    ]
+  },
+  {
     "version": "1.63.0",
     "title": "Find more emails for a brand you're pitching",
     "features": [
