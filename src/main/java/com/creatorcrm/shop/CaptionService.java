@@ -1,7 +1,7 @@
 package com.creatorcrm.shop;
 
-import com.creatorcrm.channels.instagram.InstagramStatsService;
 import com.creatorcrm.domain.CaptionSet;
+import com.creatorcrm.domain.CaptionUse;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Product;
 import com.creatorcrm.ideas.ContentIdeasService;
@@ -50,7 +50,6 @@ public class CaptionService {
     static final int MAX_CHOSEN = 12;
     /** Products shown to Claude when it picks from her list: the ones she used most recently. */
     static final int MAX_TO_PICK_FROM = 60;
-    static final int RECENT_CAPTIONS = 8;
 
     public record Picture(String name, String mediaType, String base64) {}
 
@@ -74,12 +73,12 @@ public class CaptionService {
     private final OpportunityRepo opportunities;
     private final WorkflowEngine workflow;
     private final ContentIdeasService ideas;
-    private final InstagramStatsService instagram;
+    private final CaptionLearning learning;
     private final SettingsService settings;
     private final LlmClient llm;
 
     public CaptionService(CaptionSetRepo sets, ProductRepo productRepo, ProductService products, OpportunityRepo opportunities,
-                          WorkflowEngine workflow, ContentIdeasService ideas, InstagramStatsService instagram, SettingsService settings,
+                          WorkflowEngine workflow, ContentIdeasService ideas, CaptionLearning learning, SettingsService settings,
                           LlmClient llm) {
         this.sets = sets;
         this.productRepo = productRepo;
@@ -87,7 +86,7 @@ public class CaptionService {
         this.opportunities = opportunities;
         this.workflow = workflow;
         this.ideas = ideas;
-        this.instagram = instagram;
+        this.learning = learning;
         this.settings = settings;
         this.llm = llm;
     }
@@ -116,7 +115,7 @@ public class CaptionService {
                 : products.byIds(chosenIds);
 
         CaptionInput input = new CaptionInput(settings.today(), about, note, numbered(offered), pick, dealContext(deal), format, platforms,
-                recentCaptions(), pictures);
+                learning.topPosts(), learning.pastCaptions(platforms), learning.habits(), pictures);
         CaptionDraft draft = llm.captions(input);
         if (draft == null) throw new IllegalStateException("Claude returned no captions");
 
@@ -161,6 +160,31 @@ public class CaptionService {
 
     public void delete(Long id) {
         sets.deleteById(id);
+    }
+
+    /** She copied one box of these captions: keep it, with what was shown to her, so new captions learn from it. */
+    public void recordUse(Long id, String field, String text) {
+        CaptionUse.Field f;
+        try {
+            f = CaptionUse.Field.valueOf(field == null ? "" : field);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown caption box");
+        }
+        CaptionSet s = sets.findById(id).orElseThrow(() -> new IllegalArgumentException("Those captions were deleted"));
+        learning.recordUse(s.id, f, shown(view(s).result(), f), text);
+    }
+
+    /** The text the app showed her in one box. */
+    static String shown(CaptionComposer.Result r, CaptionUse.Field f) {
+        return switch (f) {
+            case YOUTUBE_TITLE -> r.youtube() == null ? null : r.youtube().title();
+            case YOUTUBE_DESCRIPTION -> r.youtube() == null ? null : r.youtube().description();
+            case YOUTUBE_PINNED -> r.youtube() == null ? null : r.youtube().pinnedComment();
+            case INSTAGRAM_CAPTION -> r.instagram() == null ? null : r.instagram().caption();
+            case INSTAGRAM_STORY -> r.instagram() == null ? null : r.instagram().storyText();
+            case TIKTOK_CAPTION -> r.tiktok() == null ? null : r.tiktok().caption();
+            case DM_REPLY -> r.dmReply();
+        };
     }
 
     View view(CaptionSet s) {
@@ -210,25 +234,6 @@ public class CaptionService {
             v.avoid().forEach(a -> parts.add("- avoid: " + field(a)));
         });
         return "<untrusted_deal>\n" + String.join("\n", parts) + "\n</untrusted_deal>";
-    }
-
-    /** Her own captions to learn her voice from: recent Instagram posts, then captions she made here. */
-    private List<String> recentCaptions() {
-        List<String> out = new ArrayList<>();
-        instagram.recentPosts(RECENT_CAPTIONS).stream().map(InstagramStatsService.Post::caption)
-                .filter(c -> c != null && !c.isBlank()).forEach(c -> out.add(field(c)));
-        if (out.size() < RECENT_CAPTIONS) {
-            for (CaptionSet s : sets.findTop30ByOrderByIdDesc()) {
-                if (out.size() >= RECENT_CAPTIONS) break;
-                try {
-                    CaptionDraft d = JSON.readValue(s.draftJson, CaptionDraft.class);
-                    if (d.instagram() != null && d.instagram().caption() != null && !d.instagram().caption().isBlank()) out.add(field(d.instagram().caption()));
-                } catch (Exception e) {
-                    // skip a damaged one
-                }
-            }
-        }
-        return out;
     }
 
     static List<BriefFile> pictures(List<Picture> in) {

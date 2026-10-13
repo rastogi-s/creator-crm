@@ -214,7 +214,8 @@ function shopSettingsCard(root, prefs, open) {
 let captionsState = null; // the form, kept while she moves between pages
 
 async function renderCaptions(root) {
-  const [products, deals, recent] = await Promise.all([api("GET", "/api/products"), api("GET", "/api/pipeline"), api("GET", "/api/captions")]);
+  const [products, deals, recent, learned] = await Promise.all([api("GET", "/api/products"), api("GET", "/api/pipeline"), api("GET", "/api/captions"),
+    api("GET", "/api/captions/learning").catch(() => null)]);
   const saved = loadPrefs("captions", { platforms: ["YOUTUBE", "INSTAGRAM", "TIKTOK"], youtubeFormat: "SHORT" });
   if (!captionsState) captionsState = { about: "", note: "", productIds: [], pick: true, opportunityId: null, pictures: [], result: null };
   const pre = captionsPrefill;
@@ -229,7 +230,8 @@ async function renderCaptions(root) {
   root.appendChild(el("div", { class: "links-head" },
     el("div", {},
       el("h1", {}, "Post captions"),
-      el("p", { class: "muted" }, "Say what your video is about and get the YouTube, Instagram and TikTok captions in your voice, with your shop links already in. Copy each one with a tap."))));
+      el("p", { class: "muted" }, "Say what your video is about and get the YouTube, Instagram and TikTok captions in your voice, with your shop links already in. Copy each one with a tap."),
+      learningLine(learned))));
 
   const resultBox = el("div", { id: "caption-result" });
   root.appendChild(captionForm(root, st, saved, products, deals, resultBox));
@@ -360,6 +362,21 @@ async function writeCaptions(root, st, saved, resultBox, btn, tweak) {
 
 let captionTab = null;
 
+/** "Claude has learned from 12 captions you used, 5 with your edits." */
+function learningLine(l) {
+  if (!l) return null;
+  if (!l.enabled) return el("p", { class: "small muted learning-line" }, "Learning from your past captions is off (Settings › You › Learning from your writing).");
+  if (!l.used) return el("p", { class: "small muted learning-line" }, "✨ Claude learns from every caption you copy, and most from the changes you make before copying.");
+  return el("p", { class: "small muted learning-line" }, "✨ Claude has learned from " + l.used + " caption" + (l.used === 1 ? "" : "s") + " you used"
+    + (l.edited ? ", " + l.edited + " with your changes" : "") + ". Keep editing before you copy and it keeps getting closer to you.");
+}
+
+/** She copied a box: tell the app, so new captions learn from it. Never blocks or bothers her if it fails. */
+function captionUsed(id, field, text) {
+  if (!id || !field || !text) return;
+  api("POST", "/api/captions/" + id + "/used", { field, text }).catch(() => {});
+}
+
 function showCaptions(box, v, st, root) {
   const r = v.result;
   const tabs = v.platforms.concat(r.products.length ? ["LINKS"] : []);
@@ -372,7 +389,7 @@ function showCaptions(box, v, st, root) {
     clear(seg);
     for (const t of tabs) seg.append(el("button", { role: "tab", class: t === captionTab ? "active" : null, "aria-selected": String(t === captionTab),
       onclick: () => { captionTab = t; drawTab(); } }, t === "LINKS" ? "Links" : PLATFORM_NAMES[t]));
-    clear(body).append(...captionPanel(captionTab, r));
+    clear(body).append(...captionPanel(captionTab, r, v.id));
   };
   const saved = loadPrefs("captions", { platforms: v.platforms, youtubeFormat: v.youtubeFormat });
   const again = (tweak) => action(async (e) => {
@@ -390,14 +407,15 @@ function showCaptions(box, v, st, root) {
     r.tips.length ? el("ul", { class: "tips small" }, r.tips.map((t) => el("li", {}, t))) : null,
     el("div", { class: "row tweak-row" }, el("span", { class: "small muted" }, "Not quite right?"),
       ["Shorter", "Funnier", "More emojis", "More professional"].map((t) => el("button", { class: "small", onclick: again(t.toLowerCase()) }, t)),
-      el("button", { class: "small", onclick: again(null) }, "Try again"))].filter(Boolean));
+      el("button", { class: "small", onclick: again(null) }, "Try again")),
+    el("p", { class: "small muted learning-line" }, "✏️ Change anything before you copy it. Claude learns from what you copy, so your next captions sound more like you.")].filter(Boolean));
   box.append(card);
   drawTab();
 }
 
 /** One box per thing she pastes somewhere, each with its own Copy button. Edits in a box are what gets copied. */
-function captionPanel(tab, r) {
-  const field = (label, text, hint) => {
+function captionPanel(tab, r, id) {
+  const field = (label, text, hint, key) => {
     if (!text) return null;
     const area = el("textarea", { class: "copy-area", rows: "2", "aria-label": label });
     area.value = text;
@@ -406,24 +424,26 @@ function captionPanel(tab, r) {
     requestAnimationFrame(fit);
     return el("div", { class: "copy-field" },
       el("div", { class: "row" }, el("strong", {}, label), el("div", { class: "spacer" }),
-        el("span", { class: "small muted count" }, text.length + " characters"), copyButton(() => area.value, "Copy", { class: "copy-btn primary small" })),
+        el("span", { class: "small muted count" }, text.length + " characters"), copyButton(() => { captionUsed(id, key, area.value); return area.value; }, "Copy", { class: "copy-btn primary small" })),
       hint ? el("div", { class: "small muted" }, hint) : null, area);
   };
   if (tab === "YOUTUBE" && r.youtube) {
-    return [field("Title", r.youtube.title), field("Description", r.youtube.description, "Your shop links and Amazon's disclosure are already at the end."),
-      field("Tags", r.youtube.tags, "Paste into Tags under \"Show more\" when you upload."), field("Comment to pin", r.youtube.pinnedComment, "Post it, then tap ⋮ › Pin.")].filter(Boolean);
+    return [field("Title", r.youtube.title, null, "YOUTUBE_TITLE"),
+      field("Description", r.youtube.description, "Your shop links and Amazon's disclosure are already at the end.", "YOUTUBE_DESCRIPTION"),
+      field("Tags", r.youtube.tags, "Paste into Tags under \"Show more\" when you upload."),
+      field("Comment to pin", r.youtube.pinnedComment, "Post it, then tap ⋮ › Pin.", "YOUTUBE_PINNED")].filter(Boolean);
   }
   if (tab === "INSTAGRAM" && r.instagram) {
-    return [field("Caption", r.instagram.caption),
+    return [field("Caption", r.instagram.caption, null, "INSTAGRAM_CAPTION"),
       r.keyword ? el("div", { class: "keyword-row" }, el("span", {}, "Comment keyword: "), el("strong", {}, r.keyword), copyButton(r.keyword, "Copy", { class: "copy-btn small" })) : null,
-      field("DM reply with your links", r.dmReply, r.keyword ? "Paste into your comment-to-DM tool (like ManyChat) for the word " + r.keyword + ", or send it when someone asks." : "Send it when someone asks for the link."),
-      field("Story text", r.instagram.storyText, r.products.length ? "Add a link sticker to the Story and paste one of these links:" : null),
+      field("DM reply with your links", r.dmReply, r.keyword ? "Paste into your comment-to-DM tool (like ManyChat) for the word " + r.keyword + ", or send it when someone asks." : "Send it when someone asks for the link.", "DM_REPLY"),
+      field("Story text", r.instagram.storyText, r.products.length ? "Add a link sticker to the Story and paste one of these links:" : null, "INSTAGRAM_STORY"),
       r.products.length && r.instagram.storyText ? el("div", { class: "sticker-links" }, r.products.map((p) =>
         copyButton(p.url, "Copy link: " + p.name, { class: "copy-btn small" }))) : null].filter(Boolean);
   }
   if (tab === "TIKTOK" && r.tiktok) {
-    return [field("Caption", r.tiktok.caption),
-      field("Keyword auto-reply for DMs", r.dmReply, "TikTok can't DM people who comment. Put your shop list in your bio, and paste this as a keyword auto-reply in TikTok's Business Suite.")].filter(Boolean);
+    return [field("Caption", r.tiktok.caption, null, "TIKTOK_CAPTION"),
+      field("Keyword auto-reply for DMs", r.dmReply, "TikTok can't DM people who comment. Put your shop list in your bio, and paste this as a keyword auto-reply in TikTok's Business Suite.", "DM_REPLY")].filter(Boolean);
   }
   if (tab === "LINKS") {
     return [el("ul", { class: "product-list compact" }, r.products.map((p) => el("li", { class: "product-card" },

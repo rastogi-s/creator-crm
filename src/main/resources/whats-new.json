@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.69.0",
+    "title": "Captions that keep learning your voice",
+    "features": [
+      {
+        "id": "caption-learning",
+        "title": "Post captions learn from what you post",
+        "body": "Every caption you copy from Post captions is remembered, and the changes you make before copying count most: if you cut it shorter, swap words or drop emojis, the next captions start that way. Claude also looks at your Instagram posts that got the most likes and comments, and if you keep pressing Shorter or Funnier, new captions come out that way from the start. You can turn this off in Settings › You › Learning from your writing.",
+        "tryIt": "#captions"
+      }
+    ]
+  },
+  {
     "version": "1.68.0",
     "title": "Captions with your shop links",
     "features": [

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.creatorcrm.FakeLlm;
 import com.creatorcrm.repo.CaptionSetRepo;
+import com.creatorcrm.repo.CaptionUseRepo;
 import com.creatorcrm.repo.ProductRepo;
 import com.creatorcrm.settings.SettingsService;
 import java.util.Base64;
@@ -39,13 +40,15 @@ class ShopIntegrationTest {
     @Autowired ProductRepo productRepo;
     @Autowired CaptionSetRepo captionRepo;
     @Autowired SettingsService settings;
+    @Autowired CaptionUseRepo useRepo;
+    @Autowired CaptionLearning learning;
 
     @BeforeEach
     void reset() {
         captionRepo.deleteAll();
         productRepo.deleteAll();
         settings.update(Map.of(SettingsService.AMAZON_TAG, "ava-20", SettingsService.CAPTION_HASHTAGS, "avamakes, #cozy",
-                SettingsService.DISCLOSURE_TAG, ""));
+                SettingsService.DISCLOSURE_TAG, "", SettingsService.LEARN_FROM_HISTORY, "true"));
         llm.lastCaptionInput = null;
     }
 
@@ -117,6 +120,47 @@ class ShopIntegrationTest {
         else products.update(serum.id(), new ProductService.Request("https://www.amazon.com/dp/B0DEMO0009", "Dew Drop Serum", null, null, null));
         assertThat(captions.get(v.id()).orElseThrow().result().dmReply()).doesNotContain(url)
                 .containsAnyOf("https://shop.example/products/lamp-new", "https://www.amazon.com/dp/B0DEMO0009?tag=ava-20");
+    }
+
+    @Test
+    void newCaptionsLearnFromWhatSheCopiedAndChanged() {
+        ProductService.View serum = products.add(new ProductService.Request("https://www.amazon.com/Dew-Drop-Serum/dp/B0DEMO0001", null, null, null, null));
+        CaptionService.View first = captions.write(new CaptionService.Request("Morning routine", "funnier", null, List.of(serum.id()), false,
+                "SHORT", List.of("INSTAGRAM", "TIKTOK"), List.of()));
+        assertThat(llm.lastCaptionInput.pastCaptions()).isEmpty();
+        assertThat(llm.lastCaptionInput.habits()).isEmpty();
+
+        // She shortens the Instagram caption before copying it, and copies the TikTok one as it is.
+        captions.recordUse(first.id(), "INSTAGRAM_CAPTION", "glow mode: on ✨ Comment GLOW for the link\n\n#ad #skincare");
+        captions.recordUse(first.id(), "TIKTOK_CAPTION", first.result().tiktok().caption());
+        assertThat(learning.stats().used()).isEqualTo(2);
+        assertThat(learning.stats().edited()).isEqualTo(1);
+        // Copying the same box again replaces the earlier copy.
+        captions.recordUse(first.id(), "INSTAGRAM_CAPTION", "glow mode: on ✨ Comment GLOW for the link\nhttps://www.amazon.com/dp/B0DEMO0001?tag=ava-20");
+        assertThat(useRepo.count()).isEqualTo(2);
+
+        captions.write(new CaptionService.Request("Night routine", "funnier", null, List.of(serum.id()), false, "SHORT", List.of("INSTAGRAM"), List.of()));
+        List<String> past = llm.lastCaptionInput.pastCaptions();
+        // Only Instagram was asked for: her edited Instagram caption comes first, with what Claude had written.
+        assertThat(past).hasSize(1);
+        assertThat(past.get(0)).contains("edited=\"yes\"", "What you wrote:", "Morning glow", "glow mode: on ✨").doesNotContain("http", "#avamakes");
+        assertThat(llm.lastCaptionInput.habits()).isEmpty(); // asked once before this one
+
+        captions.write(new CaptionService.Request("Evening routine", null, null, List.of(serum.id()), false, "SHORT", List.of("TIKTOK"), List.of()));
+        assertThat(llm.lastCaptionInput.habits()).singleElement().asString().startsWith("funnier");
+        assertThat(llm.lastCaptionInput.pastCaptions()).singleElement().asString().contains("TikTok caption", "used it as you wrote it");
+
+        assertThatThrownBy(() -> captions.recordUse(first.id(), "SOMETHING", "x")).hasMessageContaining("Unknown");
+
+        // Learning off: nothing from the past goes to Claude.
+        settings.update(Map.of(SettingsService.LEARN_FROM_HISTORY, "false"));
+        captions.write(new CaptionService.Request("Weekend routine", null, null, List.of(), false, "SHORT", List.of("INSTAGRAM"), List.of()));
+        assertThat(llm.lastCaptionInput.pastCaptions()).isEmpty();
+        assertThat(llm.lastCaptionInput.habits()).isEmpty();
+
+        // Deleting captions forgets what she copied from them.
+        captions.delete(first.id());
+        assertThat(useRepo.count()).isZero();
     }
 
     @Test

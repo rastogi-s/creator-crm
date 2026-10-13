@@ -1,5 +1,6 @@
 package com.creatorcrm.web;
 
+import com.creatorcrm.shop.CaptionLearning;
 import com.creatorcrm.shop.CaptionService;
 import com.creatorcrm.shop.ProductService;
 import java.util.List;
@@ -22,12 +23,16 @@ public class ShopController {
 
     public record Bulk(List<String> urls) {}
 
+    public record Used(String field, String text) {}
+
     private final ProductService products;
     private final CaptionService captions;
+    private final CaptionLearning learning;
 
-    public ShopController(ProductService products, CaptionService captions) {
+    public ShopController(ProductService products, CaptionService captions, CaptionLearning learning) {
         this.products = products;
         this.captions = captions;
+        this.learning = learning;
     }
 
     @GetMapping("/products")
@@ -80,5 +85,17 @@ public class ShopController {
     @DeleteMapping("/captions/{id}")
     public void deleteCaption(@PathVariable Long id) {
         captions.delete(id);
+    }
+
+    /** She copied one caption box (edits included): new captions learn from it. */
+    @PostMapping("/captions/{id}/used")
+    public void used(@PathVariable Long id, @RequestBody Used body) {
+        captions.recordUse(id, body.field(), body.text());
+    }
+
+    /** How many captions she has used and edited, for the "Claude is learning" line. */
+    @GetMapping("/captions/learning")
+    public CaptionLearning.Stats learning() {
+        return learning.stats();
     }
 }
