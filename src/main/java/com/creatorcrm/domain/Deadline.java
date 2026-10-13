@@ -13,6 +13,11 @@ public class Deadline {
     public LocalDate dueDate;
     public String description;
     public boolean done;
+    /** Why the app cleared it on its own (the deal moved past it, the date passed); null if she did. */
+    public String doneReason;
+    public java.time.OffsetDateTime doneAt;
+    /** She reopened it after the app cleared it: the date rules leave it alone from then on. */
+    public boolean keptOpen;
     /** The event on her "Creator CRM" Google calendar, and a fingerprint of what it last showed. */
     public String calendarEventId;
     public String calendarFingerprint;

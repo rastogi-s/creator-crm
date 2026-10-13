@@ -186,8 +186,11 @@ class WorkflowIntegrationTest {
         assertThat(o.status).isEqualTo(OpportunityStatus.CONTENT_TO_CREATE);
         assertThat(open(o)).anyMatch(t -> t.type == TaskType.CREATE_CONTENT && due.equals(t.dueDate));
 
-        // Digest shows the overdue contract signing as urgent
-        assertThat(digest.morning().urgent()).anyMatch(i -> i.opportunityId().equals(opp().id) && i.overdueDays() > 0);
+        // The deal is past the contract now, so the overdue signing to-do closed itself and says why
+        Task signed = tasks.findById(sign.id).orElseThrow();
+        assertThat(signed.status).isEqualTo(TaskStatus.DONE);
+        assertThat(signed.autoClosedReason).startsWith("The " + brand + " deal moved on to ");
+        assertThat(digest.morning().urgent()).noneMatch(i -> "TASK".equals(i.kind()) && sign.id.equals(i.refId()));
 
         // Brand pulls out -> closed, open work dismissed
         email(Direction.INBOUND, 12, "Unfortunately we're pausing the campaign.", analysis(Intent.DECLINE, brand, false, List.of()));

@@ -36,9 +36,13 @@ import com.creatorcrm.repo.TaskRepo;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -60,6 +64,25 @@ public class WorkflowEngine {
     private static final Set<Intent> LEAD_INTENTS = EnumSet.of(Intent.NEW_OPPORTUNITY, Intent.RATES_REQUEST,
             Intent.MEDIA_KIT_REQUEST, Intent.AVAILABILITY_REQUEST, Intent.APPLICATION_FORM, Intent.NEGOTIATION,
             Intent.PITCH, Intent.SENT_RATES_OR_MEDIA_KIT);
+
+    /** To-dos a message from her finishes, beyond the reply to-dos every message of hers answers. */
+    private static final Map<Intent, Set<TaskType>> DONE_BY_HER = new EnumMap<>(Intent.class);
+    /** To-dos a message from the brand makes unnecessary. */
+    private static final Map<Intent, Set<TaskType>> DONE_BY_BRAND = new EnumMap<>(Intent.class);
+
+    static {
+        Set<TaskType> content = EnumSet.of(TaskType.CREATE_CONTENT, TaskType.REVISE_CONTENT, TaskType.SUBMIT_CONTENT);
+        DONE_BY_HER.put(Intent.INVOICE_SENT, EnumSet.of(TaskType.SEND_INVOICE));
+        DONE_BY_HER.put(Intent.CONTRACT_SIGNED, EnumSet.of(TaskType.SIGN_CONTRACT, TaskType.REVIEW_CONTRACT));
+        DONE_BY_HER.put(Intent.CONTENT_SUBMITTED, content);
+        Set<TaskType> posted = EnumSet.copyOf(content);
+        posted.add(TaskType.POST_CONTENT);
+        DONE_BY_HER.put(Intent.CONTENT_POSTED, posted);
+        DONE_BY_BRAND.put(Intent.CONTENT_APPROVED, content);
+        DONE_BY_BRAND.put(Intent.PAYMENT_UPDATE, EnumSet.of(TaskType.CHASE_PAYMENT));
+    }
+
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
 
     private final BrandRepo brands;
     private final ConversationRepo conversations;
@@ -121,6 +144,12 @@ public class WorkflowEngine {
                 }
             }
             IntentRules.Rule rule = IntentRules.of(a.intent());
+            for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
+                if (DONE_BY_BRAND.getOrDefault(a.intent(), Set.of()).contains(t.type)) {
+                    autoClose(t, TaskStatus.DONE, brandSaid(o, a.intent(), day));
+                }
+            }
+            if (rule.status() == OpportunityStatus.CLOSED) o.closedReason = "Declined by brand";
             if (rule.status() != null) {
                 setStatus(o, rule.status(), at);
             } else if (a.requiresReply() && (o.status == OpportunityStatus.PITCHED
@@ -129,7 +158,6 @@ public class WorkflowEngine {
             }
             if (a.intent() == Intent.PAYMENT_UPDATE) advanceTo(o, DealStage.PAYMENT, at);
             if (rule.status() == OpportunityStatus.CLOSED) {
-                o.closedReason = "Declined by brand";
                 closeOpenWork(o);
             } else {
                 TaskType type = rule.task() != null ? rule.task() : (a.requiresReply() ? TaskType.REPLY : null);
@@ -161,10 +189,14 @@ public class WorkflowEngine {
     }
 
     private void onCreatorMessage(Opportunity o, Intent intent, LocalDate day, OffsetDateTime at) {
+        Set<TaskType> finished = DONE_BY_HER.getOrDefault(intent, Set.of());
         for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
-            if (TaskType.ANSWERED_BY_OUTBOUND.contains(t.type)
-                    || (intent == Intent.INVOICE_SENT && t.type == TaskType.SEND_INVOICE)) completeTask(t);
+            if (finished.contains(t.type)) autoClose(t, TaskStatus.DONE, sheSaid(o, intent, day));
+            else if (TaskType.ANSWERED_BY_OUTBOUND.contains(t.type)) {
+                autoClose(t, TaskStatus.DONE, "You wrote back to " + brandName(o) + " on " + DAY.format(day));
+            }
         }
+        if (intent == Intent.CREATOR_DECLINED) o.closedReason = "Declined by creator";
         IntentRules.Rule rule = IntentRules.of(intent);
         if (rule.status() != null && (o.status.isOpen() || intent == Intent.PITCH)) {
             OpportunityStatus target = rule.status();
@@ -173,7 +205,6 @@ public class WorkflowEngine {
         }
         if (intent == Intent.INVOICE_SENT) advanceTo(o, DealStage.PAYMENT, at);
         if (intent == Intent.CREATOR_DECLINED) {
-            o.closedReason = "Declined by creator";
             closeOpenWork(o);
         } else if (intent != Intent.CONTENT_POSTED && intent != Intent.INVOICE_SENT) {
             // An invoice has its own due date; chasing it before then would be rude.
@@ -183,12 +214,77 @@ public class WorkflowEngine {
         opportunities.save(o);
     }
 
-    /** Marks the deal's open tasks of these types done (e.g. "confirm payment" once the invoice is paid). */
+    /** Marks the deal's open tasks of these types done (e.g. "confirm payment" once the invoice is paid), saying why. */
     @Transactional
-    public void completeOpenTasks(Long opportunityId, Set<TaskType> types) {
+    public void completeOpenTasks(Long opportunityId, Set<TaskType> types, String why) {
         for (Task t : tasks.findByOpportunityIdAndStatus(opportunityId, TaskStatus.OPEN)) {
-            if (types.contains(t.type)) completeTask(t);
+            if (types.contains(t.type)) autoClose(t, TaskStatus.DONE, why);
         }
+    }
+
+    /**
+     * The app closing a to-do on its own because the work is done or no longer needed: DONE when it happened (she
+     * replied, the brand paid), DISMISSED when it won't (the deal closed, the date passed). The reason is shown to her
+     * with a Reopen button, so a wrong guess costs one tap.
+     */
+    @Transactional
+    public void autoClose(Task t, TaskStatus status, String why) {
+        if (t.status != TaskStatus.OPEN) return;
+        t.status = status;
+        t.completedAt = OffsetDateTime.now();
+        t.autoClosedReason = why == null ? null : why.length() > 500 ? why.substring(0, 500) : why;
+        tasks.save(t);
+        if (status == TaskStatus.DONE) activity.save(Activity.of(t.opportunityId, Activity.TASK_DONE, t.description));
+    }
+
+    /** She sent the email written for a to-do (its draft carries the to-do): that to-do is done. */
+    @Transactional
+    public void draftForTaskSent(Long taskId, LocalDate day) {
+        tasks.findById(taskId).ifPresent(t -> autoClose(t, TaskStatus.DONE, "You sent the email for it on " + DAY.format(day)));
+    }
+
+    /** The app clearing a deadline on its own, saying why. */
+    @Transactional
+    public void autoClear(Deadline d, String why) {
+        if (d.done) return;
+        d.done = true;
+        d.doneAt = OffsetDateTime.now();
+        d.doneReason = why == null ? null : why.length() > 500 ? why.substring(0, 500) : why;
+        deadlines.save(d);
+    }
+
+    private String sheSaid(Opportunity o, Intent intent, LocalDate day) {
+        String b = brandName(o);
+        String on = " on " + DAY.format(day);
+        return switch (intent) {
+            case INVOICE_SENT -> "You sent " + b + " the invoice" + on;
+            case CONTRACT_SIGNED -> "You sent " + b + " the signed contract" + on;
+            case CONTENT_SUBMITTED -> "You sent " + b + " your content" + on;
+            case CONTENT_POSTED -> "You told " + b + " the post is live" + on;
+            default -> "You wrote back to " + b + on;
+        };
+    }
+
+    private String brandSaid(Opportunity o, Intent intent, LocalDate day) {
+        String b = brandName(o);
+        String on = " on " + DAY.format(day);
+        return switch (intent) {
+            case CONTENT_APPROVED -> b + " approved your content" + on;
+            case PAYMENT_UPDATE -> b + " said the payment is on its way" + on;
+            default -> b + " wrote" + on;
+        };
+    }
+
+    /** Why a deal's open work was dropped when it closed or went cold. */
+    public String closedWhy(Opportunity o) {
+        String b = brandName(o);
+        String r = o.closedReason == null ? "" : o.closedReason.strip();
+        if ("Paid".equalsIgnoreCase(r)) return b + " paid, so the deal is wrapped up";
+        if ("Declined by brand".equals(r)) return b + " said no to this one";
+        if ("Declined by creator".equals(r)) return "You turned " + b + " down";
+        if ("Not a lead".equals(r)) return "You marked the chat with " + b + " as not a lead";
+        String what = o.status == OpportunityStatus.COLD ? "The " + b + " deal went cold" : "The " + b + " deal was closed";
+        return r.isEmpty() ? what : what + ": " + Character.toLowerCase(r.charAt(0)) + r.substring(1);
     }
 
     @Transactional
@@ -247,15 +343,47 @@ public class WorkflowEngine {
     }
 
     /** To-dos that belong to a stage: once the deal is past it, they're done. */
-    private static DealStage stageOf(TaskType t) {
+    static DealStage stageOf(TaskType t) {
         return switch (t) {
             case SIGN_CONTRACT, REVIEW_CONTRACT -> DealStage.CONTRACT;
             case CONFIRM_PRODUCT -> DealStage.PRODUCT;
             case CREATE_CONTENT, REVISE_CONTENT, SUBMIT_CONTENT -> DealStage.CREATE_CONTENT;
             case POST_CONTENT -> DealStage.POST;
             case SEND_INVOICE -> DealStage.INVOICE;
+            case CHASE_PAYMENT, CONFIRM_PAYMENT -> DealStage.PAYMENT;
             default -> null;
         };
+    }
+
+    /** Deadlines that belong to a stage: once the deal is past it, the date no longer needs watching. */
+    static DealStage stageOf(DeadlineType t) {
+        return switch (t) {
+            case CONTRACT -> DealStage.CONTRACT;
+            case CONTENT_DUE -> DealStage.CREATE_CONTENT;
+            case APPROVAL -> DealStage.BRAND_APPROVAL;
+            case POSTING -> DealStage.POST;
+            case PAYMENT -> DealStage.PAYMENT;
+            default -> null;
+        };
+    }
+
+    /**
+     * Closes the to-dos and deadlines of the stages before this one, and an application deadline once the brand has
+     * said yes. Only those that existed before the deal got here: a contract she uploads for review later still waits.
+     */
+    private void closePastStages(Opportunity o, DealStage stage, OffsetDateTime reachedAt) {
+        if (stage == null) return;
+        String why = "The " + brandName(o) + " deal moved on to " + stage.label;
+        for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
+            DealStage of = stageOf(t.type);
+            if (of != null && stage.isAfter(of) && (t.createdAt == null || !t.createdAt.isAfter(reachedAt))) autoClose(t, TaskStatus.DONE, why);
+        }
+        for (Deadline d : deadlines.findByOpportunityIdOrderByDueDateAsc(o.id)) {
+            if (d.done || d.keptOpen) continue;
+            DealStage of = stageOf(d.type);
+            if (d.type == DeadlineType.APPLICATION) autoClear(d, brandName(o) + " already said yes, so the application is behind you");
+            else if (of != null && stage.isAfter(of)) autoClear(d, why);
+        }
     }
 
     /**
@@ -276,18 +404,17 @@ public class WorkflowEngine {
     public void moveTo(Opportunity o, DealStage target, OffsetDateTime at) {
         setStatus(o, statusFor(o, target), at);
         moveStage(o, target, at);
-        for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
-            DealStage of = stageOf(t.type);
-            if (of != null && target.isAfter(of)) completeTask(t);
-        }
+        closePastStages(o, target, OffsetDateTime.now());
         o.updatedAt = OffsetDateTime.now();
         opportunities.save(o);
     }
 
     private void moveStage(Opportunity o, DealStage stage, OffsetDateTime at) {
         if (stage == o.stage) return;
+        boolean forward = stage != null && stage.isAfter(o.stage);
         o.stage = stage;
         if (stage != null) stages.save(StageEntry.of(o.id, stage, at));
+        if (forward) closePastStages(o, stage, OffsetDateTime.now());
     }
 
     private Opportunity createOpportunity(Message m, Conversation conv, MessageAnalysis a) {
@@ -491,11 +618,8 @@ public class WorkflowEngine {
     }
 
     private void closeOpenWork(Opportunity o) {
-        for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
-            t.status = TaskStatus.DISMISSED;
-            t.completedAt = OffsetDateTime.now();
-            tasks.save(t);
-        }
+        String why = closedWhy(o);
+        for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) autoClose(t, TaskStatus.DISMISSED, why);
         followUps.stop(o);
         supersedePendingDrafts(o);
     }

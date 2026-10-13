@@ -426,6 +426,13 @@ button.link:hover { background: none; color: var(--text); }
 
 /* ---------- Today, Deals, More ---------- */
 .today-sums { color: var(--muted); margin: -.25rem 0 1rem; }
+/* "Tell Claude" on a to-do: the box she writes what should happen next in. */
+.tell-claude { margin-top: .5rem; display: grid; gap: .4rem; }
+.tell-claude textarea { width: 100%; box-sizing: border-box; }
+.tell-claude .row { display: flex; gap: .5rem; flex-wrap: wrap; }
+.tell-claude p { margin: 0; }
+/* A to-do the app closed on its own: why, in a quieter voice than the to-do itself. */
+.detail.auto-closed { font-style: italic; }
 details.more-items > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .5rem; }
 details.more-items > summary::-webkit-details-marker { display: none; }
 details.more-items > summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }

@@ -239,6 +239,53 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "auto-close"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#today");
+    const box = page.locator("#closed-for-you");
+    await box.waitFor({ state: "attached" });
+    await say("To-dos now close themselves when the work is done.", 3400);
+    await click(box.locator("summary"));
+    await say("When you reply, send the contract or the invoice, or the deal moves on, the to-do is ticked off for you.", 4600);
+    const item = box.locator(".item").first();
+    await point(item.locator(".detail"));
+    await say("Each one says why it closed, so you can trust it.", 3600);
+    await say("Dates that passed close too: an application deadline, or a lead that went quiet for a month.", 4400);
+    await point(item.getByRole("button", { name: "Reopen" }));
+    await say("Got one wrong? Reopen puts it back on your list, and it stays there.", 4000);
+    await click(item.getByRole("button", { name: "Reopen" }));
+    await say("Back on your list.", 2400);
+    const open = box.locator(".item").filter({ has: page.getByRole("button", { name: "Open" }) }).first();
+    if (await open.count()) {
+      await click(open.getByRole("button", { name: "Open" }));
+      const why = drawer.locator(".auto-closed").first();
+      await why.waitFor();
+      await point(why);
+      await say("The deal shows it too, under Tasks.", 3400);
+      await click(drawer.getByRole("button", { name: "Close" }));
+    }
+    await say("", 600);
+  },
+
+  async "tell-claude"(page) {
+    const { say, point, click } = helpers(page);
+    await page.goto(BASE + "/#today");
+    const item = page.locator("#view-today .item").filter({ has: page.getByRole("button", { name: "Tell Claude" }) }).first();
+    await item.waitFor({ state: "attached" });
+    await say("Every to-do about a brand now has a Tell Claude button.", 3400);
+    await click(item.getByRole("button", { name: "Tell Claude" }));
+    const box = item.locator(".tell-claude textarea");
+    await point(box);
+    await say("Write what should happen next, in your own words.", 3200);
+    await box.pressSequentially("Say yes, but ask for $800 and two weeks to film", { delay: 45 });
+    await click(item.getByRole("button", { name: "Write it" }));
+    await openCard(page).waitFor();
+    await say("Claude writes the email your way. Check it, change anything, then send.", 4200);
+    await say("Sending it ticks the to-do off for you.", 3200);
+    await say("", 600);
+  },
+
   async "calendar-sync"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

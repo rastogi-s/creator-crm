@@ -55,6 +55,27 @@ async function renderToday(root) {
     el("p", {}, o.paid + " paid · " + o.gifted + " gifted · " + o.affiliate + " affiliate · " + o.other + " other"), newList));
 
   root.appendChild(card(sectionTitle("calendar", "teal", "Upcoming", t.upcoming.length), itemList(t.upcoming, "Nothing scheduled in the next two weeks.", false)));
+  if (t.closedForYou && t.closedForYou.length) root.appendChild(closedForYouCard(t.closedForYou));
+}
+
+// To-dos and dates the app closed on its own in the last few days (she replied, the deal moved on, the date
+// passed), each with why, so she can trust it and put back one it got wrong.
+function closedForYouCard(items) {
+  const c = el("details", { class: "card more-items" },
+    el("summary", {}, el("h3", {}, sectionTitle("check", "green", "Closed for you", items.length))),
+    el("p", { class: "small muted" }, "The app closes a to-do when the work is done or no longer needed: you replied, "
+      + "the brand moved the deal on, an invoice was paid, or the date passed. Reopen any that still need you."),
+    el("ul", { class: "list" }, items.map((it) => el("li", { class: "item closed-item" },
+      el("div", { class: "body" },
+        el("div", { class: "title" }, it.title),
+        el("div", { class: "detail" }, it.reason + " · " + fmtDateTime(it.at))),
+      el("div", { class: "actions" },
+        el("button", { class: "small", title: "This still needs you: put it back on your list", onclick: action(async () => {
+          await api("POST", (it.kind === "DEADLINE" ? "/api/deadlines/" : "/api/tasks/") + it.refId + "/reopen"); route();
+        }, "Back on your list") }, "Reopen"),
+        it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null)))));
+  c.id = "closed-for-you";
+  return c;
 }
 
 // Win back past brands: re-pitches drafted for brands she worked with before, a few each week.
@@ -108,9 +129,39 @@ function emailButtons(opportunityId, info) {
       title: "Open this email in Gmail" }, "Open in Gmail") : null];
 }
 
+// "Tell Claude": she says in her own words what should happen next with a to-do, and Claude writes the email for
+// it, opened for review. The button shows the box; nothing is sent until she sends the draft.
+function tellClaude(taskId) {
+  const text = el("textarea", { rows: "2", maxlength: "1000", "aria-label": "What should happen next",
+    placeholder: "What should happen next? e.g. Say yes, but ask for $800 and two weeks to film" });
+  const write = el("button", { class: "small primary", onclick: action(async () => {
+    if (!text.value.trim()) { text.focus(); return; }
+    write.disabled = true;
+    try {
+      const made = await api("POST", "/api/tasks/" + taskId + "/ask", { instruction: text.value.trim() });
+      form.classList.add("hidden");
+      text.value = "";
+      showDraft(made);
+    } finally {
+      write.disabled = false;
+    }
+  }, "Draft ready to review") }, "Write it");
+  const form = el("div", { class: "tell-claude hidden" }, text,
+    el("div", { class: "row" }, write,
+      el("button", { class: "small", onclick: () => form.classList.add("hidden") }, "Cancel")),
+    el("p", { class: "small muted" }, "Claude writes the email for this to-do your way. You'll see it before anything is sent."));
+  const button = el("button", { class: "small", title: "Tell Claude what to do next with this", onclick: () => {
+    form.classList.toggle("hidden");
+    if (!form.classList.contains("hidden")) text.focus();
+  } }, icon("sparkle"), " Tell Claude");
+  return { button, form };
+}
+
 function itemList(items, emptyText, numbered) {
   if (!items.length) return emptyLine(emptyText);
-  return el("ul", { class: "list" }, items.map((it, i) => el("li", { class: "item" },
+  return el("ul", { class: "list" }, items.map((it, i) => {
+    const ask = it.kind === "TASK" && it.opportunityId ? tellClaude(it.refId) : null;
+    return el("li", { class: "item" },
     numbered ? el("span", { class: "num" }, (i + 1) + ".") : null,
     el("div", { class: "body" },
       el("div", { class: "title" }, it.title),
@@ -120,8 +171,10 @@ function itemList(items, emptyText, numbered) {
         it.lead ? leadBadge(it.lead, it.leadWhy) : null, it.lead ? " " : null,
         // The Overdue badge already says it; the text version is for emails and Claude.
         it.overdueDays > 0 ? (it.detail || "").replace(/\s*·?\s*⚠️ OVERDUE by \d+ days?/, "") : it.detail),
-      it.task ? taskAbout(it.task.brief, it.task.links) : null),
+      it.task ? taskAbout(it.task.brief, it.task.links) : null,
+      ask ? ask.form : null),
     el("div", { class: "actions" },
+      ask ? ask.button : null,
       it.kind === "TASK" ? emailButtons(it.opportunityId, it.task) : null,
       it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
       it.kind === "DEADLINE" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/deadlines/" + it.refId + "/done"); route(); }, "Deadline cleared") }, "Done") : null,
@@ -131,7 +184,8 @@ function itemList(items, emptyText, numbered) {
         await api("POST", "/api/invoices/" + it.refId + "/paid"); route();
       }, "Marked paid") }, "Mark paid") : null,
       it.kind === "INVOICE" ? el("button", { class: "small", onclick: () => openInvoice(it.refId) }, "Open")
-        : it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null))));
+        : it.opportunityId ? el("button", { class: "small", onclick: () => openDeal(it.opportunityId) }, "Open") : null));
+  }));
 }
 
 function followUpList(items) {

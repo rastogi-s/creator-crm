@@ -12,4 +12,6 @@ public interface DeadlineRepo extends JpaRepository<Deadline, Long> {
     List<Deadline> findByDoneFalseAndDueDateLessThanEqualOrderByDueDateAsc(LocalDate date);
 
     List<Deadline> findByOpportunityIdOrderByDueDateAsc(Long opportunityId);
+
+    List<Deadline> findByDoneReasonIsNotNullAndDoneAtAfterOrderByDoneAtDesc(java.time.OffsetDateTime after);
 }
