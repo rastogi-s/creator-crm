@@ -127,7 +127,9 @@ function ideasCard(id, brand, v, refresh) {
       idea.concept ? el("p", {}, idea.concept) : null,
       idea.shots && idea.shots.length ? el("ol", { class: "shots" }, idea.shots.map((s) => el("li", {}, s))) : null,
       idea.caption ? [el("div", { class: "row" }, el("strong", { class: "small" }, "Caption"), el("div", { class: "spacer" }),
-        el("button", { class: "small", onclick: action(async () => { await navigator.clipboard.writeText(idea.caption); }, "Caption copied") }, "Copy")),
+        el("button", { class: "small", title: "YouTube, Instagram and TikTok captions for this idea, with your shop links",
+          onclick: () => { closeDrawer(); openCaptions({ about: idea.title + ". " + (idea.concept || ""), opportunityId: Number(id) }); } }, "Write captions"),
+        copyButton(() => idea.caption, "Copy", { class: "copy-btn small" })),
         el("div", { class: "caption" }, idea.caption)] : null,
       idea.whyItFits ? el("p", { class: "small muted" }, "Why it fits you: " + idea.whyItFits) : null)));
   }

@@ -68,6 +68,7 @@ public class DemoData implements ApplicationRunner {
     private final MessageRepo messages;
     private final BrandNewsRepo brandNews;
     private final DmReminders dmReminders;
+    private final com.creatorcrm.shop.ProductService products;
 
     /** Instagram DMs: who, hours ago, from her or not, text. Claude reads the brand ones as leads (see DemoInbox). */
     record Dm(String handle, int hoursAgo, boolean mine, String text) {}
@@ -95,7 +96,8 @@ public class DemoData implements ApplicationRunner {
                     ActivityRepo activity, WinBack winBack, ContractService contracts, ContractRepo contractRepo,
                     CalendarSync calendar, CampaignResults results, CampaignResultRepo resultRepo, MessageRepo messages,
                     BrandNewsRepo brandNews,
-                    DmReminders dmReminders) {
+                    DmReminders dmReminders, com.creatorcrm.shop.ProductService products) {
+        this.products = products;
         this.brandNews = brandNews;
         this.dmReminders = dmReminders;
         this.messages = messages;
@@ -227,8 +229,22 @@ public class DemoData implements ApplicationRunner {
         // Deal dates on the pretend Google Calendar, as if she had connected it.
         calendar.sync();
         dmReminders.run(); // Glow Haus has waited past the reminder time
+        // Her shop links, as if she had pasted them from Amazon, Walmart and a brand's site.
+        settings.update(Map.of(SettingsService.AMAZON_TAG, "ava-20", SettingsService.CAPTION_HASHTAGS, "#avamakes"));
+        for (String[] p : DEMO_PRODUCTS) {
+            products.add(new com.creatorcrm.shop.ProductService.Request(p[0], p[1], p[2], p[3], p[4].isEmpty() ? null : p[4]));
+        }
         log.info("Demo mode: sign in as '{}' / '{}'", USERNAME, PASSWORD);
     }
+
+    /** link, name, brand, tags, discount code. */
+    static final String[][] DEMO_PRODUCTS = {
+            {"https://www.amazon.com/Glow-Haus-Dew-Drop-Serum/dp/B0DEMO0001?tag=ava-20", "Dew Drop Serum", "Glow Haus", "skincare, morning routine", ""},
+            {"https://www.amazon.com/Lighted-Vanity-Mirror-Dimmable/dp/B0DEMO0002", "Lighted vanity mirror", "", "skincare, home", ""},
+            {"https://www.walmart.com/ip/Mainstays-Chunky-Knit-Throw-Blanket/5551234567?wmlspartner=demo", "Chunky knit throw", "Mainstays", "cozy, home", ""},
+            {"https://www.amazon.com/Ceramic-Table-Lamp-Warm-White/dp/B0DEMO0003", "Ceramic table lamp", "", "cozy, home", ""},
+            {"https://shop.glowhaus.example/products/silk-scrunchie-set", "Silk scrunchie set", "Glow Haus", "hair, morning routine", "AVA15"},
+    };
 
     private static BrandNews demoNews(Long brandId, BrandNews.Source source, String url, String title, BrandNews.Kind kind,
                                       String headline, String idea, int fit, OffsetDateTime at) {

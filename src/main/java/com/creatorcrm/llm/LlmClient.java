@@ -67,6 +67,14 @@ public interface LlmClient {
         throw new UnsupportedOperationException("Content ideas aren't supported");
     }
 
+    /**
+     * One post's captions for YouTube, Instagram and TikTok, in her voice, from what she says the video is about and
+     * which products are in it. Only when she asks for them; links are added by the app, never by Claude.
+     */
+    default CaptionDraft captions(CaptionInput input) {
+        throw new UnsupportedOperationException("Writing captions isn't supported");
+    }
+
     boolean isConfigured();
 
     /** Whether {@link #submitClassifyBatch} works: classification at half price, results within hours. */

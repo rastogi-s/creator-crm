@@ -746,6 +746,79 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "shop-links"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-products");
+    await page.goto(BASE + "/#products");
+    await view.locator("h1").waitFor();
+    await say("Shop links keeps your Amazon, Walmart and other affiliate links in one place.", 4200);
+    const input = view.locator(".add-product input").first();
+    await point(input);
+    await input.fill("https://www.amazon.com/Satin-Pillowcase-Set-Queen/dp/B0DEMO0042/ref=sr_1_1?keywords=satin");
+    await click(view.getByRole("button", { name: "Check link" }));
+    await view.locator(".product-found:not(.hidden)").waitFor();
+    await say("Paste any product link. The app sees it's Amazon, fills in the name, and adds your Amazon tag so it earns for you.", 5200);
+    const tags = view.locator(".product-found input[aria-label=Tags]");
+    await click(tags);
+    await tags.pressSequentially("sleep, bedroom", { delay: 50 });
+    await say("Add tags, and a discount code if the brand gave you one.", 3400);
+    await click(view.getByRole("button", { name: "Add product" }));
+    const card = view.locator(".product-card", { hasText: "Satin Pillowcase" });
+    await card.waitFor();
+    await point(card.getByRole("button", { name: "Copy link" }));
+    await say("Every product has a one-tap Copy link, for a DM, a Story or your bio.", 4000);
+    await click(card.getByRole("button", { name: "Copy link" }));
+    await point(view.locator(".filters"));
+    await say("Search, or filter by store and tag, when the list gets long.", 3600);
+    await click(view.locator(".product-card", { hasText: "Dew Drop Serum" }).locator("input[type=checkbox]"));
+    await click(view.locator(".pick-bar").getByRole("button", { name: /Write captions/ }));
+    await page.locator("#view-captions .caption-form").waitFor();
+    await say("Tick products and press Write captions to make a post with them.", 3800);
+    await page.goto(BASE + "/#products");
+    await view.locator("#shop-settings").waitFor();
+    await click(view.locator("#shop-settings summary"));
+    await say("In Shop settings, add your Amazon tag once, your everyday hashtags and your ad label.", 4400);
+    await say("", 600);
+  },
+
+  async "post-captions"(page) {
+    const { say, point, click } = helpers(page);
+    const view = page.locator("#view-captions");
+    await page.goto(BASE + "/#captions");
+    await view.locator(".caption-form").waitFor();
+    await say("Post captions writes your YouTube, Instagram and TikTok captions in one go, in your voice.", 4400);
+    const about = view.locator("#caption-about");
+    await click(about);
+    await about.pressSequentially("My 5-minute morning skincare routine with the Dew Drop serum and my lighted mirror", { delay: 25 });
+    await say("Say what the video is about. You can talk instead of typing, and add screenshots from the video.", 4600);
+    await point(view.locator("label.check", { hasText: "Let Claude pick" }));
+    await say("Pick the products in it, or let Claude pick them from your shop links.", 3800);
+    await point(view.locator(".chips[aria-label=Platforms]"));
+    await say("Choose where you're posting, and if it's for a brand deal.", 3400);
+    await click(view.getByRole("button", { name: "Write captions", exact: true }));
+    const result = view.locator(".caption-card");
+    await result.waitFor();
+    await point(result.locator(".hooks"));
+    await say("You get hook ideas for the first second of the video...", 3400);
+    const first = result.locator(".copy-field").nth(1);
+    await point(first.locator("textarea"));
+    await say("...and each caption in its own box. Your shop links and Amazon's disclosure are already in the YouTube description.", 5200);
+    await click(first.getByRole("button", { name: "Copy" }));
+    await say("One tap copies it. Change anything in the box first if you like.", 3600);
+    await click(result.getByRole("tab", { name: "Instagram" }));
+    await point(result.locator(".keyword-row"));
+    await say("Links don't work in Instagram captions, so yours ends with a comment keyword...", 4200);
+    await point(result.locator(".copy-field", { hasText: "DM reply" }).locator("textarea"));
+    await say("...and here's the DM with every link and code, for your comment-to-DM tool or to send yourself.", 4800);
+    await click(result.getByRole("tab", { name: "TikTok" }));
+    await say("TikTok gets a short caption that points to your bio.", 3400);
+    await click(result.getByRole("tab", { name: "Links" }));
+    await say("Links has each product to copy, and lines ready for your Linktree.", 3800);
+    await point(result.getByRole("button", { name: "Funnier" }));
+    await say("Not quite right? Make it shorter, funnier, or try again. Past captions are saved below.", 4600);
+    await say("", 600);
+  },
+
   async "win-back"(page) {
     const { say, point, click } = helpers(page);
     await page.goto(BASE + "/#today");
