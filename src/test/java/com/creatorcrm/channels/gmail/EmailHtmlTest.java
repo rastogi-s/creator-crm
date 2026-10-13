@@ -77,6 +77,30 @@ class EmailHtmlTest {
     }
 
     @Test
+    void addressesWrittenAsTextInHtmlEmailsBecomeLinks() {
+        String html = EmailHtml.clean("<p>Brief: https://brand.example/brief?a=1&amp;b=2. Shop at www.brand.example!</p>"
+                + "<a href=\"https://brand.example/x\">https://brand.example/x</a><style>a{color:red}</style>");
+        assertThat(html)
+                .contains("<a href=\"https://brand.example/brief?a=1&amp;b=2\" target=\"_blank\" rel=\"noopener noreferrer\">"
+                        + "https://brand.example/brief?a=1&amp;b=2</a>.")
+                .contains("<a href=\"https://www.brand.example\" target=\"_blank\" rel=\"noopener noreferrer\">www.brand.example</a>!")
+                .contains("<style>a{color:red}</style>");
+        assertThat(html.split("<a ").length).isEqualTo(4); // the existing link isn't wrapped again
+    }
+
+    @Test
+    void linksWrittenWithoutHttpsStillWork() {
+        assertThat(EmailHtml.clean("<a href=\"www.brand.example\">site</a>")).contains("href=\"https://www.brand.example\"");
+        assertThat(EmailHtml.clean("<a href=\" brand.example/apply \">apply</a>")).contains("href=\"https://brand.example/apply\"");
+        assertThat(EmailHtml.clean("<a href=\"//cdn.brand.example/x\">x</a>")).contains("href=\"https://cdn.brand.example/x\"");
+        assertThat(EmailHtml.clean("<a href=\"/unsubscribe\">https://brand.example/unsubscribe</a>"))
+                .contains("href=\"https://brand.example/unsubscribe\"");
+        assertThat(EmailHtml.clean("<a href=\"mailto:ava@brand.example\">mail</a>")).contains("href=\"mailto:ava@brand.example\"");
+        assertThat(EmailHtml.clean("<a href=\"javascript:steal()\">x</a><a href=\"/relative\">rel</a>"))
+                .doesNotContain("href");
+    }
+
+    @Test
     void inlinePicturesAreEmbeddedAndCharsetIsHonoured() {
         byte[] png = {(byte) 0x89, 'P', 'N', 'G'};
         MessagePart html = new MessagePart().setMimeType("text/html")

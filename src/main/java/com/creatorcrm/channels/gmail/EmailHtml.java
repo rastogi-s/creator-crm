@@ -7,7 +7,8 @@ import java.util.regex.Pattern;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Entities;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
 import org.jsoup.safety.Cleaner;
 import org.jsoup.safety.Safelist;
 
@@ -50,18 +51,28 @@ public final class EmailHtml {
 
     /** A complete page showing a text-only message, with its web addresses made clickable. */
     public static String textPage(String text) {
-        return wrap("<div class=\"plain\">" + linkify(Entities.escape(text == null ? "" : text)) + "</div>");
+        Document doc = Document.createShell("");
+        doc.outputSettings().prettyPrint(false);
+        linkify(doc.body().appendElement("div").addClass("plain").text(text == null ? "" : text));
+        return wrap(doc.body().html());
     }
 
     static String clean(String html) {
         Document dirty = Jsoup.parse(html == null ? "" : html);
         // Styles usually live in <head>, which the cleaner drops: move them into the body first.
         dirty.body().insertChildren(0, new ArrayList<>(dirty.head().select("style")));
+        dirty.select("a[href]").forEach(a -> a.attr("href", fullHref(a.attr("href"))));
         foldQuotes(dirty);
         Document doc = new Cleaner(SAFE).clean(dirty);
         doc.select("img").forEach(img -> {
             if (isTrackingPixel(img)) img.remove();
         });
+        // A link whose address was dropped (one the email left relative, say) still works if it shows the address.
+        doc.select("a:not([href])").forEach(a -> {
+            String text = a.text().strip();
+            if (URL.matcher(text).matches() && trimTail(text).equals(text)) a.attr("href", fullHref(text));
+        });
+        linkify(doc.body());
         doc.select("a[href]").forEach(a -> a.attr("target", "_blank").attr("rel", "noopener noreferrer"));
         doc.outputSettings().prettyPrint(false);
         return doc.body().html();
@@ -110,24 +121,53 @@ public final class EmailHtml {
                 || style.matches(".*(^|;)(width|height):[01]px.*");
     }
 
-    private static final Pattern URL = Pattern.compile("https?://(?:(?!&quot;|&#39;|&apos;|&lt;|&gt;)[^\\s<>\"])+");
+    /** A web address written out in text: with its http(s):// or starting with www. */
+    private static final Pattern URL = Pattern.compile("(?i)\\b(?:https?://|www\\.)[^\\s<>\"]+");
+    private static final Pattern SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:");
+    private static final Pattern BARE_HOST = Pattern.compile("(?i)^(?:www\\.|[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.[a-z]{2,}(?:[/?#:]|$))");
 
-    /** Web addresses in already-escaped text become links; trailing punctuation stays outside the link. */
-    static String linkify(String escaped) {
-        Matcher m = URL.matcher(escaped);
-        StringBuilder sb = new StringBuilder();
-        while (m.find()) {
-            String url = m.group();
-            String tail = "";
-            while (!url.isEmpty() && ".,;:!?)]'".indexOf(url.charAt(url.length() - 1)) >= 0) {
-                tail = url.charAt(url.length() - 1) + tail;
-                url = url.substring(0, url.length() - 1);
+    /**
+     * Link addresses written without https:// ("www.brand.com", "brand.com/apply", "//brand.com") work in Gmail but
+     * would be dropped by the cleaner, leaving text that looks like a link and does nothing.
+     */
+    static String fullHref(String href) {
+        String h = href.strip();
+        if (h.startsWith("//")) return "https:" + h;
+        if (!SCHEME.matcher(h).find() && BARE_HOST.matcher(h).find()) return "https://" + h;
+        return h;
+    }
+
+    private static String trimTail(String url) {
+        while (!url.isEmpty() && ".,;:!?)]'".indexOf(url.charAt(url.length() - 1)) >= 0) url = url.substring(0, url.length() - 1);
+        return url;
+    }
+
+    /**
+     * Web addresses written out as text, outside any link, become links, as Gmail shows them. Trailing punctuation
+     * stays outside the link.
+     */
+    static void linkify(Element root) {
+        List<TextNode> texts = new ArrayList<>();
+        root.traverse((node, depth) -> {
+            if (node instanceof TextNode t && t.parent() instanceof Element p && p.closest("a, style, summary") == null) texts.add(t);
+        });
+        for (TextNode t : texts) {
+            String text = t.getWholeText();
+            Matcher m = URL.matcher(text);
+            List<Node> parts = new ArrayList<>();
+            int last = 0;
+            while (m.find()) {
+                String url = trimTail(m.group());
+                if (url.length() <= 4 || url.equalsIgnoreCase("www.")) continue;
+                if (m.start() > last) parts.add(new TextNode(text.substring(last, m.start())));
+                parts.add(new Element("a").attr("href", fullHref(url)).attr("target", "_blank").attr("rel", "noopener noreferrer").text(url));
+                last = m.start() + url.length();
             }
-            m.appendReplacement(sb, Matcher.quoteReplacement(
-                    "<a href=\"" + url + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + url + "</a>" + tail));
+            if (parts.isEmpty()) continue;
+            if (last < text.length()) parts.add(new TextNode(text.substring(last)));
+            for (Node p : parts) t.before(p);
+            t.remove();
         }
-        m.appendTail(sb);
-        return sb.toString();
     }
 
     private static String wrap(String body) {

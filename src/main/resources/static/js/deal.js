@@ -145,13 +145,15 @@ function closeDrawer() {
 }
 
 // Scrolls the open deal to one message and highlights it for a moment.
-// Web addresses in a message's text become links that open in a new window.
+// Web addresses in a message's text (with https:// or starting with www.) become links that open in a new window.
 function linkify(text) {
   const out = [];
   let last = 0;
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"]+/g)) {
+  for (const m of text.matchAll(/\b(?:https?:\/\/|www\.)[^\s<>"]+/gi)) {
     const url = m[0].replace(/[.,;:!?)\]']+$/, "");
-    out.push(text.slice(last, m.index), el("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, url));
+    if (url.length <= 4) continue;
+    const href = /^www\./i.test(url) ? "https://" + url : url;
+    out.push(text.slice(last, m.index), el("a", { href, target: "_blank", rel: "noopener noreferrer" }, url));
     last = m.index + url.length;
   }
   out.push(text.slice(last));
