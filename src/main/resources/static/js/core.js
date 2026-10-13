@@ -209,12 +209,79 @@ function savePrefs(view, prefs) {
   try { localStorage.setItem("crm.view." + view, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
 }
 
+/** Wraps a text box with an × that empties it in one tap. The × only shows while there's text (see .search-clear in app.css). */
+function clearable(input) {
+  const wrap = el("span", { class: "search-wrap" }, input);
+  wrap.appendChild(clearButton(input));
+  return wrap;
+}
+
+/** The × itself; clearing fires an input event, so the box's own listeners see it as if she'd deleted the text. */
+function clearButton(input) {
+  return el("button", { type: "button", class: "search-clear", title: "Clear", "aria-label": "Clear " + (input.getAttribute("aria-label") || "search"),
+    onmousedown: (e) => e.preventDefault(), // keep the box focused, so a suggestion list doesn't flicker shut
+    onclick: () => { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); } }, "×");
+}
+
+/** A filter box with a clear button. Returns the wrapper; its .value reads and sets the box, and .input is the box. */
 function searchBox(value, placeholder, onChange) {
   const input = el("input", { type: "search", class: "search", value: value || "", placeholder, "aria-label": placeholder, maxlength: "100",
     autocomplete: "off", name: "filter" });
   let timer;
-  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => onChange(input.value), 150); });
-  return input;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    // Emptying the box (the × or deleting everything) shows the full list straight away.
+    if (!input.value) onChange(""); else timer = setTimeout(() => onChange(input.value), 150);
+  });
+  const wrap = clearable(input);
+  wrap.input = input;
+  Object.defineProperty(wrap, "value", { get: () => input.value, set: (v) => { input.value = v; } });
+  return wrap;
+}
+
+/**
+ * Shows matches under a searchBox while she types. find(query) returns [{title, detail}] (best first, a few at most);
+ * pick(hit) runs when she clicks one or presses Enter. Arrow keys move through the list; Escape closes it.
+ */
+function suggestions(box, find, pick) {
+  const input = box.input;
+  const list = el("div", { class: "search-results suggest hidden", role: "listbox", id: "suggest-" + Math.random().toString(36).slice(2) });
+  box.appendChild(list);
+  input.setAttribute("aria-controls", list.id);
+  input.setAttribute("aria-expanded", "false");
+  let hits = [], active = -1;
+  const close = () => { list.classList.add("hidden"); input.setAttribute("aria-expanded", "false"); active = -1; };
+  const choose = (h) => { close(); input.blur(); pick(h); };
+  function paint() {
+    clear(list);
+    hits.forEach((h, i) => list.appendChild(el("button", { class: "hit" + (i === active ? " active" : ""), type: "button", role: "option",
+      onmousedown: (e) => e.preventDefault(), onclick: () => choose(h) },
+      el("div", { class: "title" }, h.title), h.detail ? el("div", { class: "detail" }, h.detail) : null)));
+    list.classList.toggle("hidden", !hits.length);
+    input.setAttribute("aria-expanded", String(hits.length > 0));
+  }
+  function update() {
+    hits = input.value.trim() ? find(input.value) : [];
+    active = -1;
+    paint();
+  }
+  input.addEventListener("input", update);
+  input.addEventListener("focus", update);
+  input.addEventListener("blur", () => setTimeout(close, 150));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !list.classList.contains("hidden")) { close(); e.stopPropagation(); return; }
+    if (!hits.length || list.classList.contains("hidden")) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % hits.length;
+      paint();
+      const a = list.querySelector(".hit.active");
+      if (a) a.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      choose(hits[Math.max(active, 0)]);
+    }
+  });
 }
 
 /** Every word of the query appears somewhere in the fields, ignoring case. */

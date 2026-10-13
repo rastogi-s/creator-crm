@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.67.0",
+    "title": "Quicker searching",
+    "features": [
+      {
+        "id": "search-suggest",
+        "title": "Deals show up as you type, and one tap clears a search",
+        "body": "The search box on Deals now drops down the matching deals while you type, brand names first, with the contact and stage under each. Click one, or use the arrow keys and Enter, to open it. Every search box in the app, including the one at the top, now has a × at its right end that clears it in one tap and shows the full list again.",
+        "tryIt": "#pipeline",
+        "video": "search.webm"
+      }
+    ]
+  },
+  {
     "version": "1.66.0",
     "title": "Content ideas for every deal",
     "features": [

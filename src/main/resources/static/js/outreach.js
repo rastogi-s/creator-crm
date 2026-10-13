@@ -194,7 +194,7 @@ function findBrandsCard(root, leads, ig) {
   });
   handle.addEventListener("keydown", (e) => { if (e.key === "Enter") lookup(e); });
   const lookupRow = ig && ig.facebookConnected
-    ? el("div", { class: "row" }, el("span", { class: "small muted" }, "Know a brand already?"), el("div", { class: "spacer" }, handle),
+    ? el("div", { class: "row" }, el("span", { class: "small muted" }, "Know a brand already?"), el("div", { class: "spacer" }, clearable(handle)),
       el("button", { class: "small", onclick: lookup }, "Look up on Instagram"))
     : el("p", { class: "small muted" }, "Tip: connect Facebook on the Settings page to look up any brand's Instagram (followers, bio, creators they work with) and add it here.");
   // Free search by category: Wikidata's open brand data, then each brand's own website for emails. No Claude.
@@ -211,11 +211,11 @@ function findBrandsCard(root, leads, ig) {
     } finally { categoryStatus.textContent = ""; }
   });
   category.addEventListener("keydown", (e) => { if (e.key === "Enter") byCategory(e); });
-  const categoryRow = el("div", { class: "row find-category" }, el("div", { class: "query" }, category),
+  const categoryRow = el("div", { class: "row find-category" }, el("div", { class: "query" }, clearable(category)),
     el("button", { onclick: byCategory, title: "Uses Wikidata, a free open database of companies, then reads each brand's own website for published emails" }, "Search category (free)"));
   return card("Find brands to pitch",
     el("p", { class: "small muted" }, "Claude searches the web for brands that fit your profile, checks their sites for a published partnerships or PR email, and suggests a pitch idea. Pick the ones you like and a pitch draft lands in Drafts for you to edit and send. Nothing is sent automatically."),
-    el("div", { class: "row find-brands" }, el("div", { class: "query" }, query), count, el("button", { class: "primary", onclick: search }, "Find brands")),
+    el("div", { class: "row find-brands" }, el("div", { class: "query" }, clearable(query)), count, el("button", { class: "primary", onclick: search }, "Find brands")),
     el("div", { class: "row find-depth" }, el("span", { class: "small muted" }, "Search depth:"), depth),
     status,
     el("p", { class: "small muted" }, "Or search a category for free (no Claude): brands come from Wikidata, an open database of companies, and their websites are read for published emails."),

@@ -23,6 +23,20 @@ async function renderPipeline(root) {
   const leadSelect = el("select", { id: "lead-filter", "aria-label": "Leads", onchange: (e) => { f.lead = e.target.value; save(); draw(); } },
     [["", "All deals"], ["LEADS", "Leads only"], ["LOW", "Low-value leads"]].map(([v, t]) => el("option", { value: v, selected: f.lead === v }, t)));
   const search = searchBox(f.q, "Search brand, contact, campaign…", (v) => { f.q = v; save(); draw(); });
+  // Matching deals drop down as she types; the table below filters too. Each word she types must start a word in the
+  // brand, contact or campaign (so "g" finds Glow Haus, not every name with a g in it), and brands that start with it come first.
+  suggestions(search, (q) => {
+    const words = q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    if (!words.length) return [];
+    const starts = (r) => { const hay = [r.brand, r.contact, r.campaign].join(" ").toLowerCase().split(/[^\p{L}\p{N}]+/u);
+      return words.every((w) => hay.some((h) => h.startsWith(w))); };
+    const score = (r) => ((r.brand || "").toLowerCase().startsWith(words[0]) ? 0 : 1);
+    return rows.filter(starts)
+      .sort((a, b) => score(a) - score(b) || String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .slice(0, 6)
+      .map((r) => ({ id: r.id, title: r.brand,
+        detail: [(r.contact || "").split(" · ")[0], r.campaign, stripEmoji(r.statusLabel || statuses[r.status] || pretty(r.status))].filter(Boolean).join(" · ") }));
+  }, (h) => openDeal(h.id));
   root.appendChild(dealsSwitch("pipeline"));
   root.appendChild(el("div", { class: "row" }, el("h1", {}, "Deals"), el("div", { class: "spacer" }),
     el("label", { class: "check" }, closedBox, "Show closed")));
