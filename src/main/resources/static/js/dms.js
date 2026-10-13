@@ -235,5 +235,5 @@ async function openDm(id) {
 
   drawer.appendChild(card("Conversation", el("div", { class: "dm-thread" }, d.messages.map((m) =>
     el("div", { class: "dm-bubble" + (m.fromMe ? " mine" : "") },
-      el("div", {}, m.text || ""), el("div", { class: "small muted" }, (m.fromMe ? "You · " : "") + fmtDateTime(m.sentAt)))))));
+      el("div", {}, linkify(m.text || "")), el("div", { class: "small muted" }, (m.fromMe ? "You · " : "") + fmtDateTime(m.sentAt)))))));
 }
