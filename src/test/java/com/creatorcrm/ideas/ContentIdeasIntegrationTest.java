@@ -75,7 +75,7 @@ class ContentIdeasIntegrationTest {
         llm.ideas = normal;
         doReturn(true).when(gmail).isConnected();
         doReturn(Optional.empty()).when(gmail).pushDraft(any());
-        doReturn(List.of()).when(gmail).briefAttachments(anyString(), anyInt(), anyLong());
+        doReturn(new GmailConnector.BriefAttachments(List.of(), List.of())).when(gmail).briefAttachments(anyString(), anyInt(), anyLong());
         for (Message m : messages.findByAiProcessedFalseAndFilteredReasonIsNullOrderBySentAtAsc()) {
             m.filteredReason = "left over from another test";
             messages.save(m);
@@ -98,6 +98,20 @@ class ContentIdeasIntegrationTest {
         return opportunities.findFirstByConversationIdOrderByIdDesc(conv).orElseThrow();
     }
 
+    static GmailConnector.BriefAttachments files(GmailConnector.FileAttachment... files) {
+        return new GmailConnector.BriefAttachments(List.of(files), List.of());
+    }
+
+    /** A brand email added to an existing deal's thread. */
+    private void reply(Opportunity o, Intent intent, String externalId, String subject, String body) {
+        String thread = conversations.findById(o.conversationId).orElseThrow().externalId;
+        llm.next.add(analysis(intent, "Brand " + thread, false, List.of()));
+        ingestion.store(List.of(new NormalizedMessage(Platform.EMAIL, externalId, thread, Direction.INBOUND,
+                "sam@" + thread + ".test", "Sam", "me@creator.test", "sam@" + thread + ".test", subject, body,
+                "<" + UUID.randomUUID() + "@mail>", "", OffsetDateTime.now().minusMinutes(5), false)));
+        ingestion.processPending();
+    }
+
     private Optional<Task> planTask(Opportunity o, TaskStatus status) {
         return tasks.findByOpportunityIdAndStatus(o.id, status).stream().filter(t -> t.type == TaskType.PLAN_CONTENT).findFirst();
     }
@@ -105,7 +119,7 @@ class ContentIdeasIntegrationTest {
     @Test
     void aBriefWithAWordFileGetsIdeasByItself() throws Exception {
         String id = UUID.randomUUID().toString();
-        doReturn(List.of(new GmailConnector.FileAttachment("Cozy brief.docx", BriefFilesTest.docx("Show the lamp in the first 3 seconds", "Tag @novanest"))))
+        doReturn(files(new GmailConnector.FileAttachment("Cozy brief.docx", BriefFilesTest.docx("Show the lamp in the first 3 seconds", "Tag @novanest"))))
                 .when(gmail).briefAttachments(eq(id), anyInt(), anyLong());
         Opportunity o = email(Intent.CONTENT_BRIEF, id, "Hi! Our brief is attached. Draft due Friday.", OffsetDateTime.now().minusHours(1));
 
@@ -179,5 +193,59 @@ class ContentIdeasIntegrationTest {
         ContentIdeasService.View v = ideas.generate(o.id, null, null);
         assertThat(v.source()).isEqualTo("EMAIL");
         assertThat(llm.lastIdeasInput.guidelines()).contains("film it at golden hour");
+    }
+
+    @Test
+    void pdfsAndPicturesGoToClaudeAsTheyAre() throws Exception {
+        String id = UUID.randomUUID().toString();
+        byte[] pdf;
+        try (var doc = new org.apache.pdfbox.pdmodel.PDDocument(); var out = new java.io.ByteArrayOutputStream()) {
+            doc.addPage(new org.apache.pdfbox.pdmodel.PDPage());
+            doc.save(out);
+            pdf = out.toByteArray();
+        }
+        byte[] moodboard = new byte[40_000];
+        doReturn(new GmailConnector.BriefAttachments(List.of(new GmailConnector.FileAttachment("Brief deck.pdf", pdf),
+                new GmailConnector.FileAttachment("moodboard.png", moodboard)), List.of("Brief.key")))
+                .when(gmail).briefAttachments(eq(id), anyInt(), anyLong());
+        Opportunity o = email(Intent.CONTENT_BRIEF, id, "Brief attached!", OffsetDateTime.now().minusHours(1));
+
+        assertThat(llm.lastIdeasInput.files()).extracting(f -> f.name() + " " + f.mediaType())
+                .containsExactly("Brief deck.pdf application/pdf", "moodboard.png image/png");
+        assertThat(llm.lastIdeasInput.guidelines()).contains("Brief attached!").doesNotContain("#cozycorner");
+        ContentIdeasService.View v = ideas.latest(o.id).orElseThrow();
+        assertThat(v.fileNames()).isEqualTo("Brief deck.pdf, moodboard.png");
+        assertThat(v.error()).contains("Brief.key can't be read");
+        assertThat(v.hasGuidelines()).isTrue();
+    }
+
+    @Test
+    void refreshFindsABriefAttachedToALaterEmail() throws Exception {
+        Opportunity o = email(Intent.CONTENT_BRIEF, UUID.randomUUID().toString(), "Brief coming in a separate email.",
+                OffsetDateTime.now().minusHours(2));
+        String later = UUID.randomUUID().toString();
+        doReturn(files(new GmailConnector.FileAttachment("guidelines.txt", "Say the throw is machine washable. Tag @novanest.".getBytes())))
+                .when(gmail).briefAttachments(eq(later), anyInt(), anyLong());
+        reply(o, Intent.GENERAL_REPLY, later, "Re: brief", "Here you go!");
+        // The deal is at the content step and the email says it's the brief: new ideas from that file by themselves.
+        assertThat(llm.ideasCalls).isEqualTo(2);
+        assertThat(ideas.latest(o.id).orElseThrow().fileNames()).isEqualTo("guidelines.txt");
+        // Refresh reads the deal's emails again: both emails and the file.
+        ContentIdeasService.View v = ideas.generate(o.id, null, null);
+        assertThat(v.fileNames()).isEqualTo("guidelines.txt");
+        assertThat(llm.lastIdeasInput.guidelines()).contains("machine washable").contains("Here you go!").contains("Brief coming");
+    }
+
+    @Test
+    void aFileNamedLikeABriefOnAShippedDealGetsIdeasByItself() throws Exception {
+        Opportunity o = email(Intent.PRODUCT_SHIPPED, UUID.randomUUID().toString(), "Your package is on its way!",
+                OffsetDateTime.now().minusHours(2));
+        assertThat(ideas.latest(o.id)).isEmpty();
+        String later = UUID.randomUUID().toString();
+        doReturn(files(new GmailConnector.FileAttachment("Nova Nest creator guidelines.txt", "Film in daylight, 30 to 45 seconds.".getBytes())))
+                .when(gmail).briefAttachments(eq(later), anyInt(), anyLong());
+        reply(o, Intent.GENERAL_REPLY, later, "For your video", "See attached, excited to see what you make!");
+        assertThat(ideas.latest(o.id)).get().satisfies(v -> assertThat(v.fileNames()).isEqualTo("Nova Nest creator guidelines.txt"));
+        assertThat(llm.lastIdeasInput.guidelines()).contains("Film in daylight");
     }
 }

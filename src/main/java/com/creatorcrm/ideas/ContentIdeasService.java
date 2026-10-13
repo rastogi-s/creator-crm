@@ -8,12 +8,14 @@ import com.creatorcrm.domain.ContentIdeas;
 import com.creatorcrm.domain.Conversation;
 import com.creatorcrm.domain.Deadline;
 import com.creatorcrm.domain.Enums.Direction;
+import com.creatorcrm.domain.Enums.OpportunityStatus;
 import com.creatorcrm.domain.Enums.Platform;
 import com.creatorcrm.domain.Enums.Priority;
 import com.creatorcrm.domain.Enums.TaskType;
 import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.links.LinkService;
+import com.creatorcrm.llm.BriefFile;
 import com.creatorcrm.llm.ContentIdeaList;
 import com.creatorcrm.llm.ContentIdeasInput;
 import com.creatorcrm.llm.Intent;
@@ -33,6 +35,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +60,13 @@ public class ContentIdeasService {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     static final int MAX_FILES = 4;
+    /** The brand's emails on a deal looked through for the brief when she presses Refresh. */
+    static final int MAX_EMAILS = 12;
+    static final int MAX_BODIES = 4;
+    /** PDFs and pictures go to Claude as they are, up to these limits; past them a PDF is read as text. */
+    static final long MAX_VISUAL_BYTES = 18L * 1024 * 1024;
+    static final int MAX_PICTURE_BYTES = 5 * 1024 * 1024;
+    static final int MAX_PDF_PAGES = 60;
     static final long MAX_BYTES = 15L * 1024 * 1024;
     static final int MAX_EMAIL_CHARS = 8_000;
     static final int RECENT_POSTS = 15;
@@ -78,7 +88,15 @@ public class ContentIdeasService {
                        boolean hasGuidelines, OffsetDateTime createdAt) {}
 
     /** The guidelines read from one brand email: its text, the files that were read, and what couldn't be read. */
-    record Brief(String text, List<String> files, List<String> notes) {}
+    record Brief(String text, List<String> files, List<String> notes, List<BriefFile> visuals) {
+        static Brief of(String text) {
+            return new Brief(text, List.of(), List.of(), List.of());
+        }
+
+        boolean isEmpty() {
+            return text.isBlank() && visuals.isEmpty();
+        }
+    }
 
     private final ContentIdeasRepo runs;
     private final OpportunityRepo opportunities;
@@ -124,16 +142,41 @@ public class ContentIdeasService {
     public void onBrief(Message m, Opportunity o) {
         if (runs.existsByMessageId(m.id)) return;
         try {
-            Brief brief = read(m);
-            run(o, ContentIdeas.Source.EMAIL, m.id, brief, null);
+            run(o, ContentIdeas.Source.EMAIL, m.id, read(List.of(m), true), null);
         } catch (RuntimeException e) {
             log.warn("Could not plan content for deal {}: {}", o.id, e.getMessage());
         }
     }
 
+    /** Deal statuses where a file from the brand is likely its brief: the product is coming or the content is next. */
+    private static final Set<OpportunityStatus> BRIEF_TIME = EnumSet.of(OpportunityStatus.CONTRACT_TO_SIGN,
+            OpportunityStatus.PRODUCT_PENDING, OpportunityStatus.PRODUCT_RECEIVED, OpportunityStatus.CONTENT_TO_CREATE);
+    /** A file name, subject or email that says it's the brief. */
+    private static final Pattern BRIEF_WORDS = Pattern.compile(
+            "(?i)(brief|guideline|guide\\b|deck|creative|script|talking points|direction|mood ?board|concept|key messag|do'?s|content plan)");
+
     /**
-     * Refresh on the deal. {@code pasted}: guidelines she pasted (a brief behind a link); else the newest guidelines
-     * the app has for the deal. {@code note}: what she wants different this time.
+     * A brand email that wasn't read as a brief but has files attached, on a deal at the product or content step: when
+     * a file, the subject or the email says it's the brief, plan content from it. Never throws; one run per email.
+     */
+    public void onAttachments(Message m, Opportunity o) {
+        Intent type = intent(m);
+        if (!BRIEF_TIME.contains(o.status) || (type != null && NOT_A_BRIEF.contains(type)) || runs.existsByMessageId(m.id) || !isGmail(m)) return;
+        try {
+            String said = (m.subject == null ? "" : m.subject) + "\n" + (m.content == null ? "" : m.content);
+            GmailConnector.BriefAttachments found = gmail.briefAttachments(gmailId(m.externalId), MAX_FILES, MAX_BYTES);
+            boolean brief = found.files().stream().anyMatch(f -> !isPicture(f.fileName()) || BRIEF_WORDS.matcher(f.fileName()).find())
+                    && (BRIEF_WORDS.matcher(said).find() || found.files().stream().anyMatch(f -> BRIEF_WORDS.matcher(f.fileName()).find()));
+            if (!brief) return;
+            run(o, ContentIdeas.Source.EMAIL, m.id, read(List.of(m), true, Map.of(m.id, found)), null);
+        } catch (Exception e) {
+            log.warn("Could not check the files of message {} for a brief: {}", m.id, e.getMessage());
+        }
+    }
+
+    /**
+     * Refresh on the deal. {@code pasted}: guidelines she pasted (a brief behind a link); else the brief read fresh
+     * from the deal's emails and their files. {@code note}: what she wants different this time.
      */
     public View generate(Long opportunityId, String pasted, String note) {
         Opportunity o = opportunities.findById(opportunityId).orElseThrow();
@@ -142,79 +185,151 @@ public class ContentIdeasService {
         String paste = pasted == null ? "" : pasted.strip();
         if (!paste.isEmpty()) {
             if (paste.length() < MIN_PASTED) throw new IllegalArgumentException("Paste the whole brief (at least a few sentences)");
-            return view(run(o, ContentIdeas.Source.PASTED, null, new Brief(BriefFiles.clip(paste), List.of(), List.of()), ask));
+            return view(run(o, ContentIdeas.Source.PASTED, null, Brief.of(BriefFiles.clip(paste)), ask));
         }
-        Optional<ContentIdeas> last = runs.findByOpportunityIdOrderByIdDesc(o.id).stream()
-                .filter(r -> r.guidelines != null && !r.guidelines.isBlank()).findFirst();
-        if (last.isPresent()) {
-            ContentIdeas r = last.get();
-            List<String> files = r.fileNames == null || r.fileNames.isBlank() ? List.of() : List.of(r.fileNames.split(", "));
-            return view(run(o, r.source, r.messageId, new Brief(r.guidelines, files, List.of()), ask));
+        List<Message> emails = brandEmails(o);
+        Brief fresh = read(emails, false);
+        if (!fresh.isEmpty()) {
+            Long from = emails.stream().filter(m -> isBriefType(m)).map(m -> m.id).findFirst().orElse(null);
+            return view(run(o, ContentIdeas.Source.EMAIL, from, fresh, ask));
         }
-        Message briefEmail = briefEmail(o);
-        if (briefEmail != null) return view(run(o, ContentIdeas.Source.EMAIL, briefEmail.id, read(briefEmail), ask));
-        return view(run(o, ContentIdeas.Source.DEAL, null, new Brief("", List.of(), List.of()), ask));
+        // Nothing in the emails (or Gmail is offline): the brief she pasted before, if any.
+        Optional<ContentIdeas> pastedBefore = runs.findByOpportunityIdOrderByIdDesc(o.id).stream()
+                .filter(r -> r.source == ContentIdeas.Source.PASTED && r.guidelines != null).findFirst();
+        if (pastedBefore.isPresent()) return view(run(o, ContentIdeas.Source.PASTED, null, Brief.of(pastedBefore.get().guidelines), ask));
+        return view(run(o, ContentIdeas.Source.DEAL, null, new Brief("", List.of(), fresh.notes(), List.of()), ask));
     }
 
     public Optional<View> latest(Long opportunityId) {
         return runs.findFirstByOpportunityIdOrderByIdDesc(opportunityId).map(this::view);
     }
 
-    /** The newest brand email in the deal's conversation that carried the guidelines. */
-    private Message briefEmail(Opportunity o) {
-        if (o.conversationId == null) return null;
-        List<Message> all = messages.findByConversationIdOrderBySentAtAsc(o.conversationId);
-        for (int i = all.size() - 1; i >= 0; i--) {
-            Message m = all.get(i);
-            if (m.direction != Direction.INBOUND || m.messageType == null) continue;
-            Intent intent;
-            try {
-                intent = Intent.valueOf(m.messageType);
-            } catch (IllegalArgumentException e) {
-                continue;
-            }
-            if (carriesBrief(intent, m)) return m;
-        }
-        return null;
+    /** Emails that are about money or the contract, not the content: their files are invoices and contracts. */
+    private static final Set<Intent> NOT_A_BRIEF = EnumSet.of(Intent.CONTRACT_SENT, Intent.CONTRACT_COMING, Intent.INVOICE_REQUEST,
+            Intent.PAYMENT_UPDATE, Intent.DECLINE, Intent.NEW_OPPORTUNITY, Intent.RATES_REQUEST, Intent.MEDIA_KIT_REQUEST);
+
+    /** The brand's emails on the deal, newest first, leaving out contract and money emails. */
+    private List<Message> brandEmails(Opportunity o) {
+        if (o.conversationId == null) return List.of();
+        List<Message> all = new ArrayList<>(messages.findByConversationIdOrderBySentAtAsc(o.conversationId));
+        java.util.Collections.reverse(all);
+        return all.stream().filter(m -> m.direction == Direction.INBOUND)
+                .filter(m -> intent(m) == null || !NOT_A_BRIEF.contains(intent(m)))
+                .limit(MAX_EMAILS).toList();
     }
 
-    /** The email's text plus its brief files. Files that can't be read are named in the notes. */
-    Brief read(Message m) {
+    private static Intent intent(Message m) {
+        if (m.messageType == null) return null;
+        try {
+            return Intent.valueOf(m.messageType);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private static boolean isBriefType(Message m) {
+        Intent i = intent(m);
+        return i != null && carriesBrief(i, m);
+    }
+
+    private boolean isGmail(Message m) {
+        if (m.externalId == null || !gmail.isConnected()) return false;
+        return conversations.findById(m.conversationId).map(c -> c.platform == Platform.EMAIL).orElse(false);
+    }
+
+    Brief read(List<Message> emails, boolean everyBody) {
+        return read(emails, everyBody, Map.of());
+    }
+
+    /**
+     * The brief from these emails (newest first): the text of brief emails (or of every email, with {@code everyBody}),
+     * the text of their Word, PowerPoint and text files, and their PDFs and pictures for Claude to read directly.
+     * {@code fetched}: attachments already downloaded, by message id. Files that can't be read are named in the notes.
+     */
+    Brief read(List<Message> emails, boolean everyBody, Map<Long, GmailConnector.BriefAttachments> fetched) {
         StringBuilder text = new StringBuilder();
         List<String> files = new ArrayList<>();
         List<String> notes = new ArrayList<>();
-        String body = m.content == null ? "" : m.content.strip();
-        if (!body.isEmpty()) {
-            text.append("From the brand's email").append(m.subject == null || m.subject.isBlank() ? "" : " \"" + m.subject.strip() + "\"")
-                    .append(":\n").append(body.length() > MAX_EMAIL_CHARS ? body.substring(0, MAX_EMAIL_CHARS) + "\n[...]" : body);
-        }
-        Conversation conv = conversations.findById(m.conversationId).orElse(null);
-        if (conv != null && conv.platform == Platform.EMAIL && m.externalId != null && gmail.isConnected()) {
-            try {
-                for (GmailConnector.FileAttachment f : gmail.briefAttachments(gmailId(m.externalId), MAX_FILES, MAX_BYTES)) {
-                    try {
-                        String t = BriefFiles.text(f.fileName(), f.data());
-                        if (t == null) {
-                            notes.add(f.fileName() + " has no text the app can read (it may be pictures or a scan)");
-                            continue;
-                        }
-                        text.append("\n\nFrom the attached file \"").append(f.fileName()).append("\":\n").append(t);
-                        files.add(f.fileName());
-                    } catch (Exception e) {
-                        notes.add(f.fileName() + " couldn't be opened");
-                    }
+        List<BriefFile> visuals = new ArrayList<>();
+        long visualBytes = 0;
+        int bodies = 0;
+        for (Message m : emails) {
+            List<GmailConnector.FileAttachment> attached = List.of();
+            if (files.size() < MAX_FILES && isGmail(m)) {
+                try {
+                    GmailConnector.BriefAttachments a = fetched.containsKey(m.id) ? fetched.get(m.id)
+                            : gmail.briefAttachments(gmailId(m.externalId), MAX_FILES - files.size(), MAX_BYTES);
+                    attached = a.files();
+                    for (String name : a.skipped()) notes.add(name + " can't be read by the app (save it as a PDF and paste or forward it)");
+                } catch (Exception e) {
+                    log.warn("Could not download the brief files of message {}: {}", m.id, e.getMessage());
+                    notes.add("The brief's files couldn't be downloaded from Gmail");
                 }
-            } catch (Exception e) {
-                log.warn("Could not download the brief files of message {}: {}", m.id, e.getMessage());
-                notes.add("The brief's files couldn't be downloaded from Gmail");
+            }
+            String body = m.content == null ? "" : m.content.strip();
+            if ((everyBody || isBriefType(m) || !attached.isEmpty()) && !body.isEmpty() && bodies < MAX_BODIES) {
+                bodies++;
+                text.append(text.isEmpty() ? "" : "\n\n").append("From the brand's email")
+                        .append(m.subject == null || m.subject.isBlank() ? "" : " \"" + m.subject.strip() + "\"")
+                        .append(" (").append(m.sentAt.toLocalDate()).append("):\n")
+                        .append(body.length() > MAX_EMAIL_CHARS ? body.substring(0, MAX_EMAIL_CHARS) + "\n[...]" : body);
+                Matcher link = BRIEF_LINK.matcher(body);
+                if (attached.isEmpty() && link.find()) {
+                    notes.add("Part of the brief looks like it's on " + pretty(link.group(1)) + ", which the app can't open. "
+                            + "Paste its text below and press Refresh for ideas that follow it closely");
+                }
+            }
+            for (GmailConnector.FileAttachment f : attached) {
+                String type = mediaType(f.fileName(), f.data());
+                if (type != null && visualBytes + f.data().length <= MAX_VISUAL_BYTES
+                        && (!type.startsWith("image/") || f.data().length <= MAX_PICTURE_BYTES) && pages(f, type) <= MAX_PDF_PAGES) {
+                    visuals.add(new BriefFile(f.fileName(), type, f.data()));
+                    visualBytes += f.data().length;
+                    files.add(f.fileName());
+                    continue;
+                }
+                try {
+                    String t = BriefFiles.text(f.fileName(), f.data());
+                    if (t == null) {
+                        notes.add(f.fileName() + " is too big or has no text the app can read");
+                        continue;
+                    }
+                    text.append("\n\nFrom the attached file \"").append(f.fileName()).append("\":\n").append(t);
+                    files.add(f.fileName());
+                } catch (Exception e) {
+                    notes.add(f.fileName() + " couldn't be opened");
+                }
             }
         }
-        Matcher link = BRIEF_LINK.matcher(body);
-        if (files.isEmpty() && link.find()) {
-            notes.add("The full brief looks like it's on " + pretty(link.group(1)) + ", which the app can't open. "
-                    + "Paste its text below and press Refresh for ideas that follow it closely");
+        return new Brief(BriefFiles.clip(text.toString()), files, notes.stream().distinct().toList(), visuals);
+    }
+
+    /** application/pdf or a picture type Claude reads directly; null for files read as text. */
+    static String mediaType(String name, byte[] data) {
+        String ext = BriefFiles.extension(name);
+        return switch (ext) {
+            case "pdf" -> "application/pdf";
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "webp" -> "image/webp";
+            case "gif" -> "image/gif";
+            default -> data.length > 4 && data[0] == '%' && data[1] == 'P' && data[2] == 'D' && data[3] == 'F' ? "application/pdf" : null;
+        };
+    }
+
+    private static boolean isPicture(String name) {
+        String t = mediaType(name, new byte[0]);
+        return t != null && t.startsWith("image/");
+    }
+
+    /** A PDF's page count (0 for pictures); a PDF that won't open counts as too long, so its text is tried instead. */
+    private static int pages(GmailConnector.FileAttachment f, String type) {
+        if (!"application/pdf".equals(type)) return 0;
+        try (var doc = org.apache.pdfbox.Loader.loadPDF(f.data())) {
+            return doc.getNumberOfPages();
+        } catch (Exception e) {
+            return Integer.MAX_VALUE;
         }
-        return new Brief(BriefFiles.clip(text.toString()), files, notes);
     }
 
     private ContentIdeas run(Opportunity o, ContentIdeas.Source source, Long messageId, Brief brief, String note) {
@@ -228,7 +343,7 @@ public class ContentIdeasService {
         r.createdAt = OffsetDateTime.now();
         String brand = workflow.brandName(o);
         try {
-            ContentIdeaList ideas = llm.contentIdeas(input(o, brand, brief.text(), note));
+            ContentIdeaList ideas = llm.contentIdeas(input(o, brand, brief, note));
             if (ideas == null || ideas.ideas() == null || ideas.ideas().isEmpty()) throw new IllegalStateException("Claude returned no ideas");
             r.ideasJson = JSON.writeValueAsString(ideas);
             r.status = ContentIdeas.Status.READY;
@@ -250,9 +365,9 @@ public class ContentIdeasService {
         }
     }
 
-    ContentIdeasInput input(Opportunity o, String brand, String guidelines, String note) {
+    ContentIdeasInput input(Opportunity o, String brand, Brief brief, String note) {
         return new ContentIdeasInput(settings.today(), brand, dealContext(o), profile(), recentPosts(), pastBrandPosts(o.id),
-                guidelines.isBlank() ? "" : wrap(guidelines), note == null ? "" : note);
+                brief.text().isBlank() ? "" : wrap(brief.text()), note == null ? "" : note, brief.visuals());
     }
 
     private String dealContext(Opportunity o) {
@@ -335,7 +450,7 @@ public class ContentIdeasService {
                 ideas == null || ideas.mustInclude() == null ? List.of() : ideas.mustInclude(),
                 ideas == null || ideas.avoid() == null ? List.of() : ideas.avoid(),
                 ideas == null || ideas.ideas() == null ? List.of() : ideas.ideas(),
-                r.guidelines != null && !r.guidelines.isBlank(), r.createdAt);
+                (r.guidelines != null && !r.guidelines.isBlank()) || r.fileNames != null, r.createdAt);
     }
 
     /** The guidelines as data for Claude; they can't close the tag early to pass off instructions as ours. */
