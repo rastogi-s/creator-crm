@@ -12,6 +12,7 @@ import com.creatorcrm.domain.Message;
 import com.creatorcrm.domain.Opportunity;
 import com.creatorcrm.domain.Task;
 import com.creatorcrm.drafts.DraftService;
+import com.creatorcrm.ideas.ContentIdeasService;
 import com.creatorcrm.llm.ClassificationInput;
 import com.creatorcrm.llm.Intent;
 import com.creatorcrm.llm.LlmClient;
@@ -51,11 +52,13 @@ public class MessageProcessor {
     private final ContractService contracts;
     private final ContactService contacts;
     private final ActivityRepo activity;
+    private final ContentIdeasService ideas;
 
     public MessageProcessor(LlmClient llm, WorkflowEngine workflow, DraftService drafts, ConversationRepo conversations,
                             MessageRepo messages, OpportunityRepo opportunities, BrandRepo brands,
                             SettingsService settings, ContractService contracts, ContactService contacts,
-                            ActivityRepo activity) {
+                            ActivityRepo activity, ContentIdeasService ideas) {
+        this.ideas = ideas;
         this.contacts = contacts;
         this.activity = activity;
         this.contracts = contracts;
@@ -97,6 +100,10 @@ public class MessageProcessor {
         if (recent && m.direction == Direction.INBOUND && analysis.intent() == Intent.CONTRACT_SENT) {
             // Read the contract's terms; old contracts in an import aren't worth a Claude call.
             opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).ifPresent(o -> contracts.onContractSent(m, o));
+        }
+        if (recent && m.direction == Direction.INBOUND && ContentIdeasService.carriesBrief(analysis.intent(), m)) {
+            // The brand's content guidelines: plan reels and videos from them while she waits for (or has) the product.
+            opportunities.findFirstByConversationIdOrderByIdDesc(conv.id).ifPresent(o -> ideas.onBrief(m, o));
         }
         // A newer email in the thread would supersede the draft at once (common when importing history).
         if (m.sentAt.isBefore(OffsetDateTime.now().minus(DRAFT_CUTOFF))

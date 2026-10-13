@@ -347,7 +347,7 @@ public class WorkflowEngine {
         return switch (t) {
             case SIGN_CONTRACT, REVIEW_CONTRACT -> DealStage.CONTRACT;
             case CONFIRM_PRODUCT -> DealStage.PRODUCT;
-            case CREATE_CONTENT, REVISE_CONTENT, SUBMIT_CONTENT -> DealStage.CREATE_CONTENT;
+            case CREATE_CONTENT, REVISE_CONTENT, SUBMIT_CONTENT, PLAN_CONTENT -> DealStage.CREATE_CONTENT;
             case POST_CONTENT -> DealStage.POST;
             case SEND_INVOICE -> DealStage.INVOICE;
             case CHASE_PAYMENT, CONFIRM_PAYMENT -> DealStage.PAYMENT;

@@ -58,6 +58,7 @@ public class ClaudeLlmClient implements LlmClient {
     private final String pictureSystem;
     private final String newsSystem;
     private final String profileSystem;
+    private final String ideasSystem;
 
     private AnthropicClient client;
     private String clientKeyHash;
@@ -77,6 +78,7 @@ public class ClaudeLlmClient implements LlmClient {
         this.pictureSystem = resource("prompts/contact-image-system.md");
         this.newsSystem = resource("prompts/brand-news-system.md");
         this.profileSystem = resource("prompts/profile-writer-system.md");
+        this.ideasSystem = resource("prompts/content-ideas-system.md");
     }
 
     @Override
@@ -409,6 +411,36 @@ public class ClaudeLlmClient implements LlmClient {
             user.append('\n');
         }
         return user.append("Write her About you profile.").toString();
+    }
+
+    @Override
+    public ContentIdeaList contentIdeas(ContentIdeasInput in) {
+        return call(ClaudeSpend.Feature.IDEAS, settings.writerModel(), settings.writerEffort(), ideasSystem, null,
+                ideasPrompt(in), ContentIdeaList.class, 8000, null);
+    }
+
+    static String ideasPrompt(ContentIdeasInput in) {
+        StringBuilder user = new StringBuilder("Today: ").append(in.today()).append('\n')
+                .append("Brand: ").append(Untrusted.escape(in.brandName())).append("\n\n");
+        if (!in.dealContext().isBlank()) user.append("The deal, from the app's records:\n").append(in.dealContext()).append("\n\n");
+        user.append("<creator_profile>\n").append(Untrusted.escape(in.profile())).append("\n</creator_profile>\n\n");
+        if (!in.recentPosts().isEmpty()) {
+            user.append("Her recent Instagram posts (newest first), with how they did:\n");
+            in.recentPosts().forEach(p -> user.append("- ").append(p).append('\n'));
+            user.append('\n');
+        }
+        if (!in.pastBrandPosts().isEmpty()) {
+            user.append("Posts she made for brands before, with how they did:\n");
+            in.pastBrandPosts().forEach(p -> user.append("- ").append(p).append('\n'));
+            user.append('\n');
+        }
+        user.append(in.guidelines().isBlank()
+                ? "The brand hasn't sent guidelines the app could read. Plan from the deal details and her profile, and keep mustInclude to what the deal details say.\n\n"
+                : "THE BRAND'S GUIDELINES:\n" + in.guidelines() + "\n\n");
+        if (in.note() != null && !in.note().isBlank()) {
+            user.append("The creator asks for this in the new ideas: ").append(Untrusted.escape(in.note())).append("\n\n");
+        }
+        return user.append("Write the content ideas.").toString();
     }
 
     /** Her own to-do rules from Settings, or null when she has none (keeps the cached prompt unchanged). */

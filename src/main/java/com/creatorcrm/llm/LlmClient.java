@@ -59,6 +59,14 @@ public interface LlmClient {
         throw new UnsupportedOperationException("Drafting a profile isn't supported");
     }
 
+    /**
+     * Reel and video ideas for a deal, from the brand's guidelines, her profile and how her past posts did. Runs when
+     * a brand sends its brief, and when she presses Refresh on the deal.
+     */
+    default ContentIdeaList contentIdeas(ContentIdeasInput input) {
+        throw new UnsupportedOperationException("Content ideas aren't supported");
+    }
+
     boolean isConfigured();
 
     /** Whether {@link #submitClassifyBatch} works: classification at half price, results within hours. */

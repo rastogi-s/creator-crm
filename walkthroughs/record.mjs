@@ -350,6 +350,38 @@ const scenarios = {
     await say("", 600);
   },
 
+  async "content-ideas"(page) {
+    const { say, point, click } = helpers(page);
+    const drawer = page.locator("#drawer");
+    await page.goto(BASE + "/#pipeline");
+    const row = page.locator("#view-pipeline tr", { hasText: "Nova Nest Home" });
+    await row.waitFor();
+    await say("Nova Nest Home sent the brief for your cozy-corner Reel.", 3400);
+    await click(row.locator("strong"));
+    const box = drawer.locator("#content-ideas");
+    await box.waitFor();
+    await point(box.locator("h2"));
+    await say("Content ideas were written by themselves as soon as the brief arrived, in the email or as a PDF, Word or PowerPoint file.", 5200);
+    await point(box.locator("ul.checks.must"));
+    await say("First, what the brand asked for: every must-do and don't from the brief, as a checklist.", 4600);
+    const idea = box.locator("details.idea").first();
+    await point(idea.locator(".hook"));
+    await say("Then ideas that fit you, best first: a hook for the first seconds, the shots to film, and a caption.", 4800);
+    await point(idea.getByText("Why it fits you"));
+    await say("They're based on your About you, your recent Instagram posts and how your past brand posts did.", 4600);
+    await click(idea.getByRole("button", { name: "Copy" }));
+    await say("Copy the caption when you post.", 2800);
+    const note = box.locator(".row input").first();
+    await click(note);
+    await note.pressSequentially("film it outdoors", { delay: 40 });
+    await say("Want something different? Say what to change and press Refresh ideas.", 3800);
+    await click(box.getByRole("button", { name: "Refresh ideas" }));
+    await drawer.locator("#content-ideas details.idea").first().waitFor();
+    await point(drawer.locator("#content-ideas details.idea summary").first());
+    await say("Brief behind a Google Drive or Canva link? Paste its text under the button and refresh.", 4600);
+    await say("", 600);
+  },
+
   async "contract-questions"(page) {
     const { say, point, click } = helpers(page);
     const drawer = page.locator("#drawer");

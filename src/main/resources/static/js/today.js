@@ -157,6 +157,9 @@ function tellClaude(taskId) {
   return { button, form };
 }
 
+// To-dos about making the content: they get a button to the deal's content ideas.
+const CONTENT_TASKS = ["CREATE_CONTENT", "REVISE_CONTENT", "PLAN_CONTENT"];
+
 function itemList(items, emptyText, numbered) {
   if (!items.length) return emptyLine(emptyText);
   return el("ul", { class: "list" }, items.map((it, i) => {
@@ -176,6 +179,8 @@ function itemList(items, emptyText, numbered) {
     el("div", { class: "actions" },
       ask ? ask.button : null,
       it.kind === "TASK" ? emailButtons(it.opportunityId, it.task) : null,
+      it.kind === "TASK" && it.opportunityId && it.task && CONTENT_TASKS.includes(it.task.type)
+        ? el("button", { class: "small", title: "Reel and video ideas for this deal", onclick: () => openDealAt(it.opportunityId, "content-ideas") }, "Content ideas") : null,
       it.kind === "TASK" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + it.refId + "/done"); route(); }, "Marked done") }, "Done") : null,
       it.kind === "DEADLINE" ? el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/deadlines/" + it.refId + "/done"); route(); }, "Deadline cleared") }, "Done") : null,
       it.kind === "INVOICE" && /reminder ready/.test(it.detail) ? el("button", { class: "small primary", onclick: () => { location.hash = "#drafts?invoice=" + it.refId; } }, "Review reminder") : null,

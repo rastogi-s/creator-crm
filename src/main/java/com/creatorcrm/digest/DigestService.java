@@ -108,7 +108,7 @@ public class DigestService {
     private final GmailLinks gmailLinks;
 
     /** What a to-do is about: Claude's brief, the links from the email, and where to read the email. */
-    public record TaskInfo(String brief, List<Task.Link> links, Long messageId, String gmailUrl) {}
+    public record TaskInfo(String brief, List<Task.Link> links, Long messageId, String gmailUrl, String type) {}
 
     public DigestService(TaskRepo tasks, OpportunityRepo opportunities, BrandRepo brands, DeadlineRepo deadlines,
                          DraftRepo drafts, ActivityRepo activity, FollowUpEngine followUps, DraftService draftService,
@@ -348,7 +348,7 @@ public class DigestService {
         if (t.brief == null && t.linksJson == null && t.sourceMessageId == null) return null;
         String gmailUrl = t.sourceMessageId == null ? null
                 : messages.findById(t.sourceMessageId).map(gmailLinks::urlFor).orElse(null);
-        return new TaskInfo(t.brief, t.getLinks(), t.sourceMessageId, gmailUrl);
+        return new TaskInfo(t.brief, t.getLinks(), t.sourceMessageId, gmailUrl, t.type == null ? null : t.type.name());
     }
 
     private Approval approval(Draft d, Map<Long, Opportunity> opps, Map<Long, String> brandNames) {

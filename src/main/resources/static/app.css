@@ -728,3 +728,18 @@ li.item.clickable:hover { background: var(--surface-2); }
 .dm-thread { display: flex; flex-direction: column; gap: .5rem; }
 .dm-bubble { max-width: 85%; padding: .5rem .75rem; border-radius: 14px; background: var(--surface-2); overflow-wrap: anywhere; white-space: pre-wrap; }
 .dm-bubble.mine { align-self: flex-end; background: var(--accent-soft); }
+
+/* Content ideas on the deal */
+#content-ideas ul.checks { list-style: none; padding: 0; margin: .25rem 0 .6rem; }
+#content-ideas ul.checks li { display: flex; gap: .5rem; padding: .2rem 0; align-items: baseline; }
+#content-ideas ul.checks li .mark { flex: 0 0 1.2rem; font-weight: 700; text-align: center; }
+#content-ideas ul.checks.must .mark { color: var(--ok); }
+#content-ideas ul.checks.avoid .mark { color: var(--danger); }
+#content-ideas details.idea { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin: .5rem 0; background: var(--surface); }
+#content-ideas details.idea > summary { cursor: pointer; display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; font-weight: 600; }
+#content-ideas details.idea[open] > summary { margin-bottom: .4rem; }
+#content-ideas .hook { background: var(--accent-soft); border-radius: 8px; padding: .4rem .6rem; margin: .3rem 0; }
+#content-ideas ol.shots { margin: .3rem 0 .5rem 1.2rem; padding: 0; }
+#content-ideas .caption { white-space: pre-wrap; background: var(--surface-2); border-radius: 8px; padding: .4rem .6rem; margin: .3rem 0; overflow-wrap: anywhere; }
+#content-ideas textarea { width: 100%; min-height: 6rem; }
+#content-ideas .row input { flex: 1; min-width: 12rem; }
