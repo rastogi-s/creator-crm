@@ -145,6 +145,20 @@ public class FakeLlm implements LlmClient {
         return ideas.apply(input);
     }
 
+    public java.util.function.Function<com.creatorcrm.llm.CaptionInput, com.creatorcrm.llm.CaptionDraft> captions = in -> new com.creatorcrm.llm.CaptionDraft(
+            "Morning glow", in.products().isEmpty() ? List.of() : List.of(1), "glow!", List.of("Watch till the end"),
+            new com.creatorcrm.llm.CaptionDraft.YouTube("My morning routine", "Here's my routine.", List.of("skincare", "#routine"), "Ask me anything!"),
+            new com.creatorcrm.llm.CaptionDraft.Instagram("Morning glow ✨", List.of("#skincare", "glowup"), "Links on the sticker"),
+            new com.creatorcrm.llm.CaptionDraft.TikTok("Morning glow", List.of("#fyp")),
+            "Here you go!");
+    public com.creatorcrm.llm.CaptionInput lastCaptionInput;
+
+    @Override
+    public com.creatorcrm.llm.CaptionDraft captions(com.creatorcrm.llm.CaptionInput input) {
+        lastCaptionInput = input;
+        return captions.apply(input);
+    }
+
     @Override
     public boolean isConfigured() {
         return true;

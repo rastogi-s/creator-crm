@@ -1,5 +1,25 @@
 [
   {
+    "version": "1.68.0",
+    "title": "Captions with your shop links",
+    "features": [
+      {
+        "id": "post-captions",
+        "title": "YouTube, Instagram and TikTok captions in one go",
+        "body": "Open Post captions, say in a sentence what your video is about (or add a few screenshots), and Claude writes everything for the post in your voice: a YouTube title, description, tags and a comment to pin; an Instagram caption, Story line and the DM with your links; and a TikTok caption. Your shop links, discount codes, ad label and Amazon's disclosure are put in by the app, so they're always right. Each one has its own Copy button, with hook ideas for the first second of the video. Press Shorter, Funnier or Try again to change them, and find past captions further down. On a deal's content idea, press Write captions to start from that idea.",
+        "tryIt": "#captions",
+        "video": "post-captions.webm"
+      },
+      {
+        "id": "shop-links",
+        "title": "All your Amazon and Walmart links in one place",
+        "body": "Shop links keeps every product you recommend. Paste a link from Amazon, Walmart or any shop: the app fills in the name, and adds your Amazon tag to Amazon links that don't have it, so every link earns for you. It warns you about a plain Walmart link that won't earn. Add tags and discount codes, copy any link with one tap, and tick products to write a post with them. Add your Amazon tag, everyday hashtags and ad label once in Shop settings at the bottom of the page.",
+        "tryIt": "#products",
+        "video": "shop-links.webm"
+      }
+    ]
+  },
+  {
     "version": "1.67.0",
     "title": "Quicker searching",
     "features": [

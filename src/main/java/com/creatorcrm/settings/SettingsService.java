@@ -96,6 +96,12 @@ public class SettingsService {
      */
     public static final String DM_REPLY_REMINDER_HOURS = "dmReplyReminderHours";
     static final String DEFAULT_DM_REPLY_REMINDER_HOURS = "6";
+    /** Her Amazon Associates tracking tag (e.g. ava-20), added to Amazon product links that have none. */
+    public static final String AMAZON_TAG = "amazonTag";
+    /** Hashtags she puts on every post, added to Instagram and TikTok captions. */
+    public static final String CAPTION_HASHTAGS = "captionHashtags";
+    /** The ad disclosure added to captions with shop links or for a paid deal. */
+    public static final String DISCLOSURE_TAG = "disclosureTag";
 
     static final String DEFAULT_FOLLOWUP_TIME = "08:00";
     static final String DEFAULT_PAYMENT_REMINDER_DAYS = "3,7,14";
@@ -106,7 +112,8 @@ public class SettingsService {
             INVOICE_PAYMENT_DETAILS, INVOICE_PREFIX, INVOICE_TERMS_DAYS, PAYMENT_REMINDER_DAYS, WIN_BACK_QUIET_DAYS,
             WIN_BACK_WEEKLY_LIMIT, BRAND_NEWS, BRAND_NEWS_WEB_SEARCH, WIN_BACK_NEEDS_NEWS, RATE_USAGE_PCT, RATE_EXCLUSIVITY_PCT,
             CONTRACT_MAX_PAYMENT_DAYS, CONTRACT_FREE_USAGE_MONTHS, CONTRACT_REVISIONS_INCLUDED, CALENDAR_SYNC, TASK_RULES, SETUP_GUIDE,
-            CAMPAIGN_ADDRESS, CAMPAIGN_DAILY_CAP, CAMPAIGN_WARMUP, DM_REPLY_REMINDER_HOURS);
+            CAMPAIGN_ADDRESS, CAMPAIGN_DAILY_CAP, CAMPAIGN_WARMUP, DM_REPLY_REMINDER_HOURS, AMAZON_TAG, CAPTION_HASHTAGS,
+            DISCLOSURE_TAG);
 
     static final String DEFAULT_KEYWORDS = "collab, collaboration, partnership, partner, sponsor, sponsored, campaign, "
             + "ugc, gifted, gifting, pr package, ambassador, affiliate, influencer, creator, rates, rate card, "
@@ -252,6 +259,19 @@ public class SettingsService {
     /** 0 = DM reply reminders are off. */
     public int dmReplyReminderHours() { return Integer.parseInt(raw(DM_REPLY_REMINDER_HOURS, DEFAULT_DM_REPLY_REMINDER_HOURS)); }
 
+    public String amazonTag() { return raw(AMAZON_TAG, ""); }
+
+    /** Her always-on hashtags, each starting with #, in her order. */
+    public List<String> captionHashtags() {
+        return Arrays.stream(raw(CAPTION_HASHTAGS, "").split("[\\s,]+")).map(String::strip).filter(s -> !s.isEmpty())
+                .map(s -> s.startsWith("#") ? s : "#" + s).distinct().toList();
+    }
+
+    public String disclosureTag() {
+        String v = raw(DISCLOSURE_TAG, "#ad");
+        return v.isBlank() ? "#ad" : v;
+    }
+
     public boolean campaignWarmup() { return Boolean.parseBoolean(raw(CAMPAIGN_WARMUP, "true")); }
 
     public List<String> brandKeywords() {
@@ -302,6 +322,9 @@ public class SettingsService {
         m.put(CAMPAIGN_DAILY_CAP, String.valueOf(campaignDailyCap()));
         m.put(CAMPAIGN_WARMUP, String.valueOf(campaignWarmup()));
         m.put(DM_REPLY_REMINDER_HOURS, String.valueOf(dmReplyReminderHours()));
+        m.put(AMAZON_TAG, amazonTag());
+        m.put(CAPTION_HASHTAGS, String.join(" ", captionHashtags()));
+        m.put(DISCLOSURE_TAG, disclosureTag());
         return m;
     }
 
@@ -341,6 +364,17 @@ public class SettingsService {
                 if (!v.isBlank() && (!v.trim().matches("\\d{1,3}") || Integer.parseInt(v.trim()) > 168)) {
                     throw new IllegalArgumentException("DM reply reminder: a number of hours from 0 to 168 (0 = off), e.g. 6");
                 }
+            }
+            case AMAZON_TAG -> {
+                if (!v.isBlank() && !com.creatorcrm.shop.ProductLinks.TAG_FORMAT.matcher(v.strip()).matches()) {
+                    throw new IllegalArgumentException("Amazon tag: copy it from Associates Central, it looks like ava-20");
+                }
+            }
+            case CAPTION_HASHTAGS -> {
+                if (v.length() > 300) throw new IllegalArgumentException("Your hashtags are too long (max 300 characters)");
+            }
+            case DISCLOSURE_TAG -> {
+                if (v.length() > 60) throw new IllegalArgumentException("Ad label is too long (max 60 characters)");
             }
             case CAMPAIGN_ADDRESS -> {
                 if (v.length() > 300) throw new IllegalArgumentException("Postal address is too long (max 300 characters)");

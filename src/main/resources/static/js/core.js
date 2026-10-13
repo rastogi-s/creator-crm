@@ -73,6 +73,41 @@ function action(fn, okMsg) {
   };
 }
 
+/**
+ * Copies text to the clipboard. Falls back to the old copy command where the clipboard API isn't allowed (the app
+ * opened over plain http from another device).
+ */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return; }
+  } catch (e) { /* fall through */ }
+  const box = el("textarea", { readonly: true, style: "position:fixed;top:-1000px;opacity:0" });
+  box.value = text;
+  document.body.appendChild(box);
+  box.select();
+  box.setSelectionRange(0, text.length);
+  const ok = document.execCommand("copy");
+  box.remove();
+  if (!ok) throw new Error("Couldn't copy; select the text and copy it instead");
+}
+
+/** A Copy button: one tap copies getText() (a function, so it copies what's in an edited box) and says so on the button. */
+function copyButton(getText, label, attrs) {
+  const text = label || "Copy";
+  const btn = el("button", Object.assign({ type: "button", class: "copy-btn" }, attrs || {}), text);
+  btn.addEventListener("click", async () => {
+    try {
+      const value = typeof getText === "function" ? getText() : getText;
+      if (!value) { toast("Nothing to copy yet", true); return; }
+      await copyText(value);
+      btn.textContent = "Copied ✓";
+      btn.classList.add("copied");
+      setTimeout(() => { btn.textContent = text; btn.classList.remove("copied"); }, 1600);
+    } catch (err) { toast(err.message, true); }
+  });
+  return btn;
+}
+
 // Same rule as Placeholders.java: capitals in square brackets, e.g. [RATE FOR 1 REEL] or [MEDIA KIT LINK].
 function blanksIn(...texts) {
   const found = new Set();

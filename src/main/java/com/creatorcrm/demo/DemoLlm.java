@@ -224,6 +224,53 @@ public class DemoLlm implements LlmClient {
                                 "Polls in your Stories get lots of taps, and they warm people up for the Reel.")));
     }
 
+    /**
+     * Demo mode's captions: built from what she typed, with the products whose names share a word with it (or the
+     * first one when none do) when she let Claude pick.
+     */
+    @Override
+    public com.creatorcrm.llm.CaptionDraft captions(com.creatorcrm.llm.CaptionInput input) {
+        String about = input.about().strip();
+        String lower = about.toLowerCase(java.util.Locale.ROOT);
+        List<Integer> picked = new java.util.ArrayList<>();
+        for (int i = 0; i < input.products().size(); i++) {
+            String name = input.products().get(i).replaceFirst("^\\d+\\. ", "").replaceFirst(" \\(.*$", "").toLowerCase(java.util.Locale.ROOT);
+            boolean match = java.util.Arrays.stream(name.split("[^a-z]+")).anyMatch(w -> w.length() >= 4 && lower.contains(w));
+            if (!input.pick() || match) picked.add(i + 1);
+        }
+        if (input.pick() && picked.isEmpty() && !input.products().isEmpty()) picked.add(1);
+        boolean shop = !picked.isEmpty();
+        String funny = input.note() != null && input.note().toLowerCase(java.util.Locale.ROOT).contains("fun") ? " (and yes, I tripped over the rug twice 😂)" : "";
+        String topic = about.length() > 60 ? about.substring(0, 60).replaceFirst("\\s+\\S*$", "") : about;
+        String keyword = lower.contains("serum") || lower.contains("skin") ? "GLOW" : lower.contains("lamp") || lower.contains("cozy") ? "COZY" : "LINK";
+        List<String> ps = input.platforms();
+        return new com.creatorcrm.llm.CaptionDraft(
+                capitalise(String.join(" ", java.util.Arrays.asList(topic.split("\\s+")).subList(0, Math.min(5, topic.split("\\s+").length)))),
+                picked, keyword,
+                List.of("Wait for the last shot 👀", "The 5-minute reset I swear by", "I didn't expect this to work"),
+                ps.contains("YOUTUBE") ? new com.creatorcrm.llm.CaptionDraft.YouTube(
+                        ("SHORT".equals(input.youtubeFormat()) ? "" : "My honest routine: ") + capitalise(topic),
+                        capitalise(topic) + ", start to finish." + funny + "\n\nEverything I use is linked below, and I've added my favourite tips in the video. "
+                                + "Tell me in the comments what you'd like to see next!",
+                        List.of("cozy home", "self care routine", "everyday favourites", "what I use", "honest review", "routine"),
+                        shop ? "Everything from this video is linked below 👇 Any questions, ask me here!" : "What should I try next? Tell me below!")
+                        : new com.creatorcrm.llm.CaptionDraft.YouTube("", "", List.of(), ""),
+                ps.contains("INSTAGRAM") ? new com.creatorcrm.llm.CaptionDraft.Instagram(
+                        "The little routine that makes my whole day better ✨\n\n" + capitalise(topic) + "." + funny
+                                + (shop ? "\n\nComment " + keyword + " and I'll send you the links 💌" : "\n\nSave this for later 🤍"),
+                        List.of("#cozyhome", "#selfcare", "#everydayroutine", "#favouritefinds"),
+                        shop ? "Everything I used is on the link 👆" : "New Reel is up! 🎬")
+                        : new com.creatorcrm.llm.CaptionDraft.Instagram("", List.of(), ""),
+                ps.contains("TIKTOK") ? new com.creatorcrm.llm.CaptionDraft.TikTok(
+                        capitalise(topic) + " ✨" + (shop ? " Links in my bio!" : ""), List.of("#fyp", "#routine", "#cozytok"))
+                        : new com.creatorcrm.llm.CaptionDraft.TikTok("", List.of()),
+                shop ? "Hi! So happy you liked it 💕 Here's everything from the video:" : "Thanks for watching! 💕");
+    }
+
+    private static String capitalise(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
     @Override
     public ContractTerms extractContractTerms(ContractInput input) {
         // The demo contract is Bloomleaf Tea's (see DemoData): long payment wait, a year of ads, unlimited revisions.

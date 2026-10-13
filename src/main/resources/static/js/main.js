@@ -6,11 +6,11 @@
 
 // ---------- routing ----------
 
-const views = { today: renderToday, pipeline: renderPipeline, money: renderMoney, outreach: renderOutreach, links: renderLinks, contacts: renderContacts, campaigns: renderCampaigns,
+const views = { today: renderToday, pipeline: renderPipeline, money: renderMoney, outreach: renderOutreach, links: renderLinks, captions: renderCaptions, products: renderProducts, contacts: renderContacts, campaigns: renderCampaigns,
                 drafts: renderDrafts, summary: renderSummary, settings: renderSettings,
                 help: renderHelp, whatsnew: renderWhatsNew, more: renderMore, setup: renderSetup, directory: renderDirectory, dms: renderDms };
 // Five places in the tab bar; the other pages live under Deals or More, and keep their own addresses.
-const NAV_OF = { outreach: "pipeline", links: "more", contacts: "more", campaigns: "more", summary: "more", settings: "more", help: "more", whatsnew: "more", setup: "more", directory: "more", dms: "more" };
+const NAV_OF = { outreach: "pipeline", links: "more", captions: "more", products: "more", contacts: "more", campaigns: "more", summary: "more", settings: "more", help: "more", whatsnew: "more", setup: "more", directory: "more", dms: "more" };
 let statuses = {};
 
 function currentTab() {

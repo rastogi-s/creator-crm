@@ -27,12 +27,6 @@ async function maybeShowSetup() {
   } catch (e) { /* not important */ }
 }
 
-function copyButton(text) {
-  return el("button", { type: "button", class: "small", onclick: action(async () => {
-    await navigator.clipboard.writeText(text);
-  }, "Copied") }, "Copy");
-}
-
 function extLink(href, text) {
   return el("a", { href, target: "_blank", rel: "noopener noreferrer" }, text);
 }
@@ -142,7 +136,7 @@ async function renderSetup(root) {
           " press ", el("strong", {}, "Publish app"), ", so the connection doesn't stop every 7 days."),
         el("li", {}, "Under ", el("strong", {}, "Clients"), " press ", el("strong", {}, "Create client"), ", choose ", el("strong", {}, "Web application"),
           ", and under Authorized redirect URIs add this address:",
-          el("div", { class: "row copy-row" }, el("code", { class: "code" }, s.googleRedirectUri), copyButton(s.googleRedirectUri))),
+          el("div", { class: "row copy-row" }, el("code", { class: "code" }, s.googleRedirectUri), copyButton(s.googleRedirectUri, "Copy", { class: "copy-btn small" }))),
         el("li", {}, "Google shows a Client ID and a Client secret. Paste them below and press ", el("strong", {}, "Connect Gmail"), "."),
         el("li", {}, "On Google's screen pick your account. If it says Google hasn't verified this app, press ", el("strong", {}, "Advanced"),
           ", then ", el("strong", {}, "Go to Creator CRM"), ". That's expected: it's your own private app.")),
