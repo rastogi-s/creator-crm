@@ -664,6 +664,7 @@ public class DraftService {
             });
         }
         workflow.onCreatorMessage(o, intentOf(d.type), settings.today());
+        if (d.taskId != null) workflow.draftForTaskSent(d.taskId, settings.today());
         learning.recordDraftSent(d, workflow.brandName(o));
         activity.save(Activity.of(o.id, Activity.DRAFT_SENT,
                 d.type.name().toLowerCase().replace('_', ' ') + (automatic ? " sent automatically to " : " sent to ")

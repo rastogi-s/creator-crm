@@ -331,15 +331,25 @@ async function openDeal(id, focusMessageId) {
   const taskInput = el("input", { placeholder: "Add a task…", maxlength: "500" });
   const taskDue = el("input", { type: "date" });
   drawer.appendChild(card("Tasks",
-    d.tasks.length ? el("ul", { class: "list" }, d.tasks.map((t) => el("li", { class: "item" },
+    d.tasks.length ? el("ul", { class: "list" }, d.tasks.map((t) => {
+      const ask = t.status === "OPEN" ? tellClaude(t.id) : null;
+      return el("li", { class: "item" },
       el("div", { class: "body" }, el("div", { class: "title" }, t.description),
         el("div", { class: "detail" }, pretty(t.status) + (t.dueDate ? " · due " + fmtDate(t.dueDate) : "")),
-        t.status === "OPEN" ? taskAbout(t.brief, t.links) : null),
+        t.autoClosedReason ? el("div", { class: "detail auto-closed" }, "Closed automatically: " + t.autoClosedReason) : null,
+        t.status === "OPEN" ? taskAbout(t.brief, t.links) : null,
+        ask ? ask.form : null),
+      t.autoClosedReason ? el("div", { class: "actions" },
+        el("button", { class: "small", title: "This still needs you: put it back on your list", onclick: action(async () => {
+          await api("POST", "/api/tasks/" + t.id + "/reopen"); refresh();
+        }, "Back on your list") }, "Reopen")) : null,
       t.status === "OPEN" ? el("div", { class: "actions" },
+        ask.button,
         t.sourceMessageId && d.messages.some((m) => m.id === t.sourceMessageId)
           ? el("button", { class: "small", title: "Read the message this to-do came from", onclick: () => showMessage(t.sourceMessageId) }, "Read email") : null,
         el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + t.id + "/done"); refresh(); }, "Done") }, "Done"),
-        el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + t.id + "/dismiss"); refresh(); }) }, "Dismiss")) : null))) : emptyLine("No tasks."),
+        el("button", { class: "small", onclick: action(async () => { await api("POST", "/api/tasks/" + t.id + "/dismiss"); refresh(); }) }, "Dismiss")) : null);
+    })) : emptyLine("No tasks."),
     el("div", { class: "row" }, taskInput, taskDue, el("button", { class: "small", onclick: action(async () => {
       if (!taskInput.value.trim()) return;
       await api("POST", "/api/tasks", { opportunityId: id, description: taskInput.value, dueDate: taskDue.value || null });
@@ -364,7 +374,12 @@ async function openDeal(id, focusMessageId) {
   if (d.deadlines.length) {
     drawer.appendChild(card("Deadlines", el("ul", { class: "list" }, d.deadlines.map((x) => el("li", { class: "item" },
       el("div", { class: "body" }, el("div", { class: "title" }, pretty(x.type) + " — " + fmtDate(x.dueDate)),
-        el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "on your calendar · " : "") + (x.description || ""))))))));
+        el("div", { class: "detail" }, (x.done ? "✓ done · " : "") + (x.calendarEventId ? "on your calendar · " : "") + (x.description || "")),
+        x.doneReason ? el("div", { class: "detail auto-closed" }, "Cleared automatically: " + x.doneReason) : null),
+      x.doneReason ? el("div", { class: "actions" },
+        el("button", { class: "small", title: "This date still matters: watch it again", onclick: action(async () => {
+          await api("POST", "/api/deadlines/" + x.id + "/reopen"); refresh();
+        }, "Back on your list") }, "Reopen")) : null)))));
   }
 
   const msgs = d.messages.map((m) => ({ m, node: el("div", { class: "msg" + (m.direction === "OUTBOUND" ? " out" : ""), id: "msg-" + m.id },

@@ -88,7 +88,7 @@ public class DmReminders {
         Message last = msgs.get(msgs.size() - 1);
         Opportunity o = opportunities.findFirstByConversationIdOrderByIdDesc(c.id).orElse(null);
         if (last.direction == Direction.OUTBOUND) {
-            if (o != null) closeAnswered(o, msgs, last.sentAt);
+            if (o != null) closeAnswered(o, msgs, last.sentAt, "You answered @" + DmInbox.handle(c, msgs) + " in the Instagram app");
             return false;
         }
         int hours = settings.dmReplyReminderHours();
@@ -127,12 +127,12 @@ public class DmReminders {
     }
 
     /** She answered in the Instagram app: reply to-dos for messages before her answer are done. */
-    private void closeAnswered(Opportunity o, List<Message> msgs, OffsetDateTime answeredAt) {
+    private void closeAnswered(Opportunity o, List<Message> msgs, OffsetDateTime answeredAt, String why) {
         Map<Long, Message> byId = msgs.stream().collect(Collectors.toMap(m -> m.id, Function.identity()));
         for (Task t : tasks.findByOpportunityIdAndStatus(o.id, TaskStatus.OPEN)) {
             if (!TaskType.ANSWERED_BY_OUTBOUND.contains(t.type) || t.sourceMessageId == null) continue;
             Message from = byId.get(t.sourceMessageId);
-            if (from != null && from.sentAt.isBefore(answeredAt)) workflow.completeTask(t);
+            if (from != null && from.sentAt.isBefore(answeredAt)) workflow.autoClose(t, TaskStatus.DONE, why);
         }
     }
 

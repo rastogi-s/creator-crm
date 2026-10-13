@@ -69,7 +69,15 @@ public class DigestService {
 
     public record Morning(LocalDate date, String headline, List<Item> urgent, List<Item> followUps,
                           OpportunityCounts newOpportunities, List<Item> upcoming, List<Approval> approvals,
-                          Map<String, Long> pipeline, BigDecimal openPipelineValue, List<Item> rebook) {}
+                          Map<String, Long> pipeline, BigDecimal openPipelineValue, List<Item> rebook,
+                          List<ClosedForYou> closedForYou) {}
+
+    /** A to-do or deadline the app closed on its own in the last few days, and why, so she can reopen a wrong one. */
+    public record ClosedForYou(String kind, Long refId, String title, String reason, OffsetDateTime at,
+                               Long opportunityId, String brand) {}
+
+    /** How far back Today lists what the app closed for her. */
+    static final int CLOSED_FOR_YOU_DAYS = 3;
 
     /** The string lists are kept for the plain-text summary; the Day summary page uses the structured fields. */
     public record EndOfDay(LocalDate date, List<String> completed, List<String> stillPending,
@@ -213,7 +221,26 @@ public class DigestService {
         int total = urgent.size() + fus.size();
         String headline = "Good morning, " + settings.creatorName() + ". You have " + total + (total == 1 ? " thing" : " things")
                 + " to do today" + (approvals.isEmpty() ? "" : " and " + approvals.size() + " draft" + (approvals.size() == 1 ? "" : "s") + " to approve") + ".";
-        return new Morning(today, headline, urgent, fus, fresh, upcoming, approvals, pipeline, value, rebook);
+        return new Morning(today, headline, urgent, fus, fresh, upcoming, approvals, pipeline, value, rebook,
+                closedForYou(opps, brandNames));
+    }
+
+    private List<ClosedForYou> closedForYou(Map<Long, Opportunity> opps, Map<Long, String> brandNames) {
+        OffsetDateTime since = OffsetDateTime.now().minusDays(CLOSED_FOR_YOU_DAYS);
+        List<ClosedForYou> out = new ArrayList<>();
+        for (Task t : tasks.findByAutoClosedReasonIsNotNullAndCompletedAtAfterOrderByCompletedAtDesc(since)) {
+            Opportunity o = t.opportunityId == null ? null : opps.get(t.opportunityId);
+            out.add(new ClosedForYou("TASK", t.id, t.description, t.autoClosedReason, t.completedAt, t.opportunityId,
+                    o == null ? "" : brandNames.getOrDefault(o.brandId, "")));
+        }
+        for (Deadline d : deadlines.findByDoneReasonIsNotNullAndDoneAtAfterOrderByDoneAtDesc(since)) {
+            Opportunity o = opps.get(d.opportunityId);
+            String brand = o == null ? "" : brandNames.getOrDefault(o.brandId, "");
+            out.add(new ClosedForYou("DEADLINE", d.id, brand + " — " + pretty(d.type.name()) + " " + InvoicePdf.date(d.dueDate),
+                    d.doneReason, d.doneAt, d.opportunityId, brand));
+        }
+        out.sort(Comparator.comparing(ClosedForYou::at).reversed());
+        return out.size() > 30 ? out.subList(0, 30) : out;
     }
 
     public EndOfDay endOfDay() {

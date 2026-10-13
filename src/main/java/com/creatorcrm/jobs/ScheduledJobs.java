@@ -30,6 +30,7 @@ import com.creatorcrm.repo.FollowUpRepo;
 import com.creatorcrm.security.SetupService;
 import com.creatorcrm.settings.SettingsService;
 import com.creatorcrm.workflow.FollowUpEngine;
+import com.creatorcrm.workflow.StaleWork;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import org.slf4j.Logger;
@@ -64,6 +65,7 @@ public class ScheduledJobs {
     private final CampaignSender campaignSender;
     private final BrandNewsService brandNews;
     private final DmReminders dmReminders;
+    private final StaleWork staleWork;
 
     public ScheduledJobs(IngestionService ingestion, FollowUpEngine followUps, FollowUpRepo followUpRepo,
                          DraftService drafts, DraftRepo draftRepo, AppStateRepo state, LlmClient llm,
@@ -73,7 +75,8 @@ public class ScheduledJobs {
                          CampaignResults results, SendQueue sendQueue, GmailContacts gmailContacts,
                          ContactFinder contactFinder, CampaignService campaigns, CampaignSender campaignSender,
                          BrandNewsService brandNews,
-                         DmReminders dmReminders) {
+                         DmReminders dmReminders, StaleWork staleWork) {
+        this.staleWork = staleWork;
         this.brandNews = brandNews;
         this.dmReminders = dmReminders;
         this.campaigns = campaigns;
@@ -105,6 +108,7 @@ public class ScheduledJobs {
         int engaged = instagramEngagement.poll();
         if (engaged > 0) log.info("Instagram: {} new comments, tags or mentions", engaged);
         dmReminders.run(); // after new DMs, so a reply she just sent counts
+        retireStaleWork(); // after new mail and DMs, which close most to-dos themselves
         calendar.sync(); // after new mail, so fresh deadlines show up on her calendar
     }
 
@@ -155,6 +159,15 @@ public class ScheduledJobs {
         }
     }
 
+    private void retireStaleWork() {
+        try {
+            int closed = staleWork.sweep();
+            if (closed > 0) log.info("Closed {} to-dos and deadlines that are done or no longer needed", closed);
+        } catch (RuntimeException e) {
+            log.warn("Could not close stale to-dos: {}", e.getMessage());
+        }
+    }
+
     boolean morningDue(ZonedDateTime now) {
         if (now.toLocalTime().isBefore(settings.followupTime())) return false;
         String last = state.findById(LAST_MORNING_RUN).map(s -> s.stateValue).orElse("");
@@ -174,6 +187,7 @@ public class ScheduledJobs {
      */
     public int prepareMorning() {
         int cold = followUps.markColdDeals(settings.today());
+        retireStaleWork(); // the deals that just went cold, and dates that passed overnight
         int drafted = 0;
         for (FollowUp f : followUps.dueOnOrBefore(settings.today())) {
             try {

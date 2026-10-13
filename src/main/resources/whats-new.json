@@ -1,5 +1,25 @@
 [
   {
+    "version": "1.65.0",
+    "title": "To-dos that close themselves",
+    "features": [
+      {
+        "id": "auto-close",
+        "title": "To-dos close themselves when the work is done",
+        "body": "The app now ticks off to-dos for you when it can see they're done or no longer needed: you replied to the brand (from the app, Gmail or the Instagram app), sent the signed contract, your content or the invoice, the brand approved your content or said the payment is on its way, the deal moved past that step, the invoice was paid, the deal closed or went cold, an application's closing date passed, or a lead went quiet for a month. Dates you no longer need to watch are cleared the same way. Each one says why it closed, under Closed for you at the bottom of Today and on the deal, with a Reopen button for any that still need you.",
+        "tryIt": "#today",
+        "video": "auto-close.webm"
+      },
+      {
+        "id": "tell-claude",
+        "title": "Tell Claude what to do next with a to-do",
+        "body": "Every to-do about a brand now has a Tell Claude button. Write what should happen next in your own words, like \"say yes but ask for $800 and two weeks to film\" or \"tell them I'm away until the 20th\", and Claude writes the email for that to-do your way and opens it for you to check. Nothing goes out until you send it, and sending it ticks the to-do off.",
+        "tryIt": "#today",
+        "video": "tell-claude.webm"
+      }
+    ]
+  },
+  {
     "version": "1.64.0",
     "title": "Write to the address a brand asks for",
     "features": [

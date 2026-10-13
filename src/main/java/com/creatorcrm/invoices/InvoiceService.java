@@ -216,7 +216,8 @@ public class InvoiceService {
         String brand = workflow.brandName(o);
         activity.save(Activity.of(o.id, Activity.INVOICE, brand + " paid " + InvoicePdf.money(inv.currency, inv.amount)
                 + " (" + inv.number + ")"));
-        workflow.completeOpenTasks(o.id, Set.of(TaskType.CONFIRM_PAYMENT, TaskType.CHASE_PAYMENT, TaskType.SEND_INVOICE));
+        workflow.completeOpenTasks(o.id, Set.of(TaskType.CONFIRM_PAYMENT, TaskType.CHASE_PAYMENT, TaskType.SEND_INVOICE),
+                "Invoice " + inv.number + " was marked paid");
         boolean allPaid = invoices.findByOpportunityIdOrderByIdAsc(o.id).stream()
                 .noneMatch(i -> i.status == InvoiceStatus.SENT || i.status == InvoiceStatus.DRAFT);
         if (allPaid && o.status == OpportunityStatus.PAYMENT_PENDING) {

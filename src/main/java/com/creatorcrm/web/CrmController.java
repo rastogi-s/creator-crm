@@ -112,6 +112,8 @@ public class CrmController {
 
     public record NewDraft(@NotBlank String type, @Size(max = 1000) String instructions) {}
 
+    public record TaskAsk(@NotBlank @Size(max = 1000) String instruction) {}
+
     public record DraftEdit(@Size(max = 1000) String subject, @Size(max = 20000) String body, @Size(max = 320) String to) {}
 
     public record DraftSchedule(@Size(max = 1000) String subject, @Size(max = 20000) String body,
@@ -283,10 +285,65 @@ public class CrmController {
         return tasks.save(t);
     }
 
+    /**
+     * She tells Claude what to do next with a to-do ("say yes but ask for $800", "tell them I'm away until the 20th"):
+     * Claude writes the email for it in the brand's thread, following her words, for her to review in Drafts. Nothing
+     * is sent; sending it closes the to-do.
+     */
+    @PostMapping("/tasks/{id}/ask")
+    public Draft askAboutTask(@PathVariable Long id, @Valid @RequestBody TaskAsk ask) {
+        Task t = tasks.findById(id).orElseThrow();
+        if (t.opportunityId == null) throw new IllegalArgumentException("This to-do isn't about a brand, so there's no one to write to");
+        for (Draft d : drafts.findByOpportunityIdAndStatus(t.opportunityId, DraftStatus.PENDING)) {
+            if (id.equals(d.taskId) && d.scheduledAt == null) {
+                d.status = DraftStatus.SUPERSEDED; // her new words replace the draft written before them
+                drafts.save(d);
+            }
+        }
+        String instructions = "To-do: " + t.description + "\nWhat she wants to happen next, in her own words: "
+                + ask.instruction().strip();
+        return draftService.generate(t.opportunityId, draftTypeFor(t.type), instructions, t.id, null);
+    }
+
+    private static DraftType draftTypeFor(TaskType type) {
+        return switch (type) {
+            case SEND_RATES -> DraftType.RATES;
+            case SEND_MEDIA_KIT -> DraftType.MEDIA_KIT;
+            case NEGOTIATE -> DraftType.NEGOTIATION;
+            case ASK_MISSING_INFO -> DraftType.ASK_DETAILS;
+            case CONFIRM_PRODUCT -> DraftType.PRODUCT_ARRIVAL;
+            case SIGN_CONTRACT, REVIEW_CONTRACT -> DraftType.CONTRACT_CONFIRMATION;
+            case CREATE_CONTENT, REVISE_CONTENT, SUBMIT_CONTENT -> DraftType.CONTENT_SUBMISSION;
+            default -> DraftType.REPLY;
+        };
+    }
+
+    /** The app closed it but it still needs her: back on her list, and the date rules leave it alone from now on. */
+    @PostMapping("/tasks/{id}/reopen")
+    public Task reopenTask(@PathVariable Long id) {
+        Task t = tasks.findById(id).orElseThrow();
+        t.status = TaskStatus.OPEN;
+        t.completedAt = null;
+        t.autoClosedReason = null;
+        t.keptOpen = true;
+        return tasks.save(t);
+    }
+
     @PostMapping("/deadlines/{id}/done")
     public Deadline deadlineDone(@PathVariable Long id) {
         Deadline d = deadlines.findById(id).orElseThrow();
         d.done = true;
+        d.doneAt = OffsetDateTime.now();
+        return deadlines.save(d);
+    }
+
+    @PostMapping("/deadlines/{id}/reopen")
+    public Deadline reopenDeadline(@PathVariable Long id) {
+        Deadline d = deadlines.findById(id).orElseThrow();
+        d.done = false;
+        d.doneAt = null;
+        d.doneReason = null;
+        d.keptOpen = true;
         return deadlines.save(d);
     }
 

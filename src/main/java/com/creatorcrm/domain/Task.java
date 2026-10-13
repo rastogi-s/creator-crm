@@ -27,6 +27,10 @@ public class Task {
     @JsonIgnore public String linksJson;
     public OffsetDateTime createdAt;
     public OffsetDateTime completedAt;
+    /** Why the app closed this to-do on its own (she replied, the deal moved on, the date passed); null if she did. */
+    public String autoClosedReason;
+    /** She reopened it after the app closed it: the date rules leave it alone from then on. */
+    public boolean keptOpen;
 
     public record Link(String label, String url) {}
 

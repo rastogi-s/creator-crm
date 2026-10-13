@@ -14,4 +14,6 @@ public interface TaskRepo extends JpaRepository<Task, Long> {
     List<Task> findByOpportunityIdOrderByCreatedAtDesc(Long opportunityId);
 
     List<Task> findByStatusAndCompletedAtAfter(TaskStatus status, OffsetDateTime after);
+
+    List<Task> findByAutoClosedReasonIsNotNullAndCompletedAtAfterOrderByCompletedAtDesc(OffsetDateTime after);
 }
