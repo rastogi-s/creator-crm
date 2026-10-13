@@ -20,8 +20,10 @@ import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -151,6 +153,14 @@ public class WebsiteContacts {
         List<Address> out = new ArrayList<>();
         for (WebsiteReader.Hit h : r.hits()) out.add(new Address(h.email(), h.name(), ContactRoles.guess(h.email(), h.title()), h.pageUrl(), true));
         out.sort(Comparator.comparingInt(a -> rank(a.role())));
+        // Every address found is kept on the lead (it joins her contacts when she pitches), not just the first one.
+        Set<String> before = new HashSet<>();
+        ContactFinder.readPeople(lead.finderContacts).forEach(p -> before.add(Emails.clean(p.email())));
+        if (lead.contactEmail != null) before.add(Emails.clean(lead.contactEmail));
+        ContactFinder.keepOnLead(lead, r.hits().stream().map(h -> new ContactFinder.Person(h.email(), h.name(), h.title(), null,
+                null, null, ContactSource.Kind.WEBSITE, h.pageUrl(), null, null)).toList());
+        int fresh = (int) out.stream().filter(a -> !before.contains(Emails.clean(a.email()))).count();
+        boolean had = lead.contactEmail != null && !lead.contactEmail.isBlank();
         boolean filled = false;
         if ((lead.contactEmail == null || lead.contactEmail.isBlank()) && !out.isEmpty()) {
             lead.contactEmail = out.get(0).email();
@@ -159,8 +169,9 @@ public class WebsiteContacts {
         }
         leads.save(lead);
         if (r.problem() != null && r.pagesRead().isEmpty()) return new Result(r.site(), 0, List.of(), 0, r.problem());
-        String msg = message(r, out.size(), out.size());
+        String msg = message(r, out.size(), had ? fresh : out.size());
         if (filled) msg += " Using " + lead.contactEmail + " for this pitch.";
+        if (had && fresh > 0) msg += " Tap Use this next to one to pitch it instead.";
         return new Result(r.site(), r.pagesRead().size(), out, filled ? 1 : 0, msg);
     }
 

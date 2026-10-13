@@ -129,7 +129,7 @@ public class ContactFinder {
             Optional<LocalDate> last = credits.searchedOn(useHunter ? Provider.HUNTER : Provider.APOLLO, domain);
             if (last.isPresent() && ChronoUnit.DAYS.between(last.get(), LocalDate.now()) < RESEARCH_DAYS) {
                 return new FindResult(0, 0, 0, 0, 0, 0, domain, List.of(),
-                        "You already looked up " + domain + " on " + last.get() + ". Looking again costs another credit and usually finds the same people. Look again anyway?",
+                        lookAgain(domain, last.get()),
                         contacts.forBrand(b.id));
             }
         }
@@ -141,7 +141,7 @@ public class ContactFinder {
 
         if (useHunter) {
             try {
-                hunterCost = viaHunter(b, domain, t, touched, notes);
+                hunterCost = viaHunter(b, domain, again, t, touched, notes);
             } catch (IllegalStateException e) {
                 if (!useApollo) throw e; // nothing else to try: say so plainly
                 notes.add(e.getMessage());
@@ -182,8 +182,7 @@ public class ContactFinder {
         if (!again) {
             Optional<LocalDate> last = credits.searchedOn(useHunter ? Provider.HUNTER : Provider.APOLLO, domain);
             if (last.isPresent() && ChronoUnit.DAYS.between(last.get(), LocalDate.now()) < RESEARCH_DAYS) {
-                return new LeadResult(0, lead.contactEmail, 0, 0, List.of(), "You already looked up " + domain + " on " + last.get()
-                        + ". Looking again costs another credit and usually finds the same people. Look again anyway?");
+                return new LeadResult(0, lead.contactEmail, 0, 0, List.of(), lookAgain(domain, last.get()));
             }
         }
         List<Person> found = new ArrayList<>();
@@ -191,7 +190,7 @@ public class ContactFinder {
         double hunterCost = 0, apolloCost = 0;
         if (useHunter) {
             try {
-                Search s = hunterSearch(domain);
+                Search s = hunterSearch(domain, again);
                 found.addAll(s.people());
                 notes.addAll(s.notes());
                 hunterCost = s.cost();
@@ -214,15 +213,11 @@ public class ContactFinder {
             found = found.stream().map(p -> withVerified(p, Verified.INVALID)).toList();
             notes.add(domain + " can't receive email, so none of these addresses will be emailed.");
         }
-        Map<String, Person> kept = new LinkedHashMap<>();
-        for (Person p : readPeople(lead.finderContacts)) kept.put(p.email(), p);
-        for (Person p : found) {
-            String e = Emails.clean(p.email());
-            if (e != null) kept.put(e, new Person(e, p.name(), p.title(), p.phone(), p.linkedin(), p.confidence(), p.source(),
-                    p.sourceUrl(), p.verified(), p.verifiedAt()));
-        }
-        lead.finderContacts = kept.isEmpty() ? null : writePeople(new ArrayList<>(kept.values()));
+        Set<String> before = known(lead);
+        Map<String, Person> kept = keepOnLead(lead, found);
         List<Person> best = usable(new ArrayList<>(kept.values()));
+        int fresh = (int) usable(found).stream().map(p -> Emails.clean(p.email())).distinct().filter(e -> !before.contains(e)).count();
+        boolean had = lead.contactEmail != null && !lead.contactEmail.isBlank();
         boolean filled = false;
         if ((lead.contactEmail == null || lead.contactEmail.isBlank()) && !best.isEmpty()) {
             lead.contactEmail = best.get(0).email();
@@ -233,7 +228,8 @@ public class ContactFinder {
         int n = usable(found).size();
         String head = n == 0 ? "Nobody with a usable email turned up at " + domain + "."
                 : "Found " + n + (n == 1 ? " person" : " people") + " at " + domain + "."
-                + (filled ? " Using " + lead.contactEmail + " for this pitch." : "");
+                + (filled ? " Using " + lead.contactEmail + " for this pitch." : "")
+                + (had ? (fresh == 0 ? " No new addresses this time." : " " + fresh + " new: tap Use this next to one to pitch it instead.") : "");
         List<String> all = new ArrayList<>();
         all.add(head);
         all.addAll(notes);
@@ -245,10 +241,81 @@ public class ContactFinder {
     List<Person> usable(List<Person> people) {
         return people.stream()
                 .filter(p -> Emails.clean(p.email()) != null && p.verified() != Verified.INVALID && !suppressions.blocked(p.email()))
-                .sorted(Comparator.comparingInt((Person p) -> WebsiteContacts.rank(ContactRoles.guess(Emails.clean(p.email()), p.title())))
-                        .thenComparingInt(p -> p.verified() == Verified.VALID ? 0 : p.verified() == Verified.RISKY ? 2 : 1)
-                        .thenComparingInt(p -> -(p.confidence() == null ? 0 : p.confidence())))
+                .sorted(BEST)
                 .toList();
+    }
+
+    static final Comparator<Person> BEST =
+            Comparator.comparingInt((Person p) -> WebsiteContacts.rank(ContactRoles.guess(Emails.clean(p.email()), p.title())))
+                    .thenComparingInt(p -> p.verified() == Verified.INVALID ? 3 : p.verified() == Verified.VALID ? 0 : p.verified() == Verified.RISKY ? 2 : 1)
+                    .thenComparingInt(p -> -(p.confidence() == null ? 0 : p.confidence()));
+
+    private static String lookAgain(String domain, LocalDate last) {
+        return "You already looked up " + domain + " on " + last + ". This time Hunter looks wider: shared inboxes like "
+                + "partnerships@ and press@, and people in every team. It costs up to 2 more credits. Look again?";
+    }
+
+    /** Every address the lead already has: its contact and everyone found for it. */
+    private static Set<String> known(BrandLead lead) {
+        Set<String> out = new LinkedHashSet<>();
+        for (Person p : readPeople(lead.finderContacts)) out.add(Emails.clean(p.email()));
+        if (lead.contactEmail != null) out.add(Emails.clean(lead.contactEmail));
+        return out;
+    }
+
+    /**
+     * Adds what was found to the people kept on a lead, without duplicates, best first. Someone already kept keeps
+     * what is known about them unless the new find says more. Returns everyone kept.
+     */
+    public static Map<String, Person> keepOnLead(BrandLead lead, List<Person> found) {
+        Map<String, Person> kept = new LinkedHashMap<>();
+        for (Person p : readPeople(lead.finderContacts)) {
+            String e = Emails.clean(p.email());
+            if (e != null) kept.put(e, p);
+        }
+        for (Person p : found) {
+            String e = Emails.clean(p.email());
+            if (e == null) continue;
+            Person old = kept.get(e);
+            // A website find doesn't replace what Hunter or Apollo knew about the same address
+            if (old != null && p.source() == ContactSource.Kind.WEBSITE && old.source() != ContactSource.Kind.WEBSITE) continue;
+            kept.put(e, new Person(e, p.name() != null ? p.name() : old == null ? null : old.name(),
+                    p.title() != null ? p.title() : old == null ? null : old.title(), p.phone(), p.linkedin(), p.confidence(),
+                    p.source(), p.sourceUrl(), p.verified() != null ? p.verified() : old == null ? null : old.verified(),
+                    p.verifiedAt() != null ? p.verifiedAt() : old == null ? null : old.verifiedAt()));
+        }
+        List<Person> ranked = new ArrayList<>(kept.values());
+        ranked.sort(BEST);
+        Map<String, Person> out = new LinkedHashMap<>();
+        for (Person p : ranked) out.put(p.email(), p);
+        lead.finderContacts = out.isEmpty() ? null : writePeople(ranked);
+        return out;
+    }
+
+    /**
+     * "Use this" on another address found for a lead: it becomes the one the pitch goes to. The address it replaces
+     * stays on the lead, so it still joins her contacts when she pitches.
+     */
+    public BrandLead useForLead(Long leadId, String email) {
+        BrandLead lead = leads.findById(leadId).orElseThrow(() -> new IllegalArgumentException("That suggestion no longer exists"));
+        String e = Emails.clean(email);
+        Person pick = readPeople(lead.finderContacts).stream().filter(p -> e != null && e.equals(Emails.clean(p.email())))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("That address isn't one found for " + lead.name + "."));
+        if (pick.verified() == Verified.INVALID) throw new IllegalArgumentException(e + " doesn't exist, so it can't be pitched.");
+        if (suppressions.blocked(e)) throw new IllegalArgumentException(e + " is on your do-not-email list.");
+        keepCurrent(lead);
+        lead.contactEmail = e;
+        lead.contactSourceUrl = pick.sourceUrl();
+        return leads.save(lead);
+    }
+
+    /** Before a lead's contact is replaced, keeps the old address with the others found for it. */
+    public static void keepCurrent(BrandLead lead) {
+        String old = Emails.clean(lead.contactEmail);
+        if (old == null) return;
+        boolean there = readPeople(lead.finderContacts).stream().anyMatch(p -> old.equals(Emails.clean(p.email())));
+        if (!there) keepOnLead(lead, List.of(new Person(old, null, null, null, null, null, ContactSource.Kind.LEAD,
+                lead.contactSourceUrl, null, null)));
     }
 
     /** When she pitches a lead, everyone the finders found for it joins the new brand's contacts, tagged where they came from. */
@@ -319,8 +386,8 @@ public class ContactFinder {
     /** What one finder returned for a domain, and what it cost. */
     record Search(List<Person> people, double cost, List<String> notes) {}
 
-    private double viaHunter(Brand b, String domain, Tally t, Set<Long> touched, List<String> notes) {
-        Search s = hunterSearch(domain);
+    private double viaHunter(Brand b, String domain, boolean wider, Tally t, Set<Long> touched, List<String> notes) {
+        Search s = hunterSearch(domain, wider);
         notes.addAll(saveAll(b.id, s.people(), t, touched));
         notes.addAll(s.notes());
         return s.cost();
@@ -333,29 +400,50 @@ public class ContactFinder {
         return s.cost();
     }
 
-    /** Asks Hunter who works at the domain. Spends credits and remembers the domain was searched. */
     Search hunterSearch(String domain) {
+        return hunterSearch(domain, false);
+    }
+
+    /**
+     * Asks Hunter who works at the domain. Spends credits and remembers the domain was searched. First time: people in
+     * marketing, PR and leadership (who run creator partnerships), or everyone when that finds nobody. {@code wider}
+     * (looking again): shared inboxes like partnerships@ and press@, then people in every team.
+     */
+    Search hunterSearch(String domain, boolean wider) {
         String key = secrets.require(SecretName.HUNTER_API_KEY);
         credits.require(Provider.HUNTER, FinderCredits.SEARCH_PER_10);
-        // People in marketing and partnerships first; everyone when that finds nobody (an empty search is free).
-        HunterApi.DomainResult r = hunter.domainSearch(key, domain, HunterApi.PARTNERSHIP_DEPARTMENTS, HUNTER_LIMIT);
-        double cost = searchCost(r.people().size());
-        if (r.people().isEmpty()) {
-            r = hunter.domainSearch(key, domain, null, HUNTER_LIMIT);
-            cost = searchCost(r.people().size());
+        List<HunterApi.DomainResult> results = new ArrayList<>();
+        double cost = 0;
+        if (wider) {
+            HunterApi.DomainResult inboxes = hunter.roleInboxes(key, domain, HUNTER_LIMIT);
+            cost += spendSearch(inboxes);
+            results.add(inboxes);
+            if (credits.remaining(Provider.HUNTER) >= FinderCredits.SEARCH_PER_10) {
+                HunterApi.DomainResult everyone = hunter.domainSearch(key, domain, null, HUNTER_LIMIT);
+                cost += spendSearch(everyone);
+                results.add(everyone);
+            }
+        } else {
+            // An empty search is free, so falling back to everyone costs nothing extra.
+            HunterApi.DomainResult r = hunter.domainSearch(key, domain, HunterApi.PARTNERSHIP_DEPARTMENTS, HUNTER_LIMIT);
+            if (r.people().isEmpty()) r = hunter.domainSearch(key, domain, null, HUNTER_LIMIT);
+            cost += spendSearch(r);
+            results.add(r);
         }
-        credits.spend(Provider.HUNTER, cost);
         credits.markSearched(Provider.HUNTER, domain);
         syncHunterAccount(key);
+        boolean acceptAll = results.stream().anyMatch(HunterApi.DomainResult::acceptAll);
         String url = "https://hunter.io/domain-search/" + domain;
+        Map<String, HunterApi.Person> people = new LinkedHashMap<>();
+        for (HunterApi.DomainResult r : results) for (HunterApi.Person p : r.people()) people.putIfAbsent(p.email(), p);
         List<Person> out = new ArrayList<>();
-        for (HunterApi.Person p : r.people()) {
-            Verified v = r.acceptAll() && !"invalid".equals(p.verification()) ? Verified.RISKY : fromHunterStatus(p.verification());
+        for (HunterApi.Person p : people.values()) {
+            Verified v = acceptAll && !"invalid".equals(p.verification()) ? Verified.RISKY : fromHunterStatus(p.verification());
             out.add(new Person(p.email(), p.name(), p.position(), p.phone(), p.linkedin(), p.confidence(),
                     ContactSource.Kind.HUNTER, p.sourceUrl() != null ? p.sourceUrl() : url, v, parseDate(p.verifiedOn())));
         }
         List<String> notes = new ArrayList<>();
-        if (r.acceptAll()) notes.add(domain + " accepts every address, so Hunter can't prove any one of them exists. They're marked \"may not get through\".");
+        if (acceptAll) notes.add(domain + " accepts every address, so Hunter can't prove any one of them exists. They're marked \"may not get through\".");
         if (cost > 0) notes.add("Used " + FinderCredits.fmt(cost) + " Hunter credit" + (cost == 1 ? "" : "s") + ".");
         return new Search(out, cost, notes);
     }
@@ -415,6 +503,12 @@ public class ContactFinder {
             if (apply) mark(c, p.verified(), p.verifiedAt());
         }
         return notes;
+    }
+
+    private double spendSearch(HunterApi.DomainResult r) {
+        double c = searchCost(r.people().size());
+        credits.spend(Provider.HUNTER, c);
+        return c;
     }
 
     static double searchCost(int results) {
