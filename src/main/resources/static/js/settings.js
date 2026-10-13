@@ -525,8 +525,8 @@ async function learningCard(root) {
         exclude));
   });
   return card("Learning from your writing",
-    el("p", { class: "small muted" }, "Every message you send is saved with Claude's original draft and whether the brand replied. New drafts get your closest past examples, favouring the ones you edited and the ones that got answers. Messages you write yourself in Gmail or Instagram count too."),
-    el("label", { class: "check", for: "learn-toggle" }, toggle, " Use my past messages when writing drafts"),
+    el("p", { class: "small muted" }, "Every message you send is saved with Claude's original draft and whether the brand replied. New drafts get your closest past examples, favouring the ones you edited and the ones that got answers. Messages you write yourself in Gmail or Instagram count too. Post captions learn the same way, from the captions you copy and the changes you make first."),
+    el("label", { class: "check", for: "learn-toggle" }, toggle, " Use my past messages and captions when writing"),
     el("div", { class: "stats" }, stat(stats.examples, "messages to learn from"), stat(stats.edited, "drafts you edited"), stat(stats.gotReply, "got a reply")),
     recent.length ? el("div", {}, rows) : emptyLine("Nothing yet. Send a draft or write to a brand and it will show up here."));
 }

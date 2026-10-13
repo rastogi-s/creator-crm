@@ -450,9 +450,20 @@ public class ClaudeLlmClient implements LlmClient {
         } else {
             user.append("No shop products in this post: leave productNumbers empty, and don't ask people to comment for links.\n\n");
         }
-        if (!in.recentCaptions().isEmpty()) {
-            user.append("Her recent captions (newest first). Learn her voice from these:\n");
-            in.recentCaptions().forEach(c -> user.append("- ").append(c).append('\n'));
+        if (!in.topPosts().isEmpty()) {
+            user.append("Her Instagram posts that did best lately (most engagement first). Learn her voice and what her audience likes from these:\n");
+            in.topPosts().forEach(c -> user.append(c).append('\n'));
+            user.append('\n');
+        }
+        if (!in.pastCaptions().isEmpty()) {
+            user.append("Captions she used from you before, newest first. Where she changed what you wrote, her version is how she wants it: "
+                    + "write that way from the start (length, words, emojis, tone, what she cut or added):\n");
+            in.pastCaptions().forEach(c -> user.append(c).append('\n'));
+            user.append('\n');
+        }
+        if (!in.habits().isEmpty()) {
+            user.append("Tweaks she keeps asking for, so do them from the start:\n");
+            in.habits().forEach(h -> user.append("- ").append(h).append('\n'));
             user.append('\n');
         }
         if (in.note() != null && !in.note().isBlank()) {

@@ -108,3 +108,5 @@ button.copy-btn.copied, button.copy-btn.primary.copied { background: var(--ok); 
   button.copy-btn { min-height: 2.4rem; padding: .4rem .9rem; }
   .pick-bar { bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
 }
+
+.learning-line { margin: 6px 0 0; }
