@@ -5,7 +5,8 @@ import java.util.List;
 
 /**
  * What Claude is given to plan content for a deal. {@code guidelines} is already wrapped as untrusted data;
- * {@code dealContext}, {@code profile} and the post lists are rendered from the app's own records.
+ * {@code dealContext}, {@code profile} and the post lists are rendered from the app's own records. {@code files} are
+ * the brief's PDFs and pictures, which Claude reads as documents.
  */
 public record ContentIdeasInput(
         LocalDate today,
@@ -15,4 +16,10 @@ public record ContentIdeasInput(
         List<String> recentPosts,
         List<String> pastBrandPosts,
         String guidelines,
-        String note) {}
+        String note,
+        List<BriefFile> files) {
+
+    public ContentIdeasInput {
+        files = files == null ? List.of() : List.copyOf(files);
+    }
+}

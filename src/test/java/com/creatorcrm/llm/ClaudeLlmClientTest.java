@@ -376,4 +376,28 @@ class ClaudeLlmClientTest {
         // 1M Sonnet input tokens at $2, half price in a batch
         assertThat(spend.summary().trackedUsd() - spentBefore).isCloseTo(1.0, offset(0.011));
     }
+
+    @Test
+    void contentIdeasSendTheBriefsPdfAndPicturesAsDocuments() throws Exception {
+        replyText = """
+                {"briefSummary": "A cozy Reel.", "mustInclude": ["Tag @novanest"], "avoid": [],
+                 "ideas": [{"title": "Corner glow-up", "format": "Instagram Reel", "hook": "Watch.", "concept": "Style it.",
+                            "shots": ["Empty corner"], "caption": "Cozy #ad", "whyItFits": "Room videos do well."}]}
+                """;
+        ContentIdeaList out = claude.contentIdeas(new ContentIdeasInput(LocalDate.now(), "Nova Nest", "- type: PAID", "Name: Ava",
+                List.of(), List.of(), "<untrusted_guidelines>\nTag @novanest\n</untrusted_guidelines>", "",
+                List.of(new BriefFile("deck.pdf", "application/pdf", "%PDF-1.4".getBytes(StandardCharsets.UTF_8)),
+                        new BriefFile("mood.png", "image/png", new byte[] {1, 2, 3}))));
+        assertThat(out.ideas()).singleElement().satisfies(i -> assertThat(i.title()).isEqualTo("Corner glow-up"));
+
+        Map<?, ?> req = JsonMapper.shared().readValue(lastRequest.get(), Map.class);
+        List<?> content = (List<?>) ((Map<?, ?>) ((List<?>) req.get("messages")).get(0)).get("content");
+        assertThat(content).hasSize(3);
+        Map<?, ?> doc = (Map<?, ?>) content.get(0);
+        assertThat(doc.get("type")).isEqualTo("document");
+        assertThat(((Map<?, ?>) doc.get("source")).get("media_type")).isEqualTo("application/pdf");
+        assertThat(((Map<?, ?>) content.get(1)).get("type")).isEqualTo("image");
+        assertThat(String.valueOf(((Map<?, ?>) content.get(2)).get("text"))).contains("brief files are attached above (deck.pdf, mood.png)")
+                .contains("THE BRAND'S GUIDELINES");
+    }
 }

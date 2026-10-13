@@ -282,14 +282,48 @@ public class GmailConnector implements ChannelConnector {
 
     /** File types a brand's content brief comes in that the app can read: PDF, Word, PowerPoint and plain text. */
     static final java.util.regex.Pattern BRIEF_FILE = java.util.regex.Pattern.compile("(?i).+\\.(pdf|docx|pptx|txt|md)$");
+    /** Pictures Claude can look at: a mood board, a shot list as a screenshot, a brief exported as images. */
+    static final java.util.regex.Pattern PICTURE = java.util.regex.Pattern.compile("(?i).+\\.(png|jpe?g|webp|gif)$");
+    /** Smaller pictures are logos and signature icons, not part of a brief. */
+    static final long MIN_PICTURE_BYTES = 30_000;
+
+    /** A brief email's files: the ones the app can read, and the names of the ones it can't (a .key or .doc file). */
+    public record BriefAttachments(List<FileAttachment> files, List<String> skipped) {}
 
     /**
-     * The files of a brand's brief email the app can read (see {@link #BRIEF_FILE}), for content ideas: at most
-     * {@code max} files, each at most {@code maxBytes}. Pictures and videos are skipped without downloading them.
+     * The files of a brand's email that may hold its content brief: documents the app can read (see {@link #BRIEF_FILE})
+     * and pictures Claude can look at, at most {@code max} files, each at most {@code maxBytes}. Videos and other files
+     * are not downloaded; their names come back as skipped so she can be told.
      */
-    public List<FileAttachment> briefAttachments(String messageId, int max, long maxBytes) throws Exception {
-        return attachments(messageId, max, maxBytes, (name, mime) -> BRIEF_FILE.matcher(name).matches()
-                || "application/pdf".equalsIgnoreCase(mime), "brief.pdf");
+    public BriefAttachments briefAttachments(String messageId, int max, long maxBytes) throws Exception {
+        Gmail gmail = gmail();
+        Message m = gmail.users().messages().get("me", messageId).setFormat("full").execute();
+        List<MessagePart> parts = new ArrayList<>();
+        collectParts(m.getPayload(), parts);
+        List<FileAttachment> out = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+        for (MessagePart p : parts) {
+            String name = p.getFilename() == null ? "" : p.getFilename().strip();
+            if (name.isEmpty() || p.getBody() == null) continue;
+            String mime = p.getMimeType() == null ? "" : p.getMimeType().toLowerCase();
+            Integer size = p.getBody().getSize();
+            boolean picture = PICTURE.matcher(name).matches() || mime.startsWith("image/");
+            if (picture && (size == null || size < MIN_PICTURE_BYTES)) continue;
+            boolean readable = picture || BRIEF_FILE.matcher(name).matches() || "application/pdf".equals(mime);
+            if (!readable) {
+                if (!mime.startsWith("video/") && !mime.startsWith("audio/")) skipped.add(name);
+                continue;
+            }
+            if (out.size() >= max || (size != null && size > maxBytes)) {
+                skipped.add(name);
+                continue;
+            }
+            byte[] data = p.getBody().getAttachmentId() != null
+                    ? gmail.users().messages().attachments().get("me", messageId, p.getBody().getAttachmentId()).execute().decodeData()
+                    : p.getBody().decodeData();
+            if (data != null && data.length > 0 && data.length <= maxBytes) out.add(new FileAttachment(name, data));
+        }
+        return new BriefAttachments(out, skipped);
     }
 
     private List<FileAttachment> attachments(String messageId, int max, long maxBytes,
