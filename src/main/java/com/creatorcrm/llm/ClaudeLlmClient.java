@@ -116,7 +116,7 @@ public class ClaudeLlmClient implements LlmClient {
             user.append('\n');
         }
         user.append("NEW MESSAGE TO ANALYZE:\n").append(in.newMessage());
-        return user.toString();
+        return Untrusted.wellFormed(user.toString());
     }
 
     @Override
@@ -202,8 +202,8 @@ public class ClaudeLlmClient implements LlmClient {
         if (in.pitchIdea() != null && !in.pitchIdea().isBlank()) notes.append("Collab idea: ").append(in.pitchIdea()).append('\n');
         if (in.instagramBio() != null && !in.instagramBio().isBlank()) notes.append("The brand's Instagram bio: ").append(in.instagramBio()).append('\n');
         // No tags of their own: web text can't close <brand_notes> early
-        return "Brand: " + in.brand().replace("<", "&lt;") + "\n<brand_notes>\n" + notes.toString().strip().replace("<", "&lt;")
-                + "\n</brand_notes>";
+        return Untrusted.wellFormed("Brand: " + in.brand().replace("<", "&lt;") + "\n<brand_notes>\n"
+                + notes.toString().strip().replace("<", "&lt;") + "\n</brand_notes>");
     }
 
     @Override
@@ -549,6 +549,8 @@ public class ClaudeLlmClient implements LlmClient {
     /** {@code files}: PDFs and pictures sent ahead of the text, for Claude to read as documents. */
     private <T> T call(ClaudeSpend.Feature feature, String model, String effort, String system, String system2, String user,
                        Class<T> type, long maxTokens, SearchDepth webSearch, List<String> fetchDomains, List<BriefFile> files) {
+        user = Untrusted.wellFormed(user);
+        system2 = Untrusted.wellFormed(system2);
         MessageCreateParams.Builder params = MessageCreateParams.builder()
                 .model(model)
                 .maxTokens(maxTokens)
