@@ -22,7 +22,10 @@ public final class Untrusted {
 
     public static String wrap(Message m) {
         String body = m.content == null ? "" : m.content;
-        if (body.length() > MAX_CHARS) body = body.substring(0, MAX_CHARS) + "\n[...truncated]" + linksIn(body.substring(MAX_CHARS));
+        if (body.length() > MAX_CHARS) {
+            String head = cut(body, MAX_CHARS);
+            body = head + "\n[...truncated]" + linksIn(body.substring(head.length()));
+        }
         return "<untrusted_message direction=\"" + m.direction + "\" from=\"" + escapeAttr(m.senderName, m.sender)
                 + "\" date=\"" + m.sentAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) + "\">\n"
                 + (m.subject == null || m.subject.isBlank() ? "" : "Subject: " + escape(m.subject) + "\n")
@@ -38,10 +41,35 @@ public final class Untrusted {
         for (String line : rest.split("\n")) {
             String l = line.strip();
             if (!URL.matcher(l).find() || l.toLowerCase(java.util.Locale.ROOT).contains("unsubscribe")) continue;
-            sb.append("\n").append(l.length() > 400 ? l.substring(0, 400) + "…" : l);
+            sb.append("\n").append(l.length() > 400 ? cut(l, 400) + "…" : l);
             if (++count == 10) break;
         }
         return sb.isEmpty() ? "" : "\nLines with links further down:" + sb;
+    }
+
+    /** The first {@code max} chars of {@code s}, one shorter if that would split an emoji (a surrogate pair) in half. */
+    static String cut(String s, int max) {
+        if (s.length() <= max) return s;
+        return s.substring(0, Character.isHighSurrogate(s.charAt(max - 1)) ? max - 1 : max);
+    }
+
+    /**
+     * {@code s} with any half of an emoji (a lone surrogate) replaced by U+FFFD. The JSON writer sends a lone
+     * surrogate as a bare {@code \\uD83D} escape, which the Claude API rejects as invalid JSON ("unexpected end of
+     * hex escape"), failing the whole request.
+     */
+    public static String wellFormed(String s) {
+        if (s == null) return null;
+        StringBuilder sb = null;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean lone = Character.isHighSurrogate(c)
+                    ? i + 1 >= s.length() || !Character.isLowSurrogate(s.charAt(i + 1))
+                    : Character.isLowSurrogate(c) && (i == 0 || !Character.isHighSurrogate(s.charAt(i - 1)));
+            if (lone && sb == null) sb = new StringBuilder(s.length()).append(s, 0, i);
+            if (sb != null) sb.append(lone ? '\uFFFD' : c);
+        }
+        return sb == null ? s : sb.toString();
     }
 
     private static String escapeAttr(String name, String address) {
